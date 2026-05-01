@@ -1,4 +1,4 @@
-__version__ = "0.9.8-stable" #Fixed tests
+__version__ = "0.9.9-stable" #Fixed tests
 
 roadmap = '''Flim program roadmap:
 Version history:
@@ -20,5 +20,8 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.2 -> added some error handling and begin session restoration for roi analysis panel in the GUI
 0.9.3 -> complete session restoration for roi analysis panel
 0.9.5 -> selectable ROIs in FLIM image in GUI and export of region stats
+0.9.7 -> added FRET (using PhasorPy)
+0.9.8 -> added pile-up correction function
+0.9.9 -> UI fixes
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

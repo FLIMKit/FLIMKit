@@ -261,8 +261,11 @@ def phasor_cursor_tool(
 
             g_sel = rc[mask_i]
             s_sel = ic[mask_i]
-            tau_phi, _ = phasor_to_apparent_lifetime(
+            tau_phi, tau_mod = phasor_to_apparent_lifetime(
                 g_sel, s_sel, frequency)
+
+            # τ_m can be NaN/inf for points outside the universal semicircle
+            valid_mod = tau_mod[np.isfinite(tau_mod)]
 
             fmap = np.full_like(rc, np.nan)
             fmap[mask_i] = tau_phi
@@ -274,13 +277,16 @@ def phasor_cursor_tool(
             plt.colorbar(im, ax=ax_cur, label='τ_φ (ns)')
 
             med = np.nanmedian(tau_phi)
+            med_mod = float(np.median(valid_mod)) if valid_mod.size > 0 else float('nan')
+            mod_str = f'{med_mod:.2f}' if np.isfinite(med_mod) else 'n/a'
             ax_cur.set_title(
-                f'C{ci+1}: τ_φ  (n={n_px}, med={med:.2f} ns)')
+                f'C{ci+1}: τ_φ med={med:.2f}, τ_m med={mod_str} ns  (n={n_px})')
             print(
                 f"C{ci+1}: {n_px} px  "
                 f"τ_φ = {np.nanmin(tau_phi):.2f}"
                 f"–{np.nanmax(tau_phi):.2f} ns "
-                f"(median {med:.2f})")
+                f"(med {med:.2f})  │  "
+                f"τ_m med = {mod_str} ns")
 
         # Two-component decomposition (C1 ↔ C2)
         if has_decomp:

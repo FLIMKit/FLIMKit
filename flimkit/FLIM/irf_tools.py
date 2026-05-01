@@ -708,7 +708,10 @@ def compare_irfs(irf_estimated:  np.ndarray,
 
     # Plot
     plt.rcParams.update({"figure.dpi": 130, "font.size": 10,
-                          "axes.spines.top": False, "axes.spines.right": False})
+                          "axes.spines.top": False, "axes.spines.right": False,
+                          "text.color": "black", "axes.labelcolor": "black",
+                          "xtick.color": "black", "ytick.color": "black",
+                          "axes.titlecolor": "black"})
 
     fig, axes = plt.subplots(2, 3, figsize=(15, 8))
     fig.suptitle("IRF Comparison — Estimated vs LAS X xlsx",

@@ -974,21 +974,17 @@ class FOVPreviewPanel:
             decay_from_result = fit_result.get('decay')
             canvas = fit_result.get('canvas')
             
-            # (debug prints removed)
             
             # Use result data if available, otherwise load from PTU
             if decay_from_result is not None and time_ns_from_result is not None:
                 decay = decay_from_result
                 time_ns = time_ns_from_result
-                print(f"  - Using decay/time_ns from fit result")
             else:
                 if ptu_path and Path(ptu_path).exists():
                     ptu = PTUFile(ptu_path, verbose=False)
                     decay = ptu.summed_decay(channel=None)
                     time_ns = ptu.time_ns
-                    print(f"  - Loaded decay/time_ns from PTU file")
                 else:
-                    print(f"  - No valid PTU path for decay loading")
                     decay = None
                     time_ns = None
             
@@ -996,20 +992,15 @@ class FOVPreviewPanel:
             intensity = None
             if canvas is not None and 'intensity' in canvas:
                 intensity = canvas['intensity']
-                print(f"  - Using intensity from canvas (tile fitting)")
             elif 'intensity' in fit_result:
                 intensity = fit_result['intensity']
-                if isinstance(intensity, np.ndarray):
-                    print(f"  - Using intensity from fit_result")
             elif ptu_path and Path(ptu_path).exists():
                 ptu = PTUFile(ptu_path, verbose=False)
                 stack = ptu.pixel_stack(channel=None, binning=1)
                 intensity = stack.sum(axis=2)
-                print(f"  - Loaded intensity from PTU file")
             
             if intensity is None:
                 intensity = np.ones((512, 512), dtype=np.float32)  # Placeholder
-                print(f"  - No intensity data available, using placeholder")
             
             #  Compute FLIM lifetime map
             from flimkit.UI.flim_display import compute_intensity_weighted_lifetime
@@ -1032,27 +1023,12 @@ class FOVPreviewPanel:
                     lifetime_map = compute_intensity_weighted_lifetime(
                         pixel_maps, intensity, n_exp=nexp
                     )
-                    print(f"  - Computed intensity-weighted lifetime map ({lifetime_map.shape})")
-                    print(f"    Lifetime map range: {np.nanmin(lifetime_map):.4f} – {np.nanmax(lifetime_map):.4f} ns")
-                    print(f"    pixel_maps keys: {list(pixel_maps.keys())[:10]}")  # Show first 10 keys
                 except Exception as e:
                     print(f"  - Warning: Could not compute lifetime map: {e}")
-                    import traceback
-                    traceback.print_exc()
                     lifetime_map = None
-            
+
             # Upsample lifetime map to full-res intensity shape if they differ
             # (happens when per-pixel fitting used binning > 1)
-            if (lifetime_map is not None and intensity is not None
-                    and lifetime_map.shape != intensity.shape[:2]):
-                import cv2 as _cv2
-                th, tw = intensity.shape[:2]
-                lifetime_map = _cv2.resize(
-                    lifetime_map.astype(np.float32), (tw, th),
-                    interpolation=_cv2.INTER_NEAREST)
-                print(f"  - Upsampled lifetime_map to {th}×{tw} to match intensity")
-
-            # Upsample lifetime_map to full-res intensity shape when binning>1
             if (lifetime_map is not None and intensity is not None
                     and lifetime_map.shape != intensity.shape[:2]):
                 try:
@@ -1061,7 +1037,6 @@ class FOVPreviewPanel:
                     lifetime_map = _cv2.resize(
                         lifetime_map.astype(np.float32), (tw, th),
                         interpolation=_cv2.INTER_NEAREST)
-                    print(f"  - Upsampled lifetime_map to {th}×{tw} px")
                 except Exception as _upe:
                     print(f"  - Could not upsample lifetime_map: {_upe}")
 
@@ -1087,15 +1062,7 @@ class FOVPreviewPanel:
             # derive_global_tau / tile_fit uses tau1_mean_ns etc.).
             # nexp resolved above — do NOT overwrite it here.
             taus_fit = global_summary.get('taus_ns', [])
-            print(f"  - nexp: {nexp}, taus_ns: {taus_fit}")
-            print(f"  - global_summary keys: {list(global_summary.keys())}")
-            
-            # Debug: check for model
             model = global_summary.get('model')
-            print(f"  - model in global_summary: {model is not None}")
-            if model is not None:
-                print(f"    model shape: {model.shape if hasattr(model, 'shape') else len(model)}")
-                print(f"    model min/max: {model.min():.2e} / {model.max():.2e}")
             
             
             # Update intensity image
@@ -1162,12 +1129,10 @@ class FOVPreviewPanel:
             self._ax_decay.set_facecolor('white')
             
             if decay is None or len(decay) == 0:
-                print(f"  - No decay data available for plotting")
                 self._ax_decay.text(0.5, 0.5, "No decay data", ha='center', va='center',
                                   transform=self._ax_decay.transAxes)
             else:
                 # Plot measured decay
-                print(f"  - Plotting measured decay: {len(decay)} points, {len(time_ns)} time points")
                 self._ax_decay.semilogy(time_ns, decay, 'o-', color="steelblue", 
                                         linewidth=1.5, markersize=3, label="Measured", alpha=0.7)
                 
@@ -1178,20 +1143,14 @@ class FOVPreviewPanel:
                         # Scale IRF to ~20% of max decay for visibility
                         irf_scaled = (irf_prompt / irf_max) * decay.max() * 0.2
                         irf_time = time_ns[:len(irf_prompt)]
-                        print(f"  - Plotting IRF: {len(irf_prompt)} points")
                         self._ax_decay.semilogy(irf_time, np.maximum(irf_scaled, 1e-2), 
                                               linewidth=2.0, color="orange", label="IRF", alpha=0.8)
                 
                 # Plot fitted decay if we have parameters or model
                 model = global_summary.get('model')
                 if model is not None and len(model) > 0:
-                    print(f"  - Plotting fitted model: {len(model)} points")
                     self._ax_decay.semilogy(time_ns, model, linewidth=2.0, 
                                           color="red", label="Fitted", alpha=0.8)
-                elif global_popt is not None and nexp > 0:
-                    print(f"  - Have global_popt but no precomputed model (model={model})")
-                else:
-                    print(f"  - No global_popt ({global_popt is not None}) or nexp<=0 ({nexp}) for model")
             
             self._ax_decay.set_title(f"Summed Decay{f' ({nexp}-exp fit)' if nexp > 0 else ''}", 
                                     fontsize=10, fontweight="bold", color='white')
@@ -1218,6 +1177,15 @@ class FOVPreviewPanel:
                 self._ax_resid.axhline(0, color='red', linewidth=1.0,
                                        linestyle='--', alpha=0.8)
                 self._ax_resid.set_ylabel("Resid. (σ)", fontsize=7, color='white')
+                chi2_r = global_summary.get('reduced_chi2_tail')
+                if chi2_r is not None:
+                    self._ax_resid.annotate(
+                        f"χ²_r = {chi2_r:.3f}",
+                        xy=(0.98, 0.85), xycoords='axes fraction',
+                        ha='right', va='top', fontsize=7,
+                        color='white',
+                        bbox=dict(boxstyle='round,pad=0.2', fc='#333333', alpha=0.7),
+                    )
             else:
                 self._cached_resid_data = None
             self._ax_resid.set_xlabel("Time (ns)", color='white')
@@ -2568,7 +2536,12 @@ class _UIBuilder:
         menubar.add_cascade(label="Tools", menu=tools_menu)
         
         tools_menu.add_command(label="Machine IRF Builder", command=self._menu_irf_builder)
-        tools_menu.add_command(label="Batch Processing", command=self._menu_batch_processing)
+        batch_menu = tk.Menu(tools_menu, tearoff=0)
+        tools_menu.add_cascade(label="Batch Processing", menu=batch_menu)
+        batch_menu.add_command(label="Multi-Tile ROI Fit",
+                               command=lambda: self._menu_batch_processing("tiled"))
+        batch_menu.add_command(label="Single FOV Fit",
+                               command=lambda: self._menu_batch_processing("fov"))
         
         # HELP MENU
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -2675,16 +2648,25 @@ class _UIBuilder:
     
     def _menu_save_npz_as(self):
         """Save NPZ as new file."""
-        from tkinter import filedialog
+        import shutil
+        from tkinter import filedialog, messagebox
         scan = self._current_scan_stem()
+        src = getattr(self._res, '_current_npz_path', None) if self._res else None
+        if not src or not Path(src).exists():
+            messagebox.showwarning("Save NPZ As", "No session file to save. Run a fit first.")
+            return
         npz_file = filedialog.asksaveasfilename(
             title="Save NPZ As",
             initialfile=f"{scan}.roi_session.npz" if scan else "",
             defaultextension=".npz",
             filetypes=[("NPZ files", "*.npz"), ("All files", "*.*")])
         if npz_file:
-            print(f"[Menu] Saving NPZ as: {npz_file}")
-            # TODO: Implement save logic with chosen filename
+            try:
+                shutil.copy2(src, npz_file)
+                self._res._current_npz_path = npz_file
+                messagebox.showinfo("Saved", f"Session saved to:\n{Path(npz_file).name}")
+            except Exception as e:
+                messagebox.showerror("Save Error", f"Could not save: {e}")
     
     def _menu_open_project_folder(self):
         """Open project folder dialog and load project."""
@@ -2852,10 +2834,11 @@ class _UIBuilder:
         if hasattr(self, '_switch_form'):
             self._switch_form("irf")
     
-    def _menu_batch_processing(self):
-        """Switch to batch processing view."""
-        print("[Menu] Batch Processing")
-        # Switch to batch form
+    def _menu_batch_processing(self, mode: str = "tiled"):
+        """Switch to batch processing view and set the batch mode."""
+        print(f"[Menu] Batch Processing → {mode}")
+        self.sv_batch_mode.set(mode)
+        self._batch_mode_changed()
         if hasattr(self, '_switch_form'):
             self._switch_form("batch")
     
@@ -3599,6 +3582,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
                 "thr_fov_val":    self.sv_thr_fov.get() if hasattr(self, 'sv_thr_fov') else "5",
                 "cell_mask":      self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
                 "correct_pileup": self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False,
+                "correct_pileup_st": self.bv_correct_pileup_st.get() if hasattr(self, 'bv_correct_pileup_st') else False,
 
                 # Stitch / tile-fit specific
                 "xlif_file":      self.sv_xlif.get()    if hasattr(self, 'sv_xlif')    else "",
@@ -3663,6 +3647,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
             if "thr_fov_val" in state and hasattr(self, 'sv_thr_fov'): self.sv_thr_fov.set(state["thr_fov_val"])
             if "cell_mask" in state and hasattr(self, 'bv_cell'): self.bv_cell.set(state["cell_mask"])    
             if "correct_pileup" in state and hasattr(self, 'bv_correct_pileup'): self.bv_correct_pileup.set(state["correct_pileup"])
+            if "correct_pileup_st" in state and hasattr(self, 'bv_correct_pileup_st'): self.bv_correct_pileup_st.set(state["correct_pileup_st"])
                         
             # Restore other settings
             if "register" in state and hasattr(self, 'bv_register'):
@@ -4034,6 +4019,34 @@ Built with Python, Tkinter, NumPy, and SciPy.
                                         ax_decay.semilogy(time_ns, model, color="red", linewidth=2.0,
                                                         label="Fitted", alpha=0.8)
                                     ax_decay.legend(fontsize=8, loc="upper right", labelcolor='black')
+
+                                    # Restore residuals panel
+                                    ax_resid = self._fov_preview._ax_resid
+                                    ax_resid.clear()
+                                    ax_resid.set_facecolor('white')
+                                    if model is not None and len(model) == len(decay):
+                                        with np.errstate(invalid='ignore', divide='ignore'):
+                                            resid = np.where(model > 0,
+                                                             (decay - model) / np.sqrt(model),
+                                                             0.0)
+                                        self._fov_preview._cached_resid_data = (time_ns.copy(), resid)
+                                        ax_resid.plot(time_ns, resid, color='steelblue', linewidth=1.0)
+                                        ax_resid.axhline(0, color='red', linewidth=1.0,
+                                                         linestyle='--', alpha=0.8)
+                                        ax_resid.set_ylabel("Resid. (σ)", fontsize=7, color='white')
+                                        chi2_r = gs.get('reduced_chi2_tail')
+                                        if chi2_r is not None:
+                                            ax_resid.annotate(
+                                                f"χ²_r = {chi2_r:.3f}",
+                                                xy=(0.98, 0.85), xycoords='axes fraction',
+                                                ha='right', va='top', fontsize=7,
+                                                color='white',
+                                                bbox=dict(boxstyle='round,pad=0.2',
+                                                          fc='#333333', alpha=0.7),
+                                            )
+                                    ax_resid.set_xlabel("Time (ns)", color='white')
+                                    ax_resid.tick_params(labelsize=7, colors='white')
+                                    ax_resid.grid(True, alpha=0.3)
                             ax_decay.set_title("Summed Decay (reloaded)", fontsize=10, fontweight="bold", color='white')
                             ax_decay.set_xlabel("Time (ns)", color='white')
                             ax_decay.set_ylabel("Photon Count", color='white')
@@ -4148,7 +4161,6 @@ Built with Python, Tkinter, NumPy, and SciPy.
 
             # Reconstruct global_summary with hoisted arrays (like in _load_fitted_data_from_file)
             if "global_summary_json" in fit_result:
-                from flimkit.UI.gui import _reconstruct_dict_from_session
                 fit_result["global_summary"] = _reconstruct_dict_from_session(fit_result, "global_summary")
 
             # Ensure intensity TIFF is loaded before displaying fit results.
@@ -4546,7 +4558,8 @@ Built with Python, Tkinter, NumPy, and SciPy.
             # Create dialog
             dlg = tk.Toplevel(self.root)
             dlg.title("Export Results")
-            dlg.geometry("550x480")
+            dlg.resizable(True, True)
+            dlg.minsize(560, 400)
             dlg.transient(self.root)
             dlg.grab_set()
             print(f"[Export Dialog] Dialog created successfully")
@@ -4664,6 +4677,11 @@ Built with Python, Tkinter, NumPy, and SciPy.
             cancel_btn = ttk.Button(btn_frame, text="Cancel", command=dlg.destroy)
             cancel_btn.pack(side="left", padx=5)
             
+            # Auto-size to fit content, capped at 85% of screen height
+            dlg.update_idletasks()
+            req_w = max(560, dlg.winfo_reqwidth() + 24)
+            req_h = min(dlg.winfo_reqheight() + 24, int(dlg.winfo_screenheight() * 0.85))
+            dlg.geometry(f"{req_w}x{req_h}")
             print(f"[Export Dialog] Dialog fully created, awaiting user input")
             
         except Exception as e:
@@ -5250,6 +5268,11 @@ Built with Python, Tkinter, NumPy, and SciPy.
         ttk.Label(fm, text="(leave blank for no threshold)",
                   foreground="grey").grid(row=0, column=2, sticky="w")
 
+        self.bv_correct_pileup_st = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fm, text="Apply Coates pile-up correction (recommended if pile-up > 5%)",
+                        variable=self.bv_correct_pileup_st).grid(
+            row=1, column=0, columnspan=3, sticky="w", **PAD)
+
         # Registration
         freg = _section(parent, "Tile Registration")
         freg.grid(row=3, column=0, sticky="ew", pady=(0, 6))
@@ -5338,9 +5361,10 @@ Built with Python, Tkinter, NumPy, and SciPy.
             self._update_expert_banners()
 
     def _update_expert_banners(self):
-        """Show or hide the expert settings banners on FOV and stitch tabs."""
+        """Show or hide the expert settings banners on FOV, stitch and batch tabs."""
         active = bool(self._expert_overrides)
-        for banner in (self._expert_banner_fov, self._expert_banner_st):
+        for banner in (self._expert_banner_fov, self._expert_banner_st,
+                       self._expert_banner_batch):
             if active:
                 banner.grid()
             else:
@@ -5413,23 +5437,45 @@ Built with Python, Tkinter, NumPy, and SciPy.
         outer, tab = self._form_inner_frames["batch"]
         tab.columnconfigure(0, weight=1)
 
+        self.sv_batch_mode = tk.StringVar(value="tiled")
+
+        # Mode label (updated by _batch_mode_changed when menu item chosen)
+        self._batch_mode_label = ttk.Label(
+            tab, text="Mode: Multi-Tile ROI Fit",
+            font=("TkDefaultFont", 9, "bold"), foreground="#555")
+        self._batch_mode_label.grid(row=0, column=0, sticky="w", padx=8, pady=(6, 2))
+
         ff = _section(tab, "Input / Output")
-        ff.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ff.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         ff.columnconfigure(1, weight=1)
         self.sv_batch_xlif_dir = tk.StringVar()
         self.sv_batch_ptu_dir  = tk.StringVar()
         self.sv_batch_out_dir  = tk.StringVar()
-        _row(ff, "XLIF folder *",     self.sv_batch_xlif_dir, 0,
-             lambda: _browse_dir(self.sv_batch_xlif_dir, "Folder of XLIF files"))
+
+        # XLIF folder row wrapped in its own frame so it can be hidden in FOV mode
+        self._batch_xlif_fr = ttk.Frame(ff)
+        self._batch_xlif_fr.grid(row=0, column=0, columnspan=3, sticky="ew")
+        self._batch_xlif_fr.columnconfigure(1, weight=1)
+        ttk.Label(self._batch_xlif_fr, text="XLIF folder *").grid(
+            row=0, column=0, sticky="e", padx=6, pady=3)
+        ttk.Entry(self._batch_xlif_fr, textvariable=self.sv_batch_xlif_dir, width=45).grid(
+            row=0, column=1, sticky="ew", padx=4, pady=3)
+        ttk.Button(self._batch_xlif_fr, text="Browse...",
+                   command=lambda: _browse_dir(self.sv_batch_xlif_dir,
+                                               "Folder of XLIF files")).grid(
+            row=0, column=2, padx=4, pady=3)
+
         _row(ff, "PTU folder *",      self.sv_batch_ptu_dir,  1,
              lambda: _browse_dir(self.sv_batch_ptu_dir,  "PTU tile directory"))
         _row(ff, "Output base dir *", self.sv_batch_out_dir,  2,
              lambda: _browse_dir(self.sv_batch_out_dir,  "Base output directory"))
-        ttk.Label(ff, text="One sub-folder per ROI created inside the output base dir.",
-                  foreground="grey").grid(row=3, column=1, columnspan=2, sticky="w", padx=4)
+        self._batch_io_help = ttk.Label(
+            ff, text="One sub-folder per ROI created inside the output base dir.",
+            foreground="grey")
+        self._batch_io_help.grid(row=3, column=1, columnspan=2, sticky="w", padx=4)
 
         fi = _section(tab, "IRF")
-        fi.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        fi.grid(row=2, column=0, sticky="ew", pady=(0, 6))
         fi.columnconfigure(1, weight=1)
         self.sv_batch_mirf = tk.StringVar(value=str(_C()["MACHINE_IRF_DEFAULT_PATH"]))
         _row(fi, "Machine IRF (.npy) *", self.sv_batch_mirf, 0,
@@ -5437,7 +5483,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
                                   [("NumPy", "*.npy"), ("All", "*.*")]))
 
         fp = _section(tab, "Fitting Parameters")
-        fp.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        fp.grid(row=3, column=0, sticky="ew", pady=(0, 6))
         ttk.Label(fp, text="Exponential components:").grid(row=0, column=0, sticky="w", **PAD)
         self.iv_nexp_batch = tk.IntVar(value=2)
         for n in (1, 2, 3):
@@ -5461,7 +5507,8 @@ Built with Python, Tkinter, NumPy, and SciPy.
         ttk.Label(fp, text="ns  (display only)", foreground="grey").grid(row=2, column=4, padx=4)
 
         freg = _section(tab, "Tile Registration")
-        freg.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        freg.grid(row=4, column=0, sticky="ew", pady=(0, 6))
+        self._batch_freg = freg  # reference for show/hide on mode change
         self.bv_batch_register = tk.BooleanVar(value=True)
         ttk.Checkbutton(freg, text="Phase-correlation registration (fixes stage Y/X drift)",
                         variable=self.bv_batch_register).grid(
@@ -5474,7 +5521,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
                   foreground="grey").grid(row=1, column=2, sticky="w")
 
         fm = _section(tab, "Masking")
-        fm.grid(row=4, column=0, sticky="ew", pady=(0, 6))
+        fm.grid(row=5, column=0, sticky="ew", pady=(0, 6))
         self.bv_batch_thr = tk.BooleanVar(value=False)
         self.sv_batch_thr = tk.StringVar()
         ttk.Checkbutton(fm, text="Intensity threshold (min photons/px):",
@@ -5484,9 +5531,13 @@ Built with Python, Tkinter, NumPy, and SciPy.
         self._batch_thr_e = ttk.Entry(fm, textvariable=self.sv_batch_thr,
                                       width=8, state="disabled")
         self._batch_thr_e.grid(row=0, column=1, sticky="w", padx=4)
+        self.bv_batch_correct_pileup = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fm, text="Apply Coates pile-up correction (recommended if pile-up > 5%)",
+                        variable=self.bv_batch_correct_pileup).grid(
+            row=1, column=0, columnspan=3, sticky="w", **PAD)
 
         fexp = _section(tab, "Image Export")
-        fexp.grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        fexp.grid(row=6, column=0, sticky="ew", pady=(0, 6))
         self.bv_batch_save_lifetime  = tk.BooleanVar(value=True)
         self.bv_batch_save_rgb       = tk.BooleanVar(value=True)
         self.bv_batch_save_intensity = tk.BooleanVar(value=True)
@@ -5518,9 +5569,164 @@ Built with Python, Tkinter, NumPy, and SciPy.
         ttk.Label(fexp, text="(blank = auto 99th percentile)",
                   foreground="grey").grid(row=4, column=2, columnspan=3, sticky="w")
 
-        self._btn_batch = ttk.Button(tab, text="▶  Run Batch ROI Fit",
-                                     command=self._run_batch)
-        self._btn_batch.grid(row=6, column=0, pady=8, ipadx=20, ipady=4)
+        # Expert settings banner
+        self._expert_banner_batch = ttk.Label(
+            tab, text="⚙  Custom expert settings active",
+            foreground="#e8a838", font=("TkDefaultFont", 9, "bold"))
+        self._expert_banner_batch.grid(row=7, column=0, sticky="w", padx=8)
+        self._expert_banner_batch.grid_remove()
+
+        # Bottom row: Expert Settings + Run button
+        btn_row_batch = ttk.Frame(tab)
+        btn_row_batch.grid(row=8, column=0, pady=8)
+        ttk.Button(btn_row_batch, text="⚙  Expert Settings",
+                   command=self._open_expert_settings).pack(side="left", padx=4)
+        self._btn_batch = ttk.Button(btn_row_batch, text="▶  Run Batch ROI Fit",
+                                     command=self._dispatch_batch)
+        self._btn_batch.pack(side="left", padx=4, ipadx=20, ipady=4)
+
+    def _batch_mode_changed(self):
+        """Show/hide tiled-mode-only controls based on the batch mode selection."""
+        is_tiled = (self.sv_batch_mode.get() == "tiled")
+        label_text = "Mode: Multi-Tile ROI Fit" if is_tiled else "Mode: Single FOV Fit"
+        self._batch_mode_label.configure(text=label_text)
+        if is_tiled:
+            self._batch_xlif_fr.grid()
+            self._batch_freg.grid()
+            self._btn_batch.configure(text="▶  Run Batch ROI Fit")
+            self._batch_io_help.configure(
+                text="One sub-folder per ROI created inside the output base dir.")
+        else:
+            self._batch_xlif_fr.grid_remove()
+            self._batch_freg.grid_remove()
+            self._btn_batch.configure(text="▶  Run Batch FOV Fit")
+            self._batch_io_help.configure(
+                text="One sub-folder per PTU file created inside the output base dir.")
+
+    def _dispatch_batch(self):
+        """Route to tiled or single-FOV batch runner based on mode selection."""
+        if self.sv_batch_mode.get() == "tiled":
+            self._run_batch()
+        else:
+            self._run_batch_fov()
+
+    def _run_batch_fov(self):
+        """Batch single-FOV fitting: run _run_flim_fit on every PTU in a folder."""
+        ptu_dir = self.sv_batch_ptu_dir.get().strip()
+        out_dir = self.sv_batch_out_dir.get().strip()
+        for val, name in [(ptu_dir, "PTU folder"), (out_dir, "Output directory")]:
+            if not val or not Path(val).is_dir():
+                messagebox.showerror("Missing input", f"Please select a valid {name}.")
+                return
+
+        ptu_files = sorted(Path(ptu_dir).glob("*.ptu"))
+        if not ptu_files:
+            messagebox.showerror("No PTU files", f"No .ptu files found in:\n{ptu_dir}")
+            return
+
+        cfg      = _C()
+        mirf     = self.sv_batch_mirf.get().strip() or str(cfg["MACHINE_IRF_DEFAULT_PATH"])
+        n_exp    = self.iv_nexp_batch.get()
+        tau_min  = float(self.sv_batch_tau_min.get() or cfg["Tau_min"])
+        tau_max  = float(self.sv_batch_tau_max.get() or cfg["Tau_max"])
+        tau_lo   = _flt(self.sv_batch_tau_lo) or cfg["TAU_DISPLAY_MIN"] or 0.0
+        tau_hi   = _flt(self.sv_batch_tau_hi) or cfg["TAU_DISPLAY_MAX"] or 10.0
+        save_npy = self.bv_batch_save_npy.get()
+        thr      = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        correct_pileup = self.bv_batch_correct_pileup.get()
+        # Snapshot expert overrides now (before the worker thread runs)
+        expert_overrides = dict(self._expert_overrides)
+
+        from flimkit.interactive import _run_flim_fit
+        import gc, csv as csv_mod
+
+        def task(progress_callback, cancel_event):
+            csv_path = Path(out_dir) / "batch_fov_fit_summary.csv"
+            header_written = False
+            n_total = len(ptu_files)
+
+            for idx, ptu_path in enumerate(ptu_files):
+                if cancel_event.is_set():
+                    print("\nBatch cancelled.")
+                    break
+                progress_callback(idx, n_total)
+                stem    = ptu_path.stem
+                fov_out = Path(out_dir) / stem.replace(" ", "_")
+                fov_out.mkdir(parents=True, exist_ok=True)
+                print(f"\n{'='*50}\n  [{idx+1}/{n_total}] {stem}\n{'='*50}")
+
+                try:
+                    a = argparse.Namespace(
+                        ptu=str(ptu_path),
+                        xlsx=None,
+                        debug_xlsx=False,
+                        print_config=False,
+                        irf=None,
+                        irf_xlsx=None,
+                        estimate_irf="machine_irf",
+                        no_xlsx_irf=True,
+                        machine_irf=mirf,
+                        irf_bins=cfg["IRF_BINS"],
+                        irf_fit_width=cfg["IRF_FIT_WIDTH"],
+                        irf_fwhm=expert_overrides.get("irf_fwhm", cfg["IRF_FWHM"]),
+                        nexp=n_exp,
+                        tau_min=tau_min,
+                        tau_max=tau_max,
+                        mode="both",
+                        binning=expert_overrides.get("binning_factor", cfg["binning_factor"]),
+                        min_photons=expert_overrides.get("min_photons", cfg["MIN_PHOTONS_PERPIX"]),
+                        optimizer=expert_overrides.get("optimizer", cfg["Optimizer"]),
+                        restarts=expert_overrides.get("lm_restarts", cfg["lm_restarts"]),
+                        de_population=expert_overrides.get("de_population", cfg["de_population"]),
+                        de_maxiter=expert_overrides.get("de_maxiter", cfg["de_maxiter"]),
+                        workers=expert_overrides.get("n_workers", cfg["n_workers"]),
+                        no_polish=False,
+                        channel=expert_overrides.get("channels", cfg["channels"]),
+                        out=str(fov_out / stem),
+                        no_plots=True,
+                        cell_mask=False,
+                        correct_pileup=correct_pileup,
+                        intensity_threshold=thr,
+                        irf_align=expert_overrides.get("irf_align", "steepest_rise"),
+                        irf_shift_bins=expert_overrides.get("irf_shift_bins", 2),
+                    )
+                    result  = _run_flim_fit(a)
+                    summary = result.get("global_summary", {})
+                    pu_pct  = result.get("pileup_pct")
+                    cr_mhz  = result.get("count_rate_mhz")
+                    if not save_npy:
+                        for f_ in fov_out.glob("*.npy"):
+                            if not f_.name.endswith("_time_axis_ns.npy"):
+                                f_.unlink(missing_ok=True)
+                    gc.collect()
+                    row = {"fov": stem, "status": "OK",
+                           "pileup_pct": pu_pct if pu_pct is not None else "",
+                           "count_rate_mhz": cr_mhz if cr_mhz is not None else "",
+                           **summary}
+                    print(f"  OK: {stem}")
+                except Exception as exc:
+                    import traceback; traceback.print_exc()
+                    row = {"fov": stem,
+                           "status": f"ERROR: {type(exc).__name__}: {str(exc)[:80]}"}
+
+                with open(csv_path, "a", newline="") as fh:
+                    writer = csv_mod.DictWriter(fh, fieldnames=list(row.keys()))
+                    if not header_written:
+                        writer.writeheader(); header_written = True
+                    writer.writerow(row)
+
+            progress_callback(n_total, n_total)
+            print(f"\nBatch FOV complete. CSV: {csv_path}")
+
+        def on_done(result):
+            self._set_buttons("normal")
+            self._res.set_status("✓  Batch FOV complete.")
+            self._res.load_images(out_dir)
+
+        self._set_buttons("disabled")
+        self.run_with_progress(
+            task, task_name=f"Batch FOV Fit ({len(ptu_files)} PTUs)",
+            on_done=on_done, output_dir=out_dir)
 
     def _run_batch(self):
         xlif_dir = self.sv_batch_xlif_dir.get().strip()
@@ -5553,6 +5759,9 @@ Built with Python, Tkinter, NumPy, and SciPy.
         register  = self.bv_batch_register.get()
         reg_shift = int(self.sv_batch_reg_shift.get() or 120)
         thr       = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        correct_pileup = self.bv_batch_correct_pileup.get()
+        # Snapshot expert overrides now (before the worker thread runs)
+        expert_overrides = dict(self._expert_overrides)
 
         from flimkit.PTU.stitch    import fit_flim_tiles
         from flimkit.FLIM.assemble import (derive_global_tau, save_assembled_maps,
@@ -5579,13 +5788,17 @@ Built with Python, Tkinter, NumPy, and SciPy.
                 try:
                     fit_args = argparse.Namespace(
                         nexp=n_exp, tau_min=tau_min, tau_max=tau_max,
-                        optimizer="de", restarts=1,
-                        de_population=cfg["de_population"],
-                        de_maxiter=cfg["de_maxiter"],
-                        workers=cfg["n_workers"],
-                        binning=1,
-                        min_photons=cfg["MIN_PHOTONS_PERPIX"],
+                        optimizer=expert_overrides.get("optimizer", "de"),
+                        restarts=expert_overrides.get("lm_restarts", 1),
+                        de_population=expert_overrides.get("de_population", cfg["de_population"]),
+                        de_maxiter=expert_overrides.get("de_maxiter", cfg["de_maxiter"]),
+                        workers=expert_overrides.get("n_workers", cfg["n_workers"]),
+                        binning=expert_overrides.get("binning_factor", 1),
+                        min_photons=expert_overrides.get("min_photons", cfg["MIN_PHOTONS_PERPIX"]),
+                        channel=expert_overrides.get("channels", cfg["channels"]),
+                        irf_fwhm=expert_overrides.get("irf_fwhm", cfg["IRF_FWHM"]),
                         intensity_threshold=thr,
+                        correct_pileup=correct_pileup,
                         register_tiles=register,
                         reg_max_shift_px=reg_shift,
                         machine_irf=mirf,
@@ -6184,7 +6397,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
         a.intensity_display_min  = _flt(self.sv_int_lo)
         a.intensity_display_max  = _flt(self.sv_int_hi)
         a.intensity_threshold    = _thresh(self.bv_thr_st, self.sv_thr_st)
-        a.correct_pileup         = self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False
+        a.correct_pileup         = self.bv_correct_pileup_st.get()
         a.save_individual        = self.bv_save_ind.get()
         a.save_tau_weighted      = self.bv_save_tau_weighted.get()
         a.save_int_weighted      = self.bv_save_int_weighted.get()

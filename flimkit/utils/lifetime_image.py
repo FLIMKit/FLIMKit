@@ -155,23 +155,23 @@ def make_lifetime_image(
     ax.set_title(
         f"{roi_name}  τ_amp {tau_min_ns}–{tau_max_ns} ns  "
         f"σ={smooth_sigma_px} px  γ={gamma}",
-        fontsize=10, color='white')
+        fontsize=10, color='black')
     ax.axis('off')
-    ax.set_facecolor('black')
-    fig.patch.set_facecolor('black')
+    ax.set_facecolor('white')
+    fig.patch.set_facecolor('white')
 
     sm = plt.cm.ScalarMappable(
         cmap=FLIM_CMAP,
         norm=mcolors.Normalize(tau_min_ns, tau_max_ns))
     sm.set_array([])
     cb = fig.colorbar(sm, cax=cax)
-    cb.set_label("τ_amp (ns)", fontsize=10, color='white')
-    plt.setp(cb.ax.yaxis.get_ticklabels(), color='white')
+    cb.set_label("τ_amp (ns)", fontsize=10, color='black')
+    plt.setp(cb.ax.yaxis.get_ticklabels(), color='black')
     plt.tight_layout(pad=0.3)
 
     preview_path = output_dir / f"{roi_name}_tau_intensity_weighted_preview.png"
     plt.savefig(str(preview_path), dpi=150,
-                bbox_inches='tight', facecolor='black')
+                bbox_inches='tight', facecolor='white')
     plt.close(fig)
     if verbose:
         print(f"  ✓ preview PNG → {preview_path}")

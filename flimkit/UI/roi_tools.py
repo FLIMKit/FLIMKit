@@ -310,21 +310,23 @@ class RoiAnalysisPanel:
         list_frame.rowconfigure(0, weight=1)
         
         # Treeview for regions
-        cols = ("Name", "Type", "τ_med (ns)", "τ_sd (ns)", "Photons", "σ_photons")
+        cols = ("Name", "Type", "τ_mean (ns)", "τ_med (ns)", "τ_sd (ns)", "Photons", "σ_photons")
         self._tree = ttk.Treeview(list_frame, columns=cols, height=6, show="tree headings")
         self._tree.grid(row=0, column=0, sticky="nsew")
         
         self._tree.column("#0", width=0, stretch=False)
         self._tree.column("Name", anchor="w", width=100)
-        self._tree.column("Type", anchor="center", width=60)
-        self._tree.column("τ_med (ns)", anchor="center", width=75)
-        self._tree.column("τ_sd (ns)", anchor="center", width=75)
+        self._tree.column("Type", anchor="center", width=55)
+        self._tree.column("τ_mean (ns)", anchor="center", width=72)
+        self._tree.column("τ_med (ns)", anchor="center", width=72)
+        self._tree.column("τ_sd (ns)", anchor="center", width=70)
         self._tree.column("Photons", anchor="center", width=65)
-        self._tree.column("σ_photons", anchor="center", width=75)
+        self._tree.column("σ_photons", anchor="center", width=72)
         
         self._tree.heading("#0", text="", anchor="w")
         self._tree.heading("Name", text="Name", anchor="w")
         self._tree.heading("Type", text="Type", anchor="center")
+        self._tree.heading("τ_mean (ns)", text="τ_mean (ns)", anchor="center")
         self._tree.heading("τ_med (ns)", text="τ_med (ns)", anchor="center")
         self._tree.heading("τ_sd (ns)", text="τ_sd (ns)", anchor="center")
         self._tree.heading("Photons", text="Photons", anchor="center")
@@ -596,12 +598,13 @@ class RoiAnalysisPanel:
                 
                 # Get statistics from manager if available
                 stats = region.get("statistics", {})
+                tau_mean = stats.get("tau_mean", "N/A")
                 tau_median = stats.get("tau_median", "N/A")
                 tau_stdev = stats.get("tau_stdev", "N/A")
                 photon_count = stats.get("photon_count", "N/A")
                 photon_stdev = stats.get("photon_stdev", "N/A")
                 
-                rows.append([region_id, name, tool, tau_median, tau_stdev, photon_count, photon_stdev])
+                rows.append([region_id, name, tool, tau_mean, tau_median, tau_stdev, photon_count, photon_stdev])
             
             if not rows:
                 messagebox.showwarning("No Data", "No regions to export.")
@@ -610,7 +613,7 @@ class RoiAnalysisPanel:
             # Write CSV
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(["ID", "Name", "Type", "Tau_median", "Tau_stdev", "Photon_count", "Photon_stdev"])
+                writer.writerow(["ID", "Name", "Type", "Tau_mean_ns", "Tau_median_ns", "Tau_stdev_ns", "Photon_count", "Photon_stdev"])
                 writer.writerows(rows)
             
             messagebox.showinfo("Export Success", f"ROI data exported to:\n{Path(csv_file).name}")
@@ -865,6 +868,7 @@ class RoiAnalysisPanel:
                 color = self.fov_preview._roi_manager.get_color(region_id)
                 
                 # Compute statistics if lifetime map available
+                tau_mean = "—"
                 tau_med = "—"
                 tau_stdev = "—"
                 photon_count = "—"
@@ -880,28 +884,39 @@ class RoiAnalysisPanel:
                             valid = lifetime_in_region[~np.isnan(lifetime_in_region)]
                             
                             if valid.size > 0:
+                                tau_mean_val = float(np.mean(valid))
                                 tau_med_val = float(np.median(valid))
                                 tau_stdev_val = float(np.std(valid))
-                                photon_count_val = int(valid.size)
-                                photon_stdev_val = float(np.sqrt(photon_count_val))  # Poisson stdev
-                                
+
+                                # Photon counts from intensity map if available
+                                intensity_map = self.fov_preview._intensity_map
+                                if intensity_map is not None and intensity_map.shape == self.fov_preview._lifetime_map.shape:
+                                    intensity_in_region = intensity_map[mask]
+                                    photon_count_val = int(intensity_in_region.sum())
+                                    photon_stdev_val = float(np.std(intensity_in_region))
+                                else:
+                                    photon_count_val = int(valid.size)  # pixel count as fallback
+                                    photon_stdev_val = float(np.sqrt(photon_count_val))
+
+                                tau_mean = f"{tau_mean_val:.2f}"
                                 tau_med = f"{tau_med_val:.2f}"
                                 tau_stdev = f"{tau_stdev_val:.2f}"
                                 photon_count = str(photon_count_val)
-                                photon_stdev = f"{photon_stdev_val:.2f}"
+                                photon_stdev = f"{photon_stdev_val:.1f}"
                                 
                                 # Store statistics back in region data
                                 region["statistics"] = {
+                                    "tau_mean": tau_mean_val,
                                     "tau_median": tau_med_val,
                                     "tau_stdev": tau_stdev_val,
                                     "photon_count": photon_count_val,
-                                    "photon_stdev": photon_stdev_val
+                                    "photon_stdev": photon_stdev_val,
                                 }
                     except Exception as e:
                         print(f"[ROI] Could not compute stats: {e}")
                 
                 # Add row with region_id as item ID (iid), not in values
-                values = (name, tool_type, tau_med, tau_stdev, photon_count, photon_stdev)
+                values = (name, tool_type, tau_mean, tau_med, tau_stdev, photon_count, photon_stdev)
                 self._tree.insert("", "end", iid=str(region_id), values=values, tags=(f"color_{region_id}",))
                 
                 # Color the row by region

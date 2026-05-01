@@ -165,7 +165,7 @@ def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins) -> int:
 
 def _build_bounds(n_exp, tau_min, tau_max, decay_peak,
                   has_tail, fit_bg, fit_sigma, bg_init=0.0, bg_upper=None,
-                  sigma_max=3.0, irf_shift_bins=2):
+                  sigma_max=3.0, irf_shift_bins=5):
     """
     Build lower/upper bound lists matching the parameter vector layout
     in reconvolution_model.

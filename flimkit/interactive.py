@@ -881,10 +881,14 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
 
     # Pile-up report
     pu = ptu.pileup_fraction
+    _pileup_pct = None
+    _count_rate_mhz = None
     if pu is not None:
         acq_s = ptu.n_records / ptu.sync_rate
         cr_mhz = (decay.sum() / acq_s) / 1e6
         pu_pct = pu * 100
+        _pileup_pct = round(pu_pct, 2)
+        _count_rate_mhz = round(cr_mhz, 4)
         pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
         print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
               f"Acq: {acq_s:.1f} s  "
@@ -1094,15 +1098,17 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print("\nDone.\n")
 
     return {
-        'pixel_maps':     pixel_maps     if args.mode in ("perPixel", "both") else None,
-        'global_summary': global_summary,
-        'global_popt':    global_popt,
-        'tcspc_res':      ptu.tcspc_res,
-        'n_bins':         ptu.n_bins,
-        'strategy':       strategy,
-        'irf_prompt':     irf_prompt,
-        'time_ns':        ptu.time_ns,
-        'decay':          decay,
+        'pixel_maps':       pixel_maps     if args.mode in ("perPixel", "both") else None,
+        'global_summary':   global_summary,
+        'global_popt':      global_popt,
+        'tcspc_res':        ptu.tcspc_res,
+        'n_bins':           ptu.n_bins,
+        'strategy':         strategy,
+        'irf_prompt':       irf_prompt,
+        'time_ns':          ptu.time_ns,
+        'decay':            decay,
+        'pileup_pct':       _pileup_pct,
+        'count_rate_mhz':   _count_rate_mhz,
     }
 
 

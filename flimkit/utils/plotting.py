@@ -13,10 +13,21 @@ except Exception:
     pass  # If backend switching fails, continue anyway
 
 
+# rcParams for file exports — overrides any dark-theme globals set by the GUI
+_EXPORT_RC = {
+    'text.color':       'black',
+    'axes.labelcolor':  'black',
+    'xtick.color':      'black',
+    'ytick.color':      'black',
+    'axes.titlecolor':  'black',
+}
+
+
 def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
                irf_prompt=None):
     plt.rcParams.update({"figure.dpi": 130, "font.size": 10,
-                          "axes.spines.top": False, "axes.spines.right": False})
+                          "axes.spines.top": False, "axes.spines.right": False,
+                          **_EXPORT_RC})
     s    = summary
     t_ns = np.arange(ptu.n_bins) * ptu.tcspc_res * 1e9
     fs, fe = s["fit_window_bins"]
@@ -130,6 +141,7 @@ def plot_pixel_maps(maps, n_exp, out_prefix, binning=1):
 
 
 def plot_lifetime_histogram(maps, n_exp, out_prefix):
+    plt.rcParams.update(_EXPORT_RC)
     tau = maps["tau_mean_int"]
     wt  = maps["intensity"]
     ok  = np.isfinite(tau) & (wt > 0)
