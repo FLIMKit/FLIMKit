@@ -531,8 +531,11 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_bg    = True
 
     elif args.estimate_irf == "machine_irf":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = MACHINE_IRF_FIT_SIGMA
         fit_bg    = MACHINE_IRF_FIT_BG
@@ -540,8 +543,11 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         print(f"  IRF: {strategy}")
 
     elif args.estimate_irf == "machine_irf_sigma_full":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
         fit_bg    = MACHINE_IRF_FIT_BG
@@ -550,8 +556,11 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         print(f"  IRF: {strategy}")
 
     elif args.estimate_irf == "machine_irf_sigma_half":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
         fit_bg    = MACHINE_IRF_FIT_BG
@@ -604,6 +613,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         polish=not args.no_polish,
         cost_function=getattr(args, 'cost_function', 'poisson'),
         sigma_max=sigma_max,
+        irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
     )
     
     print_summary(global_summary, strategy, args.nexp)
@@ -651,7 +661,10 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             min_photons=args.min_photons,
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
+            correct_pileup=getattr(args, 'correct_pileup', False),
+            n_sync=getattr(ptu, 'n_records', 0),
             progress_callback=perpixel_progress_cb,
+            free_tau=getattr(args, 'free_tau_perpixel', False),
         )
         
         if getattr(args, 'save_weighted', True):
@@ -809,7 +822,7 @@ def single_FOV_flim_fit_inquire():
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     """Core fitting routine – identical to original single_FOV_flim_fit body."""
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v13  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     print(f"\n[1] PTU: {args.ptu}")
@@ -866,7 +879,25 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
           f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
 
-    xlsx = None
+    # Pile-up report
+    pu = ptu.pileup_fraction
+    if pu is not None:
+        acq_s = ptu.n_records / ptu.sync_rate
+        cr_mhz = (decay.sum() / acq_s) / 1e6
+        pu_pct = pu * 100
+        pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
+        print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
+              f"Acq: {acq_s:.1f} s  "
+              f"Count rate: {cr_mhz:.3f} MHz  "
+              f"Pile-up: {pu_pct:.1f}%{pu_warn}")
+        if getattr(args, 'correct_pileup', False):
+            from flimkit.FLIM.fit_tools import coates_pileup_correction, estimate_bg
+            bg_pre = estimate_bg(decay, irf_peak_bin)
+            decay_no_bg = np.maximum(decay - bg_pre, 0.0)
+            decay_raw_sum = decay.sum()
+            decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
+            print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
+                  f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
     if args.xlsx is not None and Path(args.xlsx).exists():
         print(f"\n[3] XLSX: {args.xlsx}")
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
@@ -917,16 +948,22 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f"  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}")
 
     elif args.estimate_irf == "machine_irf":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), ptu.n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = MACHINE_IRF_FIT_SIGMA
         fit_bg    = MACHINE_IRF_FIT_BG
         print(f"  IRF: {strategy}")
 
     elif args.estimate_irf == "machine_irf_sigma_full":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), ptu.n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
         fit_bg    = MACHINE_IRF_FIT_BG
@@ -935,8 +972,11 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f"  IRF: {strategy}")
 
     elif args.estimate_irf == "machine_irf_sigma_half":
+        _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
+        _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
-            getattr(args, 'machine_irf', None), ptu.n_bins, decay_peak_bin)
+            getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
+        strategy += f" align={_align_lbl}"
         has_tail  = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
         fit_bg    = MACHINE_IRF_FIT_BG
@@ -992,6 +1032,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
+            irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
         )
 
     if args.mode in ("summed", "both"):
@@ -1038,7 +1079,10 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             min_photons=args.min_photons,
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
+            correct_pileup=getattr(args, 'correct_pileup', False),
+            n_sync=ptu.n_records,
             progress_callback=perpixel_progress_cb,
+            free_tau=getattr(args, 'free_tau_perpixel', False),
         )
 
         if not args.no_plots:

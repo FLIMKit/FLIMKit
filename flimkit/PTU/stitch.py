@@ -855,6 +855,14 @@ def fit_flim_tiles(
             identical convolution basis → smooth amplitude maps with no
             tile boundary artefacts.
 
+    Tile registration and canvas assembly follow the globally-optimised
+    phase-correlation stitching approach of:
+
+        Preibisch, S., Saalfeld, S. and Tomancak, P. (2009).
+        "Globally optimal stitching of tiled 3D microscopic image
+        acquisitions." Bioinformatics 25(11), 1463–1465.
+        https://doi.org/10.1093/bioinformatics/btp184
+
     Args
     ----
     xlif_path:       XLIF metadata file (tile positions)
@@ -1098,6 +1106,9 @@ def fit_flim_tiles(
                 min_photons = min_photons,
                 tau_min_ns  = tau_min_ns,
                 tau_max_ns  = tau_max_ns,
+                correct_pileup = getattr(args, 'correct_pileup', False),
+                n_sync      = ptu.n_records,
+                free_tau    = getattr(args, 'free_tau_perpixel', False),
             )
             del stack
 

@@ -10,7 +10,7 @@ from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, MIN_PHOTONS_PERPIX
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from flimkit.utils.misc import print_summary
 from flimkit.utils.xlsx_tools import load_xlsx
-from flimkit.FLIM.fit_tools import find_irf_peak_bin
+from flimkit.FLIM.fit_tools import find_irf_peak_bin, coates_pileup_correction
 from flimkit.image.tools import make_intensity_image, apply_intensity_threshold, pick_intensity_threshold
 from flimkit.utils.enhanced_outputs import save_weighted_tau_images, save_individual_tau_maps
 from flimkit.configs import *
@@ -92,6 +92,12 @@ def single_FOV_flim_fit_cli():
     ap.add_argument("--intensity-display-max", type=float, default=INTENSITY_DISPLAY_MAX,
                     help="Max intensity for exported intensity images. "
                          "Out-of-range pixels are clipped to this value (LAS X style).")
+    ap.add_argument("--correct-pileup", action="store_true",
+                    help="Apply Coates (1968) pile-up correction to the decay before "
+                         "fitting. Recommended when count rate > 5%% of sync rate.")
+    ap.add_argument("--free-tau", action="store_true",
+                    help="Free tau per pixel: LM fit per pixel with tau as free parameters "
+                         "(slower; needed to see spatial tau variation for n_exp > 1).")
     ap.add_argument("--print-config", action="store_true", help="Print default configuration settings and exit")
     args = ap.parse_args()
 
@@ -100,7 +106,7 @@ def single_FOV_flim_fit_cli():
         return
 
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v13  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     #  Load PTU
@@ -147,6 +153,26 @@ def single_FOV_flim_fit_cli():
           f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
     print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
           f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
+
+    # Pile-up report
+    pu = ptu.pileup_fraction
+    if pu is not None:
+        acq_s = ptu.n_records / ptu.sync_rate
+        cr_mhz = (decay.sum() / acq_s) / 1e6
+        pu_pct = pu * 100
+        pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
+        print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
+              f"Acq: {acq_s:.1f} s  "
+              f"Count rate: {cr_mhz:.3f} MHz  "
+              f"Pile-up: {pu_pct:.1f}%{pu_warn}")
+        if getattr(args, 'correct_pileup', False):
+            from flimkit.FLIM.fit_tools import estimate_bg
+            bg_pre = estimate_bg(decay, irf_peak_bin)
+            decay_no_bg = np.maximum(decay - bg_pre, 0.0)
+            decay_raw_sum = decay.sum()
+            decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
+            print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
+                  f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
 
     #  Load xlsx (optional) 
     xlsx = None
@@ -341,6 +367,9 @@ def single_FOV_flim_fit_cli():
             min_photons=args.min_photons,
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
+            correct_pileup=getattr(args, 'correct_pileup', False),
+            n_sync=ptu.n_records,
+            free_tau=getattr(args, 'free_tau', False),
         )
 
         # Save weighted tau and intensity images
@@ -438,6 +467,12 @@ def single_FOV_flim_fit_cli():
     ap.add_argument("--intensity-display-max", type=float, default=INTENSITY_DISPLAY_MAX,
                     help="Max intensity for exported intensity images. "
                          "Out-of-range pixels are clipped to this value (LAS X style).")
+    ap.add_argument("--correct-pileup", action="store_true",
+                    help="Apply Coates (1968) pile-up correction to the decay before "
+                         "fitting. Recommended when count rate > 5%% of sync rate.")
+    ap.add_argument("--free-tau", action="store_true",
+                    help="Free tau per pixel: LM fit per pixel with tau as free parameters "
+                         "(slower; needed to see spatial tau variation for n_exp > 1).")
     ap.add_argument("--print-config", action="store_true", help="Print default configuration settings and exit")
     args = ap.parse_args()
 
@@ -446,7 +481,7 @@ def single_FOV_flim_fit_cli():
         return
 
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v13  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     #  Load PTU 
@@ -493,6 +528,26 @@ def single_FOV_flim_fit_cli():
           f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
     print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
           f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
+
+    # Pile-up report
+    pu = ptu.pileup_fraction
+    if pu is not None:
+        acq_s = ptu.n_records / ptu.sync_rate
+        cr_mhz = (decay.sum() / acq_s) / 1e6
+        pu_pct = pu * 100
+        pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
+        print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
+              f"Acq: {acq_s:.1f} s  "
+              f"Count rate: {cr_mhz:.3f} MHz  "
+              f"Pile-up: {pu_pct:.1f}%{pu_warn}")
+        if getattr(args, 'correct_pileup', False):
+            from flimkit.FLIM.fit_tools import estimate_bg
+            bg_pre = estimate_bg(decay, irf_peak_bin)
+            decay_no_bg = np.maximum(decay - bg_pre, 0.0)
+            decay_raw_sum = decay.sum()
+            decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
+            print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
+                  f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
 
     #  Load xlsx (optional) 
     xlsx = None
@@ -687,6 +742,9 @@ def single_FOV_flim_fit_cli():
             min_photons=args.min_photons,
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
+            correct_pileup=getattr(args, 'correct_pileup', False),
+            n_sync=ptu.n_records,
+            free_tau=getattr(args, 'free_tau', False),
         )
 
         # Save weighted tau and intensity images

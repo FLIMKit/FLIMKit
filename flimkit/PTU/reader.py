@@ -78,7 +78,7 @@ def _read_ptu_header(path: str) -> tuple[dict, int]:
 
 class PTUFile:
     """
-    PTU file reader - DO NOT MODIFY - used by flim9.py
+    PTU file reader - note to self: STOP TOUCHING THIS!! IT WORKS AND YOU'LL BREAK IT!!
     
     This class reads PicoQuant PTU files and provides methods to extract
     summed decays and pixel stacks.
@@ -104,6 +104,8 @@ class PTUFile:
         self.time_ns    = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
         self.photon_channel = None
         self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
+        # Pile-up metrics — populated after summed_decay() is called
+        self._total_photons: int | None = None
         # pixel_time in seconds
         pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)   # in ms? check units
         self.pixel_time = pixel_time_ms * 1e-3                      # convert to seconds
@@ -158,7 +160,26 @@ class PTUFile:
         ph_mask = photon & (ch == channel)
         dt_ph   = dtime[ph_mask].astype(np.int32)
         decay   = np.bincount(dt_ph, minlength=self.n_bins).astype(float)
+        self._total_photons = int(decay.sum())
         return decay[:self.n_bins]
+
+    @property
+    def pileup_fraction(self) -> float | None:
+        """Fraction of sync pulses that detected a photon (0–1).
+
+        Above ~0.05 (5 %) pile-up causes measurable lifetime shortening bias
+        and Coates correction is recommended.  Returns None if summed_decay()
+        has not yet been called (photon count not yet known).
+
+        Formula: count_rate / sync_rate where count_rate = total_photons /
+        acquisition_time and acquisition_time = n_records / sync_rate.
+        Simplifies to: total_photons / n_records.
+
+        Reference: Coates (1968) J. Phys. E 1:878; Becker (2005) p.~82.
+        """
+        if self._total_photons is None or self.n_records == 0:
+            return None
+        return self._total_photons / self.n_records
 
     def raw_pixel_stack(self, channel: int | None = None, binning: int = 1) -> np.ndarray:
         """

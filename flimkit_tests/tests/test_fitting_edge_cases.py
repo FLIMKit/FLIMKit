@@ -57,6 +57,83 @@ class TestPerPixelFitting:
         maps = fit_per_pixel(stack, 97e-12, n_bins, irf, has_tail=False, fit_bg=True, fit_sigma=False, global_popt=global_popt, n_exp=1, min_photons=1)
         assert np.isnan(maps['tau_mean_amp'][0, 0])
 
+    # -- free-tau tests --
+
+    def test_free_tau_returns_tau_maps_for_nexp2(self):
+        """free_tau=True should populate tau_1 / tau_2 per pixel (not fixed to global)."""
+        from flimkit_tests.mock_data import generate_synthetic_decay, MOCK_IRF_CENTER, MOCK_IRF_FWHM_BINS
+        n_bins = 256
+        tcspc = 97e-12
+        irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, MOCK_IRF_CENTER)
+
+        # Build a tiny 2×1 stack with known bi-exponential decays
+        d1 = generate_synthetic_decay(n_bins, tcspc, tau_ns=0.5, noise=False, peak_counts=2000)
+        d2 = generate_synthetic_decay(n_bins, tcspc, tau_ns=3.0, noise=False, peak_counts=2000)
+        stack = np.stack([[d1], [d2]])  # (2,1,n_bins)
+
+        # global_popt: [tau1, tau2, amp1, amp2, shift]  (no bg, no sigma, no tail)
+        global_popt = np.array([0.5e-9, 3.0e-9, 1000.0, 500.0, 0.0])
+
+        maps_fixed = fit_per_pixel(
+            stack, tcspc, n_bins, irf,
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=global_popt, n_exp=2, min_photons=10,
+            free_tau=False,
+        )
+        maps_free = fit_per_pixel(
+            stack, tcspc, n_bins, irf,
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=global_popt, n_exp=2, min_photons=10,
+            free_tau=True,
+        )
+
+        # Fixed mode: tau_1 is constant across pixels
+        assert maps_fixed['tau_1'][0, 0] == maps_fixed['tau_1'][1, 0]
+
+        # Free mode: tau maps are populated and finite
+        assert np.isfinite(maps_free['tau_1'][0, 0])
+        assert np.isfinite(maps_free['tau_2'][0, 0])
+        assert np.isfinite(maps_free['tau_mean_int'][0, 0])
+
+    def test_free_tau_skips_low_photon_pixels(self):
+        """Pixels below min_photons should be NaN in free-tau mode."""
+        n_bins = 128
+        tcspc = 97e-12
+        irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, 30)
+        stack = np.zeros((2, 1, n_bins))
+        stack[0, 0, 30:80] = 50   # enough photons
+        stack[1, 0, :] = 0        # zero photons → skip
+
+        global_popt = np.array([0.5e-9, 3.0e-9, 500.0, 200.0, 0.0])
+        maps = fit_per_pixel(
+            stack, tcspc, n_bins, irf,
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=global_popt, n_exp=2, min_photons=10,
+            free_tau=True,
+        )
+        assert np.isfinite(maps['tau_mean_amp'][0, 0])
+        assert np.isnan(maps['tau_mean_amp'][1, 0])
+
+    def test_free_tau_nexp1_falls_through_to_grid(self):
+        """free_tau=True with n_exp=1 should still use the grid-scan path (n_exp==1 branch)."""
+        from flimkit_tests.mock_data import generate_synthetic_decay, MOCK_IRF_CENTER
+        n_bins = 128
+        tcspc = 97e-12
+        irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, MOCK_IRF_CENTER)
+        d = generate_synthetic_decay(n_bins, tcspc, tau_ns=2.0, noise=False, peak_counts=1000)
+        stack = d[np.newaxis, np.newaxis, :]  # (1,1,n_bins)
+
+        global_popt = np.array([2e-9, 1000.0, 0.0, 5.0])  # shift=0, bg=5
+        maps = fit_per_pixel(
+            stack, tcspc, n_bins, irf,
+            has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=global_popt, n_exp=1, min_photons=10,
+            free_tau=True,
+        )
+        # Should still converge and give a reasonable lifetime
+        assert np.isfinite(maps['tau_1'][0, 0])
+        assert 0.5 < maps['tau_1'][0, 0] < 10.0
+
 
 class TestCostFunctions:
     """Additional tests for Poisson deviance and log-tau cost functions."""

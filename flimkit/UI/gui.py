@@ -571,6 +571,10 @@ _EXPERT_DEFAULTS = {
     "cost_function": "poisson",
     "channels": "",
     "min_photons": 10,
+    "irf_fwhm": None,
+    "irf_align": "steepest_rise",
+    "irf_shift_bins": 2,
+    "free_tau_perpixel": False,
 }
 
 
@@ -668,6 +672,39 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Entry(f, textvariable=self._sv_channels, width=12).grid(row=row, column=1, sticky="w", **PAD)
         ttk.Label(f, text="(blank = all channels)", foreground="grey").grid(row=row, column=2, columnspan=2, sticky="w", **PAD)
 
+        # IRF FWHM override
+        row += 1
+        ttk.Label(f, text="IRF FWHM (ns):").grid(row=row, column=0, sticky="w", **PAD)
+        _irf_fwhm_val = vals.get("irf_fwhm")
+        self._sv_irf_fwhm = tk.StringVar(value="" if _irf_fwhm_val is None else str(_irf_fwhm_val))
+        ttk.Entry(f, textvariable=self._sv_irf_fwhm, width=12).grid(row=row, column=1, sticky="w", **PAD)
+        ttk.Label(f, text="(blank = 1 bin auto, e.g. 0.097)", foreground="grey").grid(row=row, column=2, columnspan=2, sticky="w", **PAD)
+
+        # IRF alignment target
+        row += 1
+        ttk.Label(f, text="IRF alignment:").grid(row=row, column=0, sticky="w", **PAD)
+        self._sv_irf_align = tk.StringVar(value=vals.get("irf_align", "steepest_rise"))
+        align_frame = ttk.Frame(f)
+        align_frame.grid(row=row, column=1, columnspan=3, sticky="w", **PAD)
+        ttk.Radiobutton(align_frame, text="Steepest rise (recommended)",
+                        variable=self._sv_irf_align, value="steepest_rise").pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(align_frame, text="Decay peak (legacy)",
+                        variable=self._sv_irf_align, value="decay_peak").pack(side="left")
+
+        # IRF shift bounds
+        row += 1
+        ttk.Label(f, text="IRF shift bound (±bins):").grid(row=row, column=0, sticky="w", **PAD)
+        self._sv_irf_shift = tk.StringVar(value=str(vals.get("irf_shift_bins", 2)))
+        ttk.Entry(f, textvariable=self._sv_irf_shift, width=8).grid(row=row, column=1, sticky="w", **PAD)
+        ttk.Label(f, text="(2 = recommended; 5 = legacy)", foreground="grey").grid(row=row, column=2, columnspan=2, sticky="w", **PAD)
+
+        # Free tau per pixel
+        row += 1
+        self._bv_free_tau = tk.BooleanVar(value=bool(vals.get("free_tau_perpixel", False)))
+        ttk.Checkbutton(f, text="Free τ per pixel  (slower — reveals τ spatial variation for n_exp > 1)",
+                        variable=self._bv_free_tau).grid(
+            row=row, column=0, columnspan=4, sticky="w", **PAD)
+
         # Buttons
         row += 1
         btn_frame = ttk.Frame(f)
@@ -686,6 +723,7 @@ class ExpertSettingsDialog(tk.Toplevel):
 
     def _collect(self) -> dict:
         ch = self._sv_channels.get().strip()
+        _fwhm_s = self._sv_irf_fwhm.get().strip()
         return {
             "optimizer": self._sv_optimizer.get(),
             "de_population": int(self._sv_de_pop.get() or 30),
@@ -696,6 +734,10 @@ class ExpertSettingsDialog(tk.Toplevel):
             "min_photons": int(self._sv_min_ph.get() or 10),
             "cost_function": self._sv_cost.get(),
             "channels": int(ch) if ch.isdigit() else (None if ch == "" else ch),
+            "irf_fwhm": float(_fwhm_s) if _fwhm_s else None,
+            "irf_align": self._sv_irf_align.get(),
+            "irf_shift_bins": int(self._sv_irf_shift.get() or 2),
+            "free_tau_perpixel": self._bv_free_tau.get(),
         }
 
     def _confirm(self):
@@ -717,6 +759,10 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_min_ph.set(str(d["min_photons"]))
         self._sv_cost.set(d["cost_function"])
         self._sv_channels.set("")
+        self._sv_irf_fwhm.set("")
+        self._sv_irf_align.set("steepest_rise")
+        self._sv_irf_shift.set("2")
+        self._bv_free_tau.set(False)
 
 
 class FOVPreviewPanel:
@@ -3552,6 +3598,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
                 "thr_fov_en":     self.bv_thr_fov.get() if hasattr(self, 'bv_thr_fov') else False,
                 "thr_fov_val":    self.sv_thr_fov.get() if hasattr(self, 'sv_thr_fov') else "5",
                 "cell_mask":      self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
+                "correct_pileup": self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False,
 
                 # Stitch / tile-fit specific
                 "xlif_file":      self.sv_xlif.get()    if hasattr(self, 'sv_xlif')    else "",
@@ -3615,6 +3662,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
             if "thr_fov_en" in state and hasattr(self, 'bv_thr_fov'): self.bv_thr_fov.set(state["thr_fov_en"])
             if "thr_fov_val" in state and hasattr(self, 'sv_thr_fov'): self.sv_thr_fov.set(state["thr_fov_val"])
             if "cell_mask" in state and hasattr(self, 'bv_cell'): self.bv_cell.set(state["cell_mask"])    
+            if "correct_pileup" in state and hasattr(self, 'bv_correct_pileup'): self.bv_correct_pileup.set(state["correct_pileup"])
                         
             # Restore other settings
             if "register" in state and hasattr(self, 'bv_register'):
@@ -5030,6 +5078,11 @@ Built with Python, Tkinter, NumPy, and SciPy.
         ttk.Label(fm, text="(leave blank for no threshold)",
                   foreground="grey").grid(row=1, column=2, sticky="w")
 
+        self.bv_correct_pileup = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fm, text="Apply Coates pile-up correction (recommended if pile-up > 5%)",
+                        variable=self.bv_correct_pileup).grid(
+            row=2, column=0, columnspan=3, sticky="w", **PAD)
+
         # Expert settings banner (hidden until expert settings are confirmed)
         self._expert_banner_fov = ttk.Label(
             tab, text="⚙  Custom expert settings active",
@@ -5248,6 +5301,14 @@ Built with Python, Tkinter, NumPy, and SciPy.
             a.cost_function = ex["cost_function"]
         if "channels" in ex:
             a.channel = ex["channels"]
+        if "irf_fwhm" in ex and ex["irf_fwhm"] is not None:
+            a.irf_fwhm = ex["irf_fwhm"]
+        if "irf_align" in ex:
+            a.irf_align = ex["irf_align"]
+        if "irf_shift_bins" in ex:
+            a.irf_shift_bins = ex["irf_shift_bins"]
+        if "free_tau_perpixel" in ex:
+            a.free_tau_perpixel = ex["free_tau_perpixel"]
 
     def _open_expert_settings(self):
         """Open the expert settings dialog and update banners accordingly."""
@@ -6054,7 +6115,10 @@ Built with Python, Tkinter, NumPy, and SciPy.
             a.out = _out_raw
         a.no_plots      = False
         a.cell_mask     = self.bv_cell.get()
+        a.correct_pileup = self.bv_correct_pileup.get()
         a.intensity_threshold = _thresh(self.bv_thr_fov, self.sv_thr_fov)
+        a.irf_align     = "steepest_rise"
+        a.irf_shift_bins = 2
 
         self._apply_expert_overrides(a)
 
@@ -6120,10 +6184,13 @@ Built with Python, Tkinter, NumPy, and SciPy.
         a.intensity_display_min  = _flt(self.sv_int_lo)
         a.intensity_display_max  = _flt(self.sv_int_hi)
         a.intensity_threshold    = _thresh(self.bv_thr_st, self.sv_thr_st)
+        a.correct_pileup         = self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False
         a.save_individual        = self.bv_save_ind.get()
         a.save_tau_weighted      = self.bv_save_tau_weighted.get()
         a.save_int_weighted      = self.bv_save_int_weighted.get()
         a.save_amp_weighted      = self.bv_save_amp_weighted.get()
+        a.irf_align              = "steepest_rise"
+        a.irf_shift_bins         = 2
 
         self._apply_expert_overrides(a)
 
