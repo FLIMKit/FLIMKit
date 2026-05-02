@@ -871,6 +871,7 @@ class FOVPreviewPanel:
             'cmap': 'viridis',
         }
         self._n_exp = 1  # Number of exponential components in last fit
+        self._irf_prompt = None  # IRF used in last fit — for per-ROI refitting
         
         #  Region management
         self._roi_manager = RoiManager()  # Manages all drawn regions
@@ -970,6 +971,8 @@ class FOVPreviewPanel:
             global_summary = fit_result.get('global_summary', {})
             global_popt = fit_result.get('global_popt')
             irf_prompt = fit_result.get('irf_prompt')
+            if irf_prompt is not None:
+                self._irf_prompt = irf_prompt  # Cache for per-ROI fitting
             time_ns_from_result = fit_result.get('time_ns')
             decay_from_result = fit_result.get('decay')
             canvas = fit_result.get('canvas')
@@ -3233,9 +3236,12 @@ Built with Python, Tkinter, NumPy, and SciPy.
         self._fov_preview = FOVPreviewPanel(preview_frame)
         self._fov_preview.grid(row=0, column=0, sticky="nsew")
         
-        # Connect ROI Analysis panel to FOV preview 
+        # Connect ROI Analysis panel to FOV preview
         self._roi_analysis_panel.fov_preview = self._fov_preview
         self._fov_preview._roi_analysis_panel = self._roi_analysis_panel
+        # Provide threading + fit-params callbacks for per-ROI decay fitting
+        self._roi_analysis_panel.run_with_progress = self.run_with_progress
+        self._roi_analysis_panel.get_fit_params = self._get_roi_fit_params
 
         # Phasor panel shares the same right-panel cell; hidden until needed.
         self._phasor_panel = PhasorViewPanel(preview_frame, max_cursors=6)
@@ -4006,6 +4012,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
                                                     linewidth=1.5, markersize=3, label="Measured", alpha=0.7)
                                     irf = session_data.get("irf_prompt")
                                     if irf is not None and isinstance(irf, np.ndarray) and irf.max() > 0:
+                                        self._fov_preview._irf_prompt = irf  # Cache for per-ROI fitting
                                         irf_scaled = (irf / irf.max()) * decay.max() * 0.2
                                         ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                                         color="orange", linewidth=2.0, label="IRF", alpha=0.8)
@@ -4066,6 +4073,15 @@ Built with Python, Tkinter, NumPy, and SciPy.
                     print(f"[Auto-Load] Could not restore results: {e}")
                     import traceback
                     traceback.print_exc()
+                finally:
+                    # Always refresh the ROI table at the end of session restore —
+                    # even if the earlier inner try failed — so regions are visible
+                    # and stats reflect the now-loaded lifetime map.
+                    try:
+                        if self._roi_analysis_panel is not None:
+                            self._roi_analysis_panel._refresh_region_list()
+                    except Exception:
+                        pass
             else:
                 print(f"[Auto-Load] No session found for {ptu_path.name}")
         except Exception as e:
@@ -6283,7 +6299,37 @@ Built with Python, Tkinter, NumPy, and SciPy.
         self._xlif_after_id = self.root.after(100, _do_xlif_load)
     
     # Run handlers
-    
+
+    def _get_roi_fit_params(self) -> dict:
+        """Return the current form's fitting parameters for use by per-ROI decay fitting."""
+        cfg = _C()
+        irf = self._irf_fov.get_args(xlsx_fallback=self.sv_xlsx.get().strip())
+        params = {
+            "ptu_path":       self.sv_ptu.get().strip() or None,
+            "n_exp":          self.iv_nexp_fov.get(),
+            "tau_min":        float(self.sv_tau_min_fov.get() or cfg["Tau_min"]),
+            "tau_max":        float(self.sv_tau_max_fov.get() or cfg["Tau_max"]),
+            "cost_function":  cfg.get("cost_function", "poisson"),
+            "channel":        cfg["channels"],
+            "irf":            irf["irf"],
+            "irf_xlsx":       irf["irf_xlsx"],
+            "estimate_irf":   irf["estimate_irf"],
+            "machine_irf":    irf.get("machine_irf") or str(cfg["MACHINE_IRF_DEFAULT_PATH"]),
+            "irf_bins":       cfg["IRF_BINS"],
+            "irf_fit_width":  cfg["IRF_FIT_WIDTH"],
+            "irf_fwhm":       cfg["IRF_FWHM"],
+            "irf_align":      "steepest_rise",
+            "irf_shift_bins": 2,
+        }
+        # Apply expert overrides that affect fitting
+        expert = self._expert_overrides
+        if expert:
+            if "cost_function" in expert:
+                params["cost_function"] = expert["cost_function"]
+            if "channels" in expert:
+                params["channel"] = expert["channels"]
+        return params
+
     def _run_fov(self):
         ptu = self.sv_ptu.get().strip()
         if not ptu or not Path(ptu).exists():

@@ -175,6 +175,35 @@ ROIs are saved as part of the session. You can export them as GeoJSON for QuPath
 
 Note: GeoJSON import currently only preserves the outer boundary of shapes, donut-shaped ROIs with holes will lose the hole geometry on import.
 
+##### Per-ROI decay fitting
+
+The **⚗ Fit ROI Decay** button fits the summed decay from the selected region(s) independently, rather than using the whole-FOV fit.
+
+**Selecting regions:**
+- Single region: click it in the list, then click **⚗ Fit ROI Decay**.
+- Multiple regions: Shift-click or Cmd-click to select several; they are combined into one union mask and treated as a single merged region for the fit.
+
+**Fit Options dialog:** Before the fit runs, a small dialog appears pre-filled with the current global fit parameters. You can change any of the following without touching the main form:
+
+| Option | Description |
+|---|---|
+| Components (n_exp) | 1-, 2-, or 3-exponential model |
+| τ_min / τ_max (ns) | Lifetime search bounds |
+| Cost function | Poisson deviance or Pearson χ² |
+
+Click **Run Fit** to proceed or **Cancel** to abort.
+
+**Results window:** Opens automatically after fitting. Shows:
+- Decay data (log-scale), IRF overlay, and fitted model curve
+- Weighted residuals panel with χ²_r annotation
+- Summary table: τ₁…τₙ, amplitudes A₁…Aₙ, amplitude-weighted τ_mean, χ²_r (tail)
+
+**Reopening results without refitting:** Select the same region(s) and click **View Fit**. The last result for that selection is cached in memory and the plot window reopens instantly. The cache is lost when the app is closed.
+
+**Session persistence:** After fitting, the numeric stats (τ_mean_fit, τ₁…τₙ, A₁…Aₙ, χ²_r) are written back into each region's statistics and saved to the `.roi_session.npz` automatically. The plot data (decay array, model curve) is not stored, so after reloading a session you need to refit to regenerate the plot — but the τ values are already there.
+
+**CSV export** ("Export as CSV" button) includes all fit result columns: `Tau_mean_fit_ns`, `Chi2_r_fit`, and dynamic `Tau1_fit_ns / Amp1_fit`, `Tau2_fit_ns / Amp2_fit`, … columns sized to the maximum number of exponential components across all fitted regions. Regions that haven't been fitted yet show `N/A`.
+
 #### Phasor analysis
 
 Load a PTU file plus an IRF calibration (XLSX, machine IRF, etc). The app computes the phasor histogram and shows it alongside the intensity image. Click on the phasor plot to place elliptical cursors, the corresponding pixels in the intensity image highlight immediately.
@@ -573,7 +602,20 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 #### `gui.py`
 - **`launch_gui()`** — entry point for the Tkinter GUI
 - **`FLIMKitApp`** — main application class. Tabs: Single FOV Fit, Tile Stitch/Fit, Batch ROI Fit, Machine IRF Builder, Phasor Analysis
-- **`FOVPreviewPanel`** — right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active.
+- **`FOVPreviewPanel`** — right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active. Caches the last fitted IRF prompt (`_irf_prompt`) so per-ROI fits can reuse it.
+
+#### `roi_tools.py`
+- **`RoiManager`** — stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence.
+  - `.add_region(name, tool, coords)` — register a new region, returns its integer ID
+  - `.compute_region_mask(region_id, image_shape)` — boolean (H×W) mask for a region
+  - `.to_json()` / `.from_json(json_str)` — serialise/deserialise for session files
+- **`RoiAnalysisPanel`** — tab panel for region drawing, statistics display, and per-ROI fitting.
+  - Drawing modes: Select, Rectangle, Ellipse, Polygon, Freehand
+  - Per-region stats: τ_mean, τ_median, τ_stdev, photon count (all from the loaded lifetime/intensity maps)
+  - **`_fit_roi_decay()`** — shows the Fit Options dialog, builds a union mask for all selected regions, extracts the summed decay, and runs `fit_summed` in a background thread. On completion writes τ stats back to each merged region and updates the session file.
+  - **`_show_roi_fit_result(result)`** / **`_view_last_fit_result()`** — open (or reopen from cache) the dark-themed fit result popup with decay plot, residuals, and summary table.
+  - Export: CSV (including fit columns), GeoJSON (single or all regions), GeoJSON import
+- **`_ask_roi_fit_options(params)`** — modal dialog for overriding n_exp, τ bounds, and cost function before a per-ROI fit. Returns an updated params dict or None if cancelled.
 
 #### `phasor_panel.py`
 - **`PhasorViewPanel(parent, max_cursors=6)`** — embedded Tkinter widget with `FigureCanvasTkAgg`. Top axes: FOV intensity image (colourised once cursors are placed); bottom axes: phasor histogram. Controls: Clear, Undo, Save session, Radius slider, Minor/major slider.
@@ -635,6 +677,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 │   │
 │   ├── UI/
 │   │   ├── gui.py                 # Tkinter desktop GUI
+│   │   ├── roi_tools.py           # ROI drawing panel, RoiManager, per-ROI decay fitting
 │   │   └── phasor_panel.py        # Embedded phasor view panel
 │   │
 │   ├── PTU/
@@ -672,7 +715,8 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
     ├── mock_data.py
     ├── conftest.py
     ├── test_complete_pipeline.py
-    └── tests/
+│       ├── test_roi_decay_fit.py
+        └── tests/
         ├── test_decode.py
         ├── test_integration.py
         └── test_xml_utils.py
@@ -732,6 +776,7 @@ pytest tests/test_integration.py -v
 | Tile stitching | Canvas computation, overlap handling |
 | Integration | Complete workflows, error handling |
 | Per-tile fit pipeline | Assembly, global tau, output files |
+| Per-ROI decay fitting | ROI mask extraction, fit pipeline, IRF fallback, stat writeback, edge cases |
 
 ---
 
