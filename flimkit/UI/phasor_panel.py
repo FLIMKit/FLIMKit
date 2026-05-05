@@ -70,6 +70,13 @@ class PhasorViewPanel:
         self._drag_idx:  Optional[int] = None           # cursor index being dragged
         self._drag_last: tuple = (0.0, 0.0)             # last (g, s) during drag
 
+        # Per-cursor decay fitting
+        self._ptu_path:  Optional[str] = None   # set by FLIMKitApp after load
+        self._channel:   Optional[int] = None   # set by FLIMKitApp after load
+        self._last_fit_result: Optional[dict] = None  # cached result for reopen
+        self.run_with_progress = None
+        self.get_fit_params    = None
+
 
         self._radius = tk.DoubleVar(value=0.05)
         self._ratio  = tk.DoubleVar(value=0.60)    # radius_minor = ratio × radius
@@ -93,28 +100,32 @@ class PhasorViewPanel:
         ctrl = ttk.Frame(self.frame)
         ctrl.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
 
-        ttk.Button(ctrl, text="✕  Clear all",
+        #Row 0: cursor management + mode + sliders 
+        row0 = ttk.Frame(ctrl)
+        row0.pack(side="top", fill="x")
+
+        ttk.Button(row0, text="✕  Clear all",
                    command=self._on_clear).pack(side="left", padx=(0, 4))
-        ttk.Button(ctrl, text="↩  Undo",
+        ttk.Button(row0, text="↩  Undo",
                    command=self._on_undo).pack(side="left", padx=(0, 8))
-        ttk.Button(ctrl, text="Save session",
+        ttk.Button(row0, text="Save session",
                    command=self._on_save).pack(side="left", padx=(0, 12))
 
         # Drawing mode toggle
-        ttk.Separator(ctrl, orient="vertical").pack(
+        ttk.Separator(row0, orient="vertical").pack(
             side="left", fill="y", padx=(0, 8))
-        ttk.Label(ctrl, text="Mode:").pack(side="left")
-        ttk.Radiobutton(ctrl, text="Ellipse", variable=self._mode_var,
+        ttk.Label(row0, text="Mode:").pack(side="left")
+        ttk.Radiobutton(row0, text="Ellipse", variable=self._mode_var,
                         value='ellipse',
                         command=self._on_mode_change).pack(
             side="left", padx=(2, 2))
-        ttk.Radiobutton(ctrl, text="Polygon", variable=self._mode_var,
+        ttk.Radiobutton(row0, text="Polygon", variable=self._mode_var,
                         value='poly',
                         command=self._on_mode_change).pack(
             side="left", padx=(0, 8))
 
         # Ellipse-specific controls (hidden in polygon mode)
-        self._ellipse_ctrl_frame = ttk.Frame(ctrl)
+        self._ellipse_ctrl_frame = ttk.Frame(row0)
         self._ellipse_ctrl_frame.pack(side="left")
         ttk.Label(self._ellipse_ctrl_frame, text="Radius:").pack(side="left")
         ttk.Scale(self._ellipse_ctrl_frame, variable=self._radius,
@@ -137,6 +148,14 @@ class PhasorViewPanel:
 
         self._radius.trace_add("write", lambda *_: self._update_param_labels())
         self._ratio.trace_add("write",  lambda *_: self._update_param_labels())
+
+        # Row 1: decay fitting buttons 
+        row1 = ttk.Frame(ctrl)
+        row1.pack(side="top", fill="x", pady=(2, 0))
+        ttk.Button(row1, text="⚗ Fit Cursor Decay",
+                   command=self._fit_cursor_decay).pack(side="left", padx=(0, 4))
+        ttk.Button(row1, text="View Fit",
+                   command=self._view_last_fit_result).pack(side="left")
 
     def _update_param_labels(self):
         self._radius_lbl.configure(text=f"{self._radius.get():.3f}")
@@ -761,6 +780,180 @@ class PhasorViewPanel:
         self._canvas.draw_idle()
         self._status_var.set(
             "Polygon cancelled. Left-click to start a new one.")
+
+    #  Per-cursor decay fitting
+    def _build_cursor_union_mask(self) -> Optional[np.ndarray]:
+        """Return a boolean (Y×X) union mask for all current cursors.
+
+        Returns None if there are no cursors or no phasor data loaded.
+        """
+        if self._real is None or not self._cursors:
+            return None
+        r     = self._radius.get()
+        r_min = r * self._ratio.get()
+        union = np.zeros_like(self._real, dtype=bool)
+        for cur in self._cursors:
+            if cur.get('type', 'ellipse') == 'poly':
+                m = self._mask_from_polygon(cur['vertices'])
+            else:
+                cg = np.array([cur['center_g']])
+                cs = np.array([cur['center_s']])
+                m = mask_from_elliptic_cursor(
+                    self._real, self._imag, cg, cs,
+                    radius=r, radius_minor=r_min, angle='semicircle')
+                if m.ndim > self._real.ndim:
+                    m = m[0]
+            union |= (m & self._valid)
+        return union
+
+    def _fit_cursor_decay(self):
+        """Fit the summed decay from all phasor-cursor gated pixels."""
+        from tkinter import messagebox
+        from pathlib import Path
+        from flimkit.UI.roi_tools import _ask_roi_fit_options
+
+        # Guards
+        if self._real is None:
+            messagebox.showwarning("No Phasor Data",
+                                   "Load a PTU file and compute phasors first.")
+            return
+        if not self._cursors:
+            messagebox.showwarning("No Cursors",
+                                   "Place at least one cursor on the phasor plot first.")
+            return
+        if not self._ptu_path or not Path(self._ptu_path).exists():
+            messagebox.showwarning("No PTU",
+                                   "PTU file path not found.\n"
+                                   "Re-load the phasor data and try again.")
+            return
+        if not callable(getattr(self, 'run_with_progress', None)) or \
+           not callable(getattr(self, 'get_fit_params', None)):
+            messagebox.showwarning("Not Ready",
+                                   "Fitting callbacks are not wired.\n"
+                                   "Run a whole-FOV fit first to initialise parameters.")
+            return
+
+        params = self.get_fit_params()
+        params['ptu_path'] = self._ptu_path
+        params['channel']  = self._channel
+
+        params = _ask_roi_fit_options(params)
+        if params is None:
+            return   # cancelled
+
+        ptu_path    = self._ptu_path
+        channel     = self._channel
+        irf_cached  = params.get('irf_prompt') or params.get('irf')
+        n_cursors   = len(self._cursors)
+        label       = (f"Cursor {self._cursors[0]['color']}"
+                       if n_cursors == 1
+                       else f"{n_cursors} cursors (union)")
+
+        # Snapshot the mask now (cursors might move before the thread runs)
+        union_mask_snapshot = self._build_cursor_union_mask()
+        if union_mask_snapshot is None or not union_mask_snapshot.any():
+            messagebox.showwarning("Empty Selection",
+                                   "The current cursor(s) select no valid pixels.")
+            return
+
+        def task(progress_callback=None, cancel_event=None):
+            import numpy as _np
+            from flimkit.PTU.reader import PTUFile
+            from flimkit.FLIM.fitters import fit_summed
+
+            ptu       = PTUFile(ptu_path, verbose=False)
+            n_bins    = ptu.n_bins
+            tcspc_res = ptu.tcspc_res
+
+            if progress_callback:
+                progress_callback(1, 4)
+
+            # Infer the spatial binning from the phasor shape
+            native_h, native_w = ptu.n_y, ptu.n_x
+            ph_h,     ph_w     = union_mask_snapshot.shape
+            if native_h % ph_h != 0 or native_w % ph_w != 0:
+                raise ValueError(
+                    f"PTU native size {native_h}×{native_w} is not an integer "
+                    f"multiple of phasor size {ph_h}×{ph_w}.")
+            inferred_binning = native_h // ph_h
+            stack = ptu.pixel_stack(channel=channel, binning=inferred_binning)
+            gated_decay = stack[union_mask_snapshot].sum(axis=0).astype(float)
+            if gated_decay.max() == 0:
+                raise ValueError("Cursor gate contains no photons.")
+
+            if progress_callback:
+                progress_callback(2, 4)
+
+            # IRF resolution — same fallback chain as ROI fitting
+            irf_prompt = irf_cached
+            if (irf_prompt is None
+                    or not hasattr(irf_prompt, '__len__')
+                    or len(irf_prompt) != n_bins):
+                from flimkit.FLIM.irf_tools import gaussian_irf
+                peak_bin  = int(_np.argmax(gated_decay))
+                fwhm_bins = max(1.0, 0.2e-9 / tcspc_res)
+                irf_prompt = gaussian_irf(n_bins, peak_bin, fwhm_bins)
+                irf_source = "gaussian (no IRF cached)"
+            else:
+                irf_source = "from main fit"
+
+            if progress_callback:
+                progress_callback(3, 4)
+
+            popt, summary = fit_summed(
+                decay         = gated_decay,
+                tcspc_res     = tcspc_res,
+                n_bins        = n_bins,
+                irf_prompt    = irf_prompt,
+                has_tail      = False,
+                fit_bg        = True,
+                fit_sigma     = False,
+                n_exp         = params['n_exp'],
+                tau_min_ns    = params['tau_min'],
+                tau_max_ns    = params['tau_max'],
+                cost_function = params['cost_function'],
+            )
+
+            if progress_callback:
+                progress_callback(4, 4)
+
+            return {
+                'region_name': label,
+                'region_id':   -1,
+                'region_ids':  [],
+                'decay':       gated_decay,
+                'time_ns':     ptu.time_ns,
+                'irf_prompt':  irf_prompt,
+                'irf_source':  irf_source,
+                'popt':        popt,
+                'summary':     summary,
+                'n_exp':       params['n_exp'],
+            }
+
+        def on_done(result):
+            if result is None:
+                return
+            self._last_fit_result = result
+            from flimkit.UI.roi_tools import _show_roi_fit_result_standalone
+            _show_roi_fit_result_standalone(result)
+
+        self.run_with_progress(
+            task_fn   = task,
+            task_name = f"Fitting cursor-gated decay ({label})…",
+            on_done   = on_done,
+        )
+
+    def _view_last_fit_result(self):
+        """Reopen the last cursor fit result window without refitting."""
+        from tkinter import messagebox
+        if self._last_fit_result is None:
+            messagebox.showinfo(
+                "No Fit Cached",
+                "No fit result cached yet.\n"
+                "Run ⚗ Fit Cursor Decay first.")
+            return
+        from flimkit.UI.roi_tools import _show_roi_fit_result_standalone
+        _show_roi_fit_result_standalone(self._last_fit_result)
 
     def _on_clear(self):
         if self._real is None:

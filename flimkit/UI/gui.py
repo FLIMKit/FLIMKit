@@ -3248,6 +3248,10 @@ Built with Python, Tkinter, NumPy, and SciPy.
         self._phasor_panel.on_change = self._on_phasor_change
         self._phasor_panel.frame.grid(row=0, column=0, sticky="nsew")
         self._phasor_panel.frame.grid_remove()
+
+        # Provide the same callbacks for phasor-cursor decay fitting
+        self._phasor_panel.run_with_progress = self.run_with_progress
+        self._phasor_panel.get_fit_params    = self._get_roi_fit_params
         self._preview_frame_label = preview_frame
 
         # Show first form by default
@@ -6638,6 +6642,9 @@ Built with Python, Tkinter, NumPy, and SciPy.
                     display_image=result.get('display_image'),
                     min_photons=min_ph,
                 )
+                # Store PTU path + channel so cursor-gated fitting can use them
+                self._phasor_panel._ptu_path = ptu
+                self._phasor_panel._channel  = channel
                 # Auto-save phasor session next to the PTU file
                 self._auto_save_phasor(ptu)
                 self._res.set_status(

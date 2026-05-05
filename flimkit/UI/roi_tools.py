@@ -249,6 +249,121 @@ def get_polygon_patch(coords, edgecolor, facecolor='none', linewidth=2):
     return Polygon(coords, edgecolor=edgecolor, facecolor=facecolor, linewidth=linewidth, closed=True)
 
 
+def _show_roi_fit_result_standalone(result: dict):
+    _show_fit_result_window(result)
+
+
+def _show_fit_result_window(result: dict):
+    """Pop up a window showing decay, IRF, fitted model, residuals and table."""
+    import tkinter as tk
+    from tkinter import ttk
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+    summary    = result['summary']
+    decay      = result['decay']
+    time_ns    = result['time_ns']
+    irf_prompt = result['irf_prompt']
+    model      = summary.get('model')
+    taus       = summary.get('taus_ns', [])
+    amps       = summary.get('amps',    [])
+    chi2       = summary.get('reduced_chi2_tail')
+
+    win = tk.Toplevel()
+    win.title(f"ROI Fit — {result['region_name']}")
+    win.geometry("660x560")
+    win.resizable(True, True)
+
+    fig, (ax_d, ax_r) = plt.subplots(
+        2, 1, figsize=(6.2, 4.2),
+        gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
+    fig.patch.set_facecolor('#2b2b2b')
+    for ax in (ax_d, ax_r):
+        ax.set_facecolor('#1e1e1e')
+        ax.tick_params(colors='white', labelsize=8)
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        for spine in ax.spines.values():
+            spine.set_color('#555555')
+
+    ax_d.semilogy(time_ns, decay, 'o-', color='steelblue',
+                  linewidth=1.2, markersize=2, label='Decay', alpha=0.8)
+    if irf_prompt is not None and irf_prompt.max() > 0:
+        irf_sc = (irf_prompt / irf_prompt.max()) * decay.max() * 0.15
+        ax_d.semilogy(time_ns[:len(irf_prompt)], np.maximum(irf_sc, 1e-2),
+                      color='orange', linewidth=1.5,
+                      label=f'IRF ({result["irf_source"]})', alpha=0.7)
+    if model is not None and len(model) == len(decay):
+        ax_d.semilogy(time_ns, model, color='red', linewidth=2.0,
+                      label='Fit', alpha=0.9)
+    ax_d.legend(fontsize=7, loc='upper right', labelcolor='white',
+                facecolor='#333333', edgecolor='#555555')
+
+    title_bits = [result['region_name']]
+    if len(taus) > 0:
+        title_bits.append('  '.join(f'τ{i+1}={t:.3f}ns' for i, t in enumerate(taus)))
+    if chi2 is not None:
+        title_bits.append(f'χ²_r={chi2:.3f}')
+    ax_d.set_title('  |  '.join(title_bits), fontsize=8, color='white')
+    ax_d.set_ylabel('Photon Count', color='white', fontsize=8)
+
+    if model is not None and len(model) == len(decay):
+        with np.errstate(invalid='ignore', divide='ignore'):
+            resid = np.where(model > 0, (decay - model) / np.sqrt(model), 0.0)
+        ax_r.plot(time_ns, resid, color='steelblue', linewidth=0.9)
+        ax_r.axhline(0, color='red', linewidth=1.0, linestyle='--', alpha=0.7)
+        if chi2 is not None:
+            ax_r.annotate(f'χ²_r = {chi2:.3f}',
+                          xy=(0.98, 0.85), xycoords='axes fraction',
+                          ha='right', va='top', fontsize=7, color='white',
+                          bbox=dict(boxstyle='round,pad=0.2',
+                                    fc='#333333', alpha=0.7))
+    ax_r.set_ylabel('Resid. (σ)', color='white', fontsize=7)
+    ax_r.set_xlabel('Time (ns)', color='white', fontsize=8)
+
+    plt.tight_layout(pad=0.8)
+    canvas = FigureCanvasTkAgg(fig, master=win)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill='both', expand=True, padx=6, pady=6)
+
+    tbl = ttk.Frame(win, padding=4)
+    tbl.pack(fill='x', padx=6, pady=(0, 4))
+    cols = ('Parameter', 'Value', 'Unit')
+    n_rows = (len(taus) + len(amps)
+              + (1 if chi2 is not None else 0)
+              + (1 if len(taus) > 0 and len(amps) > 0 else 0))
+    tv = ttk.Treeview(tbl, columns=cols, show='headings',
+                      height=min(8, max(1, n_rows)))
+    for col, w in zip(cols, (200, 110, 60)):
+        tv.heading(col, text=col, anchor='w')
+        tv.column(col, width=w, anchor='w')
+
+    rows = []
+    for i, tau in enumerate(taus):
+        rows.append((f'τ{i+1}', f'{tau:.4f}', 'ns'))
+    for i, amp in enumerate(amps):
+        rows.append((f'A{i+1} (amplitude)', f'{amp:.4f}', ''))
+    if len(taus) > 0 and len(amps) > 0 and np.sum(amps) > 0:
+        tau_mean = float(np.dot(taus, amps) / np.sum(amps))
+        rows.append(('τ_mean (amplitude-weighted)', f'{tau_mean:.4f}', 'ns'))
+    if chi2 is not None:
+        rows.append(('χ²_r (tail)', f'{chi2:.4f}', ''))
+
+    for i, row in enumerate(rows):
+        tv.insert('', 'end', values=row,
+                  tags=('odd' if i % 2 else 'even',))
+    tv.tag_configure('odd',  background='#f5f7fa', foreground='#1a1a1a')
+    tv.tag_configure('even', background='#ffffff', foreground='#1a1a1a')
+    tv.pack(fill='x')
+
+    btn_row = ttk.Frame(win, padding=4)
+    btn_row.pack(fill='x', padx=6, pady=(0, 6))
+    ttk.Button(btn_row, text='Close',
+               command=lambda: (plt.close(fig), win.destroy())).pack(side='right')
+    win.protocol('WM_DELETE_WINDOW', lambda: (plt.close(fig), win.destroy()))
+
+
 def _ask_roi_fit_options(params: dict):
     """Show a small dialog to let the user tweak fit parameters before running a ROI fit.
 
@@ -1281,113 +1396,7 @@ class RoiAnalysisPanel:
 
     def _show_roi_fit_result(self, result: dict):
         """Pop up a window showing the ROI decay, IRF, fitted model and residuals."""
-        import tkinter as tk
-        from tkinter import ttk
-        import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-        summary    = result['summary']
-        decay      = result['decay']
-        time_ns    = result['time_ns']
-        irf_prompt = result['irf_prompt']
-        model      = summary.get('model')
-        taus       = summary.get('taus_ns', [])
-        amps       = summary.get('amps',    [])
-        chi2       = summary.get('reduced_chi2_tail')
-
-        win = tk.Toplevel()
-        win.title(f"ROI Fit — {result['region_name']}")
-        win.geometry("660x560")
-        win.resizable(True, True)
-
-        # decay + residuals plot
-        fig, (ax_d, ax_r) = plt.subplots(
-            2, 1, figsize=(6.2, 4.2),
-            gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
-        fig.patch.set_facecolor('#2b2b2b')
-        for ax in (ax_d, ax_r):
-            ax.set_facecolor('#1e1e1e')
-            ax.tick_params(colors='white', labelsize=8)
-            ax.xaxis.label.set_color('white')
-            ax.yaxis.label.set_color('white')
-            for spine in ax.spines.values():
-                spine.set_color('#555555')
-
-        ax_d.semilogy(time_ns, decay, 'o-', color='steelblue',
-                      linewidth=1.2, markersize=2, label='ROI decay', alpha=0.8)
-        if irf_prompt is not None and irf_prompt.max() > 0:
-            irf_sc = (irf_prompt / irf_prompt.max()) * decay.max() * 0.15
-            ax_d.semilogy(time_ns[:len(irf_prompt)], np.maximum(irf_sc, 1e-2),
-                          color='orange', linewidth=1.5,
-                          label=f'IRF ({result["irf_source"]})', alpha=0.7)
-        if model is not None and len(model) == len(decay):
-            ax_d.semilogy(time_ns, model, color='red', linewidth=2.0,
-                          label='Fit', alpha=0.9)
-        ax_d.legend(fontsize=7, loc='upper right', labelcolor='white',
-                    facecolor='#333333', edgecolor='#555555')
-
-        title_bits = [result['region_name']]
-        if len(taus) > 0:
-            title_bits.append('  '.join(f'τ{i+1}={t:.3f}ns' for i, t in enumerate(taus)))
-        if chi2 is not None:
-            title_bits.append(f'χ²_r={chi2:.3f}')
-        ax_d.set_title('  |  '.join(title_bits), fontsize=8, color='white')
-        ax_d.set_ylabel('Photon Count', color='white', fontsize=8)
-
-        if model is not None and len(model) == len(decay):
-            with np.errstate(invalid='ignore', divide='ignore'):
-                resid = np.where(model > 0, (decay - model) / np.sqrt(model), 0.0)
-            ax_r.plot(time_ns, resid, color='steelblue', linewidth=0.9)
-            ax_r.axhline(0, color='red', linewidth=1.0, linestyle='--', alpha=0.7)
-            if chi2 is not None:
-                ax_r.annotate(f'χ²_r = {chi2:.3f}',
-                              xy=(0.98, 0.85), xycoords='axes fraction',
-                              ha='right', va='top', fontsize=7, color='white',
-                              bbox=dict(boxstyle='round,pad=0.2',
-                                        fc='#333333', alpha=0.7))
-        ax_r.set_ylabel('Resid. (σ)', color='white', fontsize=7)
-        ax_r.set_xlabel('Time (ns)', color='white', fontsize=8)
-
-        plt.tight_layout(pad=0.8)
-        canvas = FigureCanvasTkAgg(fig, master=win)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True, padx=6, pady=6)
-
-        # summary table
-        tbl = ttk.Frame(win, padding=4)
-        tbl.pack(fill='x', padx=6, pady=(0, 4))
-        cols = ('Parameter', 'Value', 'Unit')
-        n_rows = len(taus) + len(amps) + (1 if chi2 is not None else 0) + (1 if len(taus) > 0 and len(amps) > 0 else 0)
-        tv = ttk.Treeview(tbl, columns=cols, show='headings', height=min(8, max(1, n_rows)))
-        for col, w in zip(cols, (200, 110, 60)):
-            tv.heading(col, text=col, anchor='w')
-            tv.column(col, width=w, anchor='w')
-
-        rows = []
-        for i, tau in enumerate(taus):
-            rows.append((f'τ{i+1}', f'{tau:.4f}', 'ns'))
-        for i, amp in enumerate(amps):
-            rows.append((f'A{i+1} (amplitude)', f'{amp:.4f}', ''))
-        if len(taus) > 0 and len(amps) > 0 and np.sum(amps) > 0:
-            tau_mean = float(np.dot(taus, amps) / np.sum(amps))
-            rows.append(('τ_mean (amplitude-weighted)', f'{tau_mean:.4f}', 'ns'))
-        if chi2 is not None:
-            rows.append(('χ²_r (tail)', f'{chi2:.4f}', ''))
-
-        for i, row in enumerate(rows):
-            tv.insert('', 'end', values=row,
-                      tags=('odd' if i % 2 else 'even',))
-        tv.tag_configure('odd',  background='#f5f7fa', foreground='#1a1a1a')
-        tv.tag_configure('even', background='#ffffff', foreground='#1a1a1a')
-        tv.pack(fill='x')
-
-        # close button
-        btn_row = ttk.Frame(win, padding=4)
-        btn_row.pack(fill='x', padx=6, pady=(0, 6))
-        ttk.Button(btn_row, text='Close',
-                   command=lambda: (plt.close(fig), win.destroy())).pack(side='right')
-
-        win.protocol('WM_DELETE_WINDOW', lambda: (plt.close(fig), win.destroy()))
+        _show_fit_result_window(result)
     
     def grid(self, **kw):
         """Grid the frame."""
