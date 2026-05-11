@@ -1164,7 +1164,6 @@ class FOVPreviewPanel:
             self._ax_decay.grid(True, alpha=0.3)
             self._ax_decay.tick_params(labelsize=8, colors='white')
 
-            # --- Residuals panel ---
             self._ax_resid.clear()
             self._ax_resid.set_facecolor('white')
             model_arr = global_summary.get('model')
@@ -2552,6 +2551,7 @@ class _UIBuilder:
         
         help_menu.add_command(label="About", command=self._menu_about)
         help_menu.add_command(label="Documentation", command=self._menu_documentation)
+        help_menu.add_command(label="Check for Updates", command=self._menu_check_updates)
         help_menu.add_separator()
         help_menu.add_command(label="View Error Logs", command=self._menu_view_error_logs)
         help_menu.add_command(label="Export Error Logs", command=self._menu_export_error_logs)
@@ -2873,6 +2873,59 @@ Built with Python, Tkinter, NumPy, and SciPy.
             webbrowser.open('file://' + os.path.realpath(doc_file))
         else:
             messagebox.showinfo("Documentation", "See README.md in the project root for documentation.")
+
+    def _menu_check_updates(self):
+        """Check git/release freshness and show a report dialog."""
+        status_win = tk.Toplevel(self.root)
+        status_win.title("Checking for Updates")
+        status_win.geometry("380x120")
+        status_win.resizable(False, False)
+        ttk.Label(
+            status_win,
+            text="Checking git status and latest available release...",
+            wraplength=340,
+            justify="left",
+        ).pack(padx=16, pady=(18, 10), anchor="w")
+        pb = ttk.Progressbar(status_win, mode="indeterminate")
+        pb.pack(fill="x", padx=16, pady=(0, 14))
+        pb.start(12)
+
+        def _worker():
+            try:
+                from flimkit.utils.update_check import (
+                    check_installation_freshness,
+                    format_update_report,
+                )
+                report = format_update_report(
+                    check_installation_freshness(timeout=3.0, do_fetch=True)
+                )
+                err = None
+            except Exception as exc:
+                report = ""
+                err = str(exc)
+
+            def _done():
+                try:
+                    pb.stop()
+                    status_win.destroy()
+                except Exception:
+                    pass
+
+                if err is not None:
+                    messagebox.showerror("Update Check", f"Update check failed: {err}")
+                    return
+
+                win = tk.Toplevel(self.root)
+                win.title("Update Check")
+                win.geometry("760x420")
+                text_widget = scrolledtext.ScrolledText(win, wrap=tk.WORD)
+                text_widget.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+                text_widget.insert(tk.END, report)
+                text_widget.config(state=tk.DISABLED)
+
+            self.root.after(0, _done)
+
+        threading.Thread(target=_worker, daemon=True).start()
     
     def _menu_view_error_logs(self):
         """View error logs."""

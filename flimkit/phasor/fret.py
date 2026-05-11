@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Optional
 import numpy as np
 
 @dataclass
@@ -48,17 +45,17 @@ class FRETChannelData:
             )
 
     @property
-    def valid_mask(self) -> np.ndarray:
+    def valid_mask(self):
         """Boolean mask of pixels that meet the photon threshold and are finite."""
         return (self.mean >= self.min_photons) & np.isfinite(self.real_cal)
 
     @property
-    def valid_g(self) -> np.ndarray:
+    def valid_g(self):
         """G (real) values of valid pixels, flattened."""
         return self.real_cal[self.valid_mask]
 
     @property
-    def valid_s(self) -> np.ndarray:
+    def valid_s(self):
         """S (imaginary) values of valid pixels, flattened."""
         return self.imag_cal[self.valid_mask]
 
@@ -101,7 +98,7 @@ class FRETModelParameters:
     donor_background:      float = 0.0
     background_real:       float = 0.0
     background_imag:       float = 0.0
-    acceptor_lifetime:     Optional[float] = None
+    acceptor_lifetime:     float | None = None
     donor_bleedthrough:    float = 0.0
     acceptor_bleedthrough: float = 0.0
     acceptor_background:   float = 0.0
@@ -135,18 +132,18 @@ class FRETBounds:
     acceptor_bleedthrough: tuple[float, float] = (0.0, 10.0)
     acceptor_background:   tuple[float, float] = (0.0, 10.0)
 
-    def _as_scipy(self, attrs: tuple[str, ...]) -> dict:
+    def _as_scipy(self, attrs):
         lo = [getattr(self, a)[0] for a in attrs]
         hi = [getattr(self, a)[1] for a in attrs]
         return dict(lb=lo, ub=hi)
 
-    def donor_only_scipy(self) -> dict:
+    def donor_only_scipy(self):
         """SciPy ``bounds`` dict for the three donor-only free parameters."""
         return self._as_scipy(
             ('fret_efficiency', 'donor_fretting', 'donor_background')
         )
 
-    def joint_scipy(self) -> dict:
+    def joint_scipy(self):
         """SciPy ``bounds`` dict for the six joint free parameters."""
         return self._as_scipy((
             'fret_efficiency', 'donor_fretting',
@@ -190,12 +187,12 @@ class FRETResult:
     donor_bleedthrough:    float = 0.0
     acceptor_bleedthrough: float = 0.0
     acceptor_background:   float = 0.0
-    acceptor_real_model:   Optional[float] = None
-    acceptor_imag_model:   Optional[float] = None
+    acceptor_real_model:   float | None = None
+    acceptor_imag_model:   float | None = None
     converged:             bool = True
     message:               str  = ""
 
-    def print_summary(self) -> None:
+    def print_summary(self):
         """Print a human-readable summary to stdout."""
         print("\u2550\u2550\u2550 FRET fit result \u2550\u2550\u2550")
         print(f"  FRET efficiency    : {self.fret_efficiency:.4f}")
@@ -213,7 +210,7 @@ class FRETResult:
         status = "\u2713 converged" if self.converged else "\u2717 did not converge"
         print(f"  Optimizer          : {status}  \u2014 {self.message}")
 
-def _require_phasorpy_fret_api() -> None:
+def _require_phasorpy_fret_api():
     """Raise ``ImportError`` with actionable guidance if the phasorpy FRET API
     is absent or the signatures differ from what FLIMKit expects.
     """
@@ -245,7 +242,7 @@ def _require_phasorpy_fret_api() -> None:
             )
 
 
-def _single_lifetime_phasor(frequency: float, lifetime: float) -> tuple[float, float]:
+def _single_lifetime_phasor(frequency, lifetime):
     """Return the theoretical ``(G, S)`` phasor for a single-exponential lifetime.
 
     Parameters
@@ -265,15 +262,15 @@ def _single_lifetime_phasor(frequency: float, lifetime: float) -> tuple[float, f
 
 
 def _fret_donor_phasor(
-    frequency: float,
-    donor_lifetime: float,
+    frequency,
+    donor_lifetime,
     *,
-    fret_efficiency: float = 0.0,
-    donor_fretting: float = 1.0,
-    donor_background: float = 0.0,
-    background_real: float = 0.0,
-    background_imag: float = 0.0,
-) -> tuple[float, float]:
+    fret_efficiency=0.0,
+    donor_fretting=1.0,
+    donor_background=0.0,
+    background_real=0.0,
+    background_imag=0.0,
+):
     """Return the model donor-channel ``(G, S)`` phasor via phasorpy.
 
     Thin wrapper around ``phasorpy.lifetime.phasor_from_fret_donor`` with
@@ -297,18 +294,18 @@ def _fret_donor_phasor(
 
 
 def _fret_acceptor_phasor(
-    frequency: float,
-    donor_lifetime: float,
-    acceptor_lifetime: float,
+    frequency,
+    donor_lifetime,
+    acceptor_lifetime,
     *,
-    fret_efficiency: float = 0.0,
-    donor_fretting: float = 1.0,
-    donor_bleedthrough: float = 0.0,
-    acceptor_bleedthrough: float = 0.0,
-    acceptor_background: float = 0.0,
-    background_real: float = 0.0,
-    background_imag: float = 0.0,
-) -> tuple[float, float]:
+    fret_efficiency=0.0,
+    donor_fretting=1.0,
+    donor_bleedthrough=0.0,
+    acceptor_bleedthrough=0.0,
+    acceptor_background=0.0,
+    background_real=0.0,
+    background_imag=0.0,
+):
     """Return the model acceptor-channel ``(G, S)`` phasor via phasorpy.
 
     Thin wrapper around ``phasorpy.lifetime.phasor_from_fret_acceptor`` with
@@ -334,19 +331,19 @@ def _fret_acceptor_phasor(
 
 
 def predict_fret_trajectory(
-    frequency: float,
-    donor_lifetime: float,
+    frequency,
+    donor_lifetime,
     *,
-    acceptor_lifetime: Optional[float] = None,
-    donor_fretting: float = 1.0,
-    donor_background: float = 0.0,
-    background_real: float = 0.0,
-    background_imag: float = 0.0,
-    donor_bleedthrough: float = 0.0,
-    acceptor_bleedthrough: float = 0.0,
-    acceptor_background: float = 0.0,
-    n_points: int = 100,
-) -> dict:
+    acceptor_lifetime=None,
+    donor_fretting=1.0,
+    donor_background=0.0,
+    background_real=0.0,
+    background_imag=0.0,
+    donor_bleedthrough=0.0,
+    acceptor_bleedthrough=0.0,
+    acceptor_background=0.0,
+    n_points=100,
+):
     """Generate model donor and acceptor phasor trajectories across FRET efficiency.
 
     Calls ``phasorpy.lifetime.phasor_from_fret_donor`` (and optionally
@@ -420,12 +417,12 @@ def predict_fret_trajectory(
 
 # Donor-Only Solver
 def fit_donor_fret(
-    donor: FRETChannelData,
-    params: FRETModelParameters,
-    bounds: Optional[FRETBounds] = None,
+    donor,
+    params,
+    bounds=None,
     *,
-    weight_by_photons: bool = True,
-) -> FRETResult:
+    weight_by_photons=True,
+):
     """Fit donor-channel FRET parameters to the photon-weighted phasor centroid.
 
     Minimises the Euclidean distance between the phasorpy donor FRET model
@@ -521,13 +518,13 @@ def fit_donor_fret(
 
 
 def fit_joint_fret(
-    donor: FRETChannelData,
-    acceptor: FRETChannelData,
-    params: FRETModelParameters,
-    bounds: Optional[FRETBounds] = None,
+    donor,
+    acceptor,
+    params,
+    bounds=None,
     *,
-    weight_by_photons: bool = True,
-) -> FRETResult:
+    weight_by_photons=True,
+):
     """Fit FRET parameters jointly from donor and acceptor phasor centroids.
 
     Minimises the combined Euclidean distance between phasorpy forward-model

@@ -737,6 +737,21 @@ python build_and_sign.py
 
 Output: `dist/FLIMKit.app` (macOS) or `dist/FLIMKit` / `dist/FLIMKit.exe` (Linux/Windows).
 
+### GPU acceleration in the compiled app
+
+The compiled app bundles whatever GPU libraries are present on the **build machine**. The GPU backend is not fetched or probed at runtime from an external install, it must be baked in at build time.
+
+| Build machine | GPU bundled |
+|---|---|
+| Apple Silicon (M-series) Mac with `mlx` installed | MLX + PyTorch MPS |
+| Intel Mac | CPU only (no Metal GPU) |
+| Linux/Windows with CUDA PyTorch | CUDA |
+| Linux/Windows with ROCm PyTorch | ROCm |
+
+**If you need GPU acceleration in the compiled app, build it yourself on the machine (or OS/hardware type) where it will run.** A pre-built binary downloaded from Releases will only have GPU support if it was built on matching hardware.
+
+`build_and_sign.py` detects and bundles GPU backends automatically, run it on the target hardware after running `python install.py` to install the right backend.
+
 ### macOS notes
 
 The app is self-signed (ad-hoc). If you built it locally, Gatekeeper won't prompt because there's no quarantine flag. For distribution to other machines, you need a paid Apple Developer ID and notarization via `xcrun notarytool`.
@@ -786,7 +801,7 @@ pytest tests/test_integration.py -v
 |---|---|
 | PNG | Intensity and lifetime map images for quick visualisation |
 | OME-TIFF | Lossless, metadata-preserving export, opens correctly in Fiji/ImageJ |
-| GeoJSON | ROI geometries and statistics — imports directly into QuPath |
+| GeoJSON | ROI geometries and statistics, imports directly into QuPath |
 | CSV | Fit summaries and per-ROI statistics |
 | NPZ | Session files (fitting results, phasor arrays, cursor state) for session restoration |
 | NPY | Raw FLIM histogram cubes and assembled lifetime maps |
@@ -803,7 +818,7 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app — the default IRF path is resolved at startup and won't update mid-session.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` mode always runs on CPU regardless of GPU availability.
 
 **Tile stitching produces visible seams**  
 Check that the max drift setting isn't too restrictive. If registration looks fine but seams persist, it's likely a sample contrast issue at tile boundaries rather than a registration failure.

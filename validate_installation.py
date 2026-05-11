@@ -402,7 +402,6 @@ def test_phasor_pipeline():
     try:
         import numpy as np
 
-        # ── Synthetic phasor data (no real PTU needed) ───────
         rng = np.random.default_rng(42)
         shape = (64, 64)
         # Single-exponential → point ON the semicircle
@@ -418,7 +417,6 @@ def test_phasor_pipeline():
 
         print_success("Step 1: Generated synthetic phasor data")
 
-        # ── Peak detection ───────────────────────────────────
         from flimkit.phasor.peaks import find_phasor_peaks
 
         peaks = find_phasor_peaks(real_cal, imag_cal, mean, frequency)
@@ -443,7 +441,6 @@ def test_phasor_pipeline():
         assert rel_err < 0.15, f"Phase τ = {tau_phase:.3f} vs true {tau_ns} (err {rel_err:.0%})"
         print_success(f"Step 3b: Phase τ = {tau_phase:.3f} ns vs true {tau_ns} (err {rel_err:.1%})")
 
-        # ── Save / load session ──────────────────────────────
         from flimkit.phasor_launcher import save_session, load_session
         import tempfile, os
 
@@ -535,7 +532,6 @@ def test_tile_fit_pipeline():
         canvas_h = 2 * TILE_H
         canvas_w = 2 * TILE_W
 
-        # ── Step 1: assemble_tile_maps ────────────────────────────────────────
         from flimkit.FLIM.assemble import assemble_tile_maps, derive_global_tau, save_assembled_maps
 
         canvas = assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp=1)
@@ -544,14 +540,12 @@ def test_tile_fit_pipeline():
         assert canvas['intensity'].shape == (canvas_h, canvas_w)
         print_success(f"Step 1: Tiles assembled into {canvas_h}×{canvas_w} canvas")
 
-        # ── Step 2: derive_global_tau ─────────────────────────────────────────
         gs = derive_global_tau(canvas, n_exp=1)
         assert gs['n_pixels_fitted'] > 0
         tau = gs['tau_mean_amp_global_ns']
         assert 0.1 < tau < 15.0, f"Unreasonable global τ: {tau}"
         print_success(f"Step 2: Global τ = {tau:.2f} ns ({gs['n_pixels_fitted']} px fitted)")
 
-        # ── Step 3: save_assembled_maps ───────────────────────────────────────
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             save_assembled_maps(canvas, gs, out, roi_name='R_2', n_exp=1)
@@ -564,7 +558,6 @@ def test_tile_fit_pipeline():
             assert not missing, f"Missing output files: {missing}"
             print_success("Step 3: TIFFs, NPYs, and summary text written")
 
-        # ── Step 4: _run_tile_fit end-to-end (fit_flim_tiles patched) ─────────
         try:
             import argparse
             import numpy as np

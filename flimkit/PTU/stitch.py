@@ -1,23 +1,3 @@
-"""
-FLIM tile stitching and per-tile fitting pipeline.
-
-fit_flim_tiles() uses a two-pass pooled machine IRF strategy:
-
-  Pass 1 — summed_decay() only (no pixel stacks). Accumulates a pooled
-            decay across all tiles, runs fit_summed once to get consensus
-            τ values and a single pooled_irf.
-
-  Pass 2 — raw_pixel_stack() one tile at a time. All tiles use the same
-            consensus τ and pooled_irf → identical convolution basis →
-            smooth amplitude maps with no inter-tile seams.
-
-This replaces the previous per-tile independent fitting approach which
-called _run_flim_fit per tile, giving different τ per tile and causing
-visible seams in assembled lifetime maps.
-"""
-
-from __future__ import annotations
-
 import json
 import numpy as np
 import tifffile
@@ -27,8 +7,6 @@ from tqdm import tqdm
 # Disable tqdm globally – all progress is shown via progress windows instead
 tqdm.disable = True
 
-from typing import Tuple, Dict, Any, Optional, List
-
 from ..utils.xml_utils import (
     parse_xlif_tile_positions,
     get_pixel_size_from_xlif,
@@ -36,30 +14,24 @@ from ..utils.xml_utils import (
 )
 from .decode import get_flim_histogram_from_ptufile, create_time_axis
 
-# Try to import GUI_MODE flag (set by gui.py if running in GUI mode)
 try:
     from ..UI.gui import GUI_MODE
 except (ImportError, AttributeError):
     GUI_MODE = False
 
-
-
-# Tile stitching (intensity + FLIM cube)
-
-
 def stitch_flim_tiles(
-    xlif_path: Path,
-    ptu_dir: Path,
-    output_dir: Path,
-    ptu_basename: str = "R 2",
-    rotate_tiles: bool = True,
-    register_tiles: bool = True,
-    reg_max_shift_px: int = 120,
-    tile_positions: Optional[list] = None,
-    verbose: bool = True,
+    xlif_path,
+    ptu_dir,
+    output_dir,
+    ptu_basename="R 2",
+    rotate_tiles=True,
+    register_tiles=True,
+    reg_max_shift_px=120,
+    tile_positions=None,
+    verbose=True,
     progress_callback=None,
     cancel_event=None,
-) -> Dict[str, Any]:
+):
     """
     Stitch FLIM PTU tiles into a mosaic using your existing PTUFile class.
 
@@ -403,9 +375,9 @@ def stitch_flim_tiles(
 
 # Load helpers
 def load_stitched_flim(
-    output_dir: Path,
-    mode: str = 'r',
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict[str, Any]]:
+    output_dir,
+    mode='r',
+):
     """
     Load previously stitched FLIM data.
 
@@ -453,9 +425,9 @@ def load_stitched_flim(
 
 
 def load_flim_for_fitting(
-    source_dir: Path,
-    load_to_memory: bool = False,
-) -> Tuple[np.ndarray, float, int]:
+    source_dir,
+    load_to_memory=False,
+):
     """
     Load stitched FLIM data ready for the fitting pipeline.
 
@@ -472,7 +444,7 @@ def load_flim_for_fitting(
 
 
 # Per-tile fitting pipeline — pooled machine IRF
-def _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) -> int:
+def _peek_tile_width(ptu_dir, tile_positions, rotate_tiles):
     """Load the first available tile just to get its pixel width."""
     for t in tile_positions:
         p = Path(ptu_dir) / t['file']
@@ -483,7 +455,7 @@ def _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) -> int:
     raise FileNotFoundError("No tile PTU files found to determine tile width")
 
 
-def _resolve_tile_irf(ptu_name: str, irf_xlsx_dir=None, irf_xlsx_map=None):
+def _resolve_tile_irf(ptu_name, irf_xlsx_dir=None, irf_xlsx_map=None):
     """
     Return the xlsx path to use as IRF for this tile, or None.
     Kept for API compatibility — not used in the pooled pipeline.
@@ -501,7 +473,7 @@ def _resolve_tile_irf(ptu_name: str, irf_xlsx_dir=None, irf_xlsx_map=None):
     return None
 
 
-def _load_machine_irf(path: str | Path) -> tuple[np.ndarray, int]:
+def _load_machine_irf(path):
     """Load and normalise machine IRF. Returns (irf_norm, peak_bin)."""
     irf = np.asarray(np.load(str(path)), dtype=float).ravel()
     irf = np.maximum(irf, 0.0)
@@ -512,8 +484,8 @@ def _load_machine_irf(path: str | Path) -> tuple[np.ndarray, int]:
     return irf, int(np.argmax(irf))
 
 
-def _get_tile_irf(machine_irf: np.ndarray, pi_machine: int,
-                  tile_peak_bin: int, n_bins: int) -> np.ndarray:
+def _get_tile_irf(machine_irf, pi_machine,
+                  tile_peak_bin, n_bins):
     """Shift machine IRF to tile_peak_bin, clipped/padded to n_bins."""
     irf = machine_irf.copy()
     if irf.size > n_bins:
@@ -527,8 +499,8 @@ def _get_tile_irf(machine_irf: np.ndarray, pi_machine: int,
     return irf / s if s > 0 else irf
 
 
-def _adapt_pixel_maps(pixel_maps: dict, n_exp: int,
-                      taus_ns: np.ndarray) -> dict:
+def _adapt_pixel_maps(pixel_maps, n_exp,
+                      taus_ns):
     """
     Remap fit_per_pixel output keys → assemble_tile_maps format.
 
@@ -604,10 +576,10 @@ def _phase_corr_2d(patch_a, patch_b, max_shift_y=120, max_shift_x=30):
 
 
 def _register_tile_columns(
-    tile_results: list,
-    max_shift_px: int = 120,
-    verbose: bool = True,
-) -> list:
+    tile_results,
+    max_shift_px=120,
+    verbose=True,
+):
     """
     Three-pass tile registration (Preibisch et al. 2009 approach):
 
@@ -829,18 +801,18 @@ def _register_tile_columns(
 
 
 def fit_flim_tiles(
-    xlif_path:     Path,
-    ptu_dir:       Path,
-    output_dir:    Path,
+    xlif_path,
+    ptu_dir,
+    output_dir,
     args,
-    ptu_basename:  str  = "R 2",
-    rotate_tiles:  bool = True,
-    irf_xlsx_dir          = None,   # kept for API compat — not used
-    irf_xlsx_map          = None,   # kept for API compat — not used
-    verbose:       bool = True,
-    progress_callback     = None,
-    cancel_event          = None,
-) -> tuple[list[dict[str, Any]], int, int, list[dict], np.ndarray, np.ndarray, float, np.ndarray, dict]:
+    ptu_basename="R 2",
+    rotate_tiles=True,
+    irf_xlsx_dir=None,
+    irf_xlsx_map=None,
+    verbose=True,
+    progress_callback=None,
+    cancel_event=None,
+):
     """
     Per-tile FLIM fitting with pooled machine IRF.
 

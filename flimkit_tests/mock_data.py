@@ -1,7 +1,6 @@
 import numpy as np
 import json
 from pathlib import Path
-from typing import Tuple, List, Dict, Any, Optional
 import xml.etree.ElementTree as ET
 
 
@@ -109,12 +108,12 @@ class MockPTUFile:
 
 
 def generate_mock_xlif(
-    output_path: Path,
-    n_tiles: int = 4,
-    tile_size: int = 512,
-    pixel_size_m: float = 3e-7,
-    layout: str = "2x2"
-) -> Path:
+    output_path,
+    n_tiles=4,
+    tile_size=512,
+    pixel_size_m=3e-7,
+    layout="2x2"
+):
     """
     Generate a mock XLIF metadata file.
     
@@ -175,13 +174,13 @@ def generate_mock_xlif(
 
 
 def generate_mock_ptu_tiles(
-    output_dir: Path,
-    ptu_basename: str,
-    n_tiles: int = 4,
-    tile_shape: Tuple[int, int] = (64, 64),
-    n_bins: int = 128,
-    mean_photons: int = 50
-) -> List[Path]:
+    output_dir,
+    ptu_basename,
+    n_tiles=4,
+    tile_shape=(64, 64),
+    n_bins=128,
+    mean_photons=50
+):
     """
     Generate mock PTU tile files.
     
@@ -225,15 +224,15 @@ def generate_mock_ptu_tiles(
 
 
 def generate_test_project(
-    base_dir: Path,
-    roi_name: str = "R 2",
-    n_tiles: int = 4,
-    layout: str = "2x2",
-    tile_shape: Tuple[int, int] = (64, 64),
-    n_bins: int = 128,
-    mean_photons: int = 50,
-    tile_size: Optional[int] = None
-) -> Dict[str, Any]:
+    base_dir,
+    roi_name="R 2",
+    n_tiles=4,
+    layout="2x2",
+    tile_shape=(64, 64),
+    n_bins=128,
+    mean_photons=50,
+    tile_size=None
+):
     """
     Generate a complete test project with XLIF and PTU files.
     
@@ -285,15 +284,15 @@ def generate_test_project(
 
 
 def generate_synthetic_decay(
-    n_bins: int = 128,
-    tcspc_res: float = MOCK_TCSPC_RES,
-    tau_ns: float = 2.0,
-    bg: float = 10.0,
-    peak_counts: float = 1000.0,
-    irf_fwhm_bins: float = MOCK_IRF_FWHM_BINS,
-    irf_center_bin: int = MOCK_IRF_CENTER,
-    noise: bool = True,
-) -> np.ndarray:
+    n_bins=128,
+    tcspc_res=MOCK_TCSPC_RES,
+    tau_ns=2.0,
+    bg=10.0,
+    peak_counts=1000.0,
+    irf_fwhm_bins=MOCK_IRF_FWHM_BINS,
+    irf_center_bin=MOCK_IRF_CENTER,
+    noise=True,
+):
     """Generate a synthetic single-exp decay using circular FFT reconvolution.
 
     Uses the **same** forward model as the fitter
@@ -350,18 +349,18 @@ def generate_synthetic_decay(
 
 
 def generate_synthetic_biexp_decay(
-    n_bins: int = 128,
-    tcspc_res: float = MOCK_TCSPC_RES,
-    tau1_ns: float = MOCK_TAU1_NS,
-    tau2_ns: float = MOCK_TAU2_NS,
-    a1: float = MOCK_AMP1,
-    a2: float = MOCK_AMP2,
-    bg: float = 5.0,
-    peak_counts: float = 50_000.0,
-    irf_fwhm_bins: float = MOCK_IRF_FWHM_BINS,
-    irf_center_bin: int = MOCK_IRF_CENTER,
-    noise: bool = True,
-) -> np.ndarray:
+    n_bins=128,
+    tcspc_res=MOCK_TCSPC_RES,
+    tau1_ns=MOCK_TAU1_NS,
+    tau2_ns=MOCK_TAU2_NS,
+    a1=MOCK_AMP1,
+    a2=MOCK_AMP2,
+    bg=5.0,
+    peak_counts=50_000.0,
+    irf_fwhm_bins=MOCK_IRF_FWHM_BINS,
+    irf_center_bin=MOCK_IRF_CENTER,
+    noise=True,
+):
     """Generate a bi-exponential decay using circular FFT reconvolution.
 
     Uses the **same** forward model as the fitter
@@ -411,9 +410,7 @@ def load_mock_ptu_file(ptu_path: Path):
     return _Wrapper(ptu)
 
 
-# ---------------------------------------------------------------------------
 # FRET phasor mock data
-# ---------------------------------------------------------------------------
 
 # Ground-truth FRET parameters used throughout the FRET test suite.
 MOCK_FRET_FREQ   = 80.0   # MHz  — laser repetition rate
@@ -421,7 +418,7 @@ MOCK_FRET_TAU_D  = 4.0    # ns   — unquenched donor lifetime
 MOCK_FRET_TAU_A  = 3.0    # ns   — acceptor lifetime
 
 
-def fret_donor_phasor_truth(efficiency: float) -> Tuple[float, float]:
+def fret_donor_phasor_truth(efficiency):
     """Return the exact phasorpy FRET donor ``(G, S)`` for a given efficiency.
 
     This is the ground truth that ``generate_fret_donor_image`` centres its
@@ -436,7 +433,7 @@ def fret_donor_phasor_truth(efficiency: float) -> Tuple[float, float]:
     return float(g), float(s)
 
 
-def fret_acceptor_phasor_truth(efficiency: float) -> Tuple[float, float]:
+def fret_acceptor_phasor_truth(efficiency):
     """Return the exact phasorpy FRET acceptor ``(G, S)`` for a given efficiency."""
     from phasorpy.lifetime import phasor_from_fret_acceptor
     g, s = phasor_from_fret_acceptor(
@@ -448,11 +445,11 @@ def fret_acceptor_phasor_truth(efficiency: float) -> Tuple[float, float]:
 
 
 def generate_fret_donor_image(
-    efficiency: float,
-    shape: Tuple[int, int] = (8, 8),
-    noise: float = 0.005,
-    mean_photons: float = 100.0,
-    seed: int = 0,
+    efficiency,
+    shape=(8, 8),
+    noise=0.005,
+    mean_photons=100.0,
+    seed=0,
 ):
     """Generate a synthetic calibrated donor-channel phasor image.
 
@@ -487,11 +484,11 @@ def generate_fret_donor_image(
 
 
 def generate_fret_acceptor_image(
-    efficiency: float,
-    shape: Tuple[int, int] = (8, 8),
-    noise: float = 0.005,
-    mean_photons: float = 100.0,
-    seed: int = 1,
+    efficiency,
+    shape=(8, 8),
+    noise=0.005,
+    mean_photons=100.0,
+    seed=1,
 ):
     """Generate a synthetic calibrated acceptor-channel phasor image.
 

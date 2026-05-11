@@ -37,7 +37,6 @@ class ConfigManager:
         self._project: dict = {}     # transient, from project.json
         self._load()
 
-    # ── public API ──────────────────────────────────────────────
 
     def get(self, dotted_key: str, default=None):
         """
@@ -95,7 +94,6 @@ class ConfigManager:
         """Return the current project overrides dict (for saving to project.json)."""
         return copy.deepcopy(self._project)
 
-    # ── persistence ─────────────────────────────────────────────
 
     def _load(self):
         """Load config from JSON file."""

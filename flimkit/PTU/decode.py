@@ -1,9 +1,8 @@
 import numpy as np
 from pathlib import Path
-from typing import Tuple, Dict, Any
 from .reader import normalise_flim, PTUFile
 
-def create_time_axis(n_bins: int, tcspc_resolution: float) -> np.ndarray:
+def create_time_axis(n_bins, tcspc_resolution):
     """
     Create time axis in nanoseconds.
     
@@ -21,11 +20,11 @@ def create_time_axis(n_bins: int, tcspc_resolution: float) -> np.ndarray:
     return np.arange(n_bins) * tcspc_resolution * 1e9
 
 def get_flim_histogram_from_ptufile(
-    ptu_path: Path,
-    rotate_cw: bool = True,
-    binning: int = 1,
-    channel: int = None
-) -> Tuple[np.ndarray, Dict[str, Any]]:
+    ptu_path,
+    rotate_cw=True,
+    binning=1,
+    channel=None
+):
     """
     Load raw FLIM histogram (uint32 counts) using custom PTUFile if it returns
     valid data; otherwise fall back to ptufile loader.
@@ -60,7 +59,7 @@ def get_flim_histogram_from_ptufile(
     }
     return stack, metadata
 
-def get_raw_flim_histogram(ptu_path, rotate_cw: bool = True) -> Tuple[np.ndarray, Dict[str, Any]]:
+def get_raw_flim_histogram(ptu_path, rotate_cw=True):
     ptu = PTUFile(str(ptu_path), verbose=False)  # or True for debugging
     stack = ptu.raw_pixel_stack(channel=None, binning=1)
     if rotate_cw:
@@ -73,7 +72,7 @@ def get_raw_flim_histogram(ptu_path, rotate_cw: bool = True) -> Tuple[np.ndarray
     }
     return stack, metadata
 
-def get_raw_flim_histogram2(ptu_path, rotate_cw: bool = True) -> Tuple[np.ndarray, Dict[str, Any]]:
+def get_raw_flim_histogram2(ptu_path, rotate_cw=True):
     """
     Load raw FLIM histogram using ptufile (reference implementation).
     Returns uint32 array (Y, X, H) and metadata.

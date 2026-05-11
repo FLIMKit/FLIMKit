@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from pathlib import Path
 from ..PTU import reader as ptufile
-from typing import Dict, List, Tuple, Optional, Any
 
 
 def make_intensity_image(ptu_path, rotate_90_cw=True, save_image=False):

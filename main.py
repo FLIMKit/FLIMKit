@@ -13,7 +13,18 @@ from pathlib import Path
 
 
 
-def main(fast=False, cli=False):
+def main(fast=False, cli=False, check_updates=False):
+    if check_updates:
+        from flimkit.utils.update_check import (
+            check_installation_freshness,
+            format_update_report,
+        )
+        report = format_update_report(
+            check_installation_freshness(timeout=3.0, do_fetch=True)
+        )
+        print(report)
+        return
+
     if not cli:
         from flimkit.UI.gui import launch_gui
         launch_gui()
@@ -64,6 +75,17 @@ def main(fast=False, cli=False):
         stitch_tiles(interactive=True)
     elif answers['process_option'] == 'About':
         print('Current version: ' + __version__)
+        try:
+            from flimkit.utils.update_check import (
+                check_installation_freshness,
+                format_update_report,
+            )
+            print()
+            print(format_update_report(
+                check_installation_freshness(timeout=2.5, do_fetch=False)
+            ))
+        except Exception as exc:
+            print(f'Update check unavailable: {exc}')
         print(roadmap)
         return    
     else:
@@ -77,6 +99,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FLIMKit — FLIM data processing toolkit")
     parser.add_argument('--cli', action='store_true', help='=Run in CLI mode')
     parser.add_argument('--fast', action='store_true', help='Skip banner display')
+    parser.add_argument(
+        '--check-updates',
+        action='store_true',
+        help='Check whether git checkout and local version are up to date, then exit',
+    )
     args = parser.parse_args()
     
-    main(fast=args.fast, cli=args.cli)    
+    main(fast=args.fast, cli=args.cli, check_updates=args.check_updates)

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter, label, maximum_filter, center_of_mass
@@ -11,17 +9,17 @@ from phasorpy.plot import PhasorPlot
 
 # Peak detection
 def find_phasor_peaks(
-    real_cal: np.ndarray,
-    imag_cal: np.ndarray,
-    mean: np.ndarray,
-    frequency: float,
+    real_cal,
+    imag_cal,
+    mean,
+    frequency,
     *,
-    min_photons: float = 0.01,
-    n_bins: int = 256,
-    sigma: float = 3.0,
-    neighbourhood: int = 15,
-    threshold_frac: float = 0.10,
-) -> dict:
+    min_photons=0.01,
+    n_bins=256,
+    sigma=3.0,
+    neighbourhood=15,
+    threshold_frac=0.10,
+):
     """Find peaks in the 2-D phasor histogram.
 
     Parameters

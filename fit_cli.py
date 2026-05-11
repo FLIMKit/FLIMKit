@@ -15,6 +15,7 @@ from flimkit.image.tools import make_intensity_image, apply_intensity_threshold,
 from flimkit.utils.enhanced_outputs import save_weighted_tau_images, save_individual_tau_maps
 from flimkit.configs import *
 from flimkit.interactive import _load_machine_irf_prompt
+from flimkit._version import fitter_version
 
 warnings.filterwarnings("ignore")
 
@@ -106,7 +107,7 @@ def single_FOV_flim_fit_cli():
         return
 
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     #  Load PTU
@@ -481,7 +482,7 @@ def single_FOV_flim_fit_cli():
         return
 
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     #  Load PTU 

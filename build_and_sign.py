@@ -199,8 +199,42 @@ def build_app():
         "--hidden-import", "openpyxl",
         "--hidden-import", "tkinterdnd2",
         "--hidden-import", "TKinterModernThemes",
+        # GPU backends — all imported dynamically inside try/except so PyInstaller
+        # static analysis misses them.  List every submodule explicitly.
+        "--hidden-import", "flimkit.GPU",
+        "--hidden-import", "flimkit.GPU._base",
+        "--hidden-import", "flimkit.GPU.mlx_backend",
+        "--hidden-import", "flimkit.GPU.torch_backend",
+        "--hidden-import", "flimkit.GPU.cuda",
+        "--hidden-import", "flimkit.GPU.mps",
+        "--hidden-import", "flimkit.GPU.rocm",
+    ]
+
+    # MLX — Apple Silicon only; skip hidden-import if not installed
+    try:
+        import mlx  # noqa: F401
+        cmd += ["--hidden-import", "mlx", "--hidden-import", "mlx.core"]
+        print("  MLX detected — bundling MLX GPU backend")
+    except ImportError:
+        print("  MLX not found — skipping MLX GPU backend")
+
+    # PyTorch — optional; collect-all bundles the native .so files
+    try:
+        import torch  # noqa: F401
+        cmd += [
+            "--collect-all", "torch",
+            "--hidden-import", "torch",
+            "--hidden-import", "torch.linalg",
+            "--hidden-import", "torch.backends.mps",
+            "--hidden-import", "torch.backends.cuda",
+        ]
+        print("  PyTorch detected — bundling Torch GPU backend")
+    except ImportError:
+        print("  PyTorch not found — skipping Torch GPU backend")
+
+    cmd += [
         "--add-data", "mpl-cache:mpl-cache",   # pre-warmed font cache
-        "--add-data", "flimkit:flimkit",
+        "--collect-all", "flimkit",             # bundle all submodules as importable bytecode
         "--add-data", "flimkit/UI/icon.png:flimkit",
     ]
 

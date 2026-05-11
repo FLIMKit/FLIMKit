@@ -2,8 +2,6 @@ import struct
 import time
 import numpy as np
 from pathlib import Path
-from typing import Tuple, Dict, Any, Optional
-
 
 _TAG_TYPES = {
     0xFFFF0008: ("Empty8",      None),
@@ -19,11 +17,9 @@ _TAG_TYPES = {
     0xFFFFFFFF: ("BinaryBlob",  "blob"),
 }
 
-
-def _read_ptu_header(path: str) -> tuple[dict, int]:
-    tags: dict = {}
-    data_offset: int = 0
-
+def _read_ptu_header(path):
+    tags = {}
+    data_offset = 0
     with open(path, "rb") as fh:
         magic = fh.read(8)
         if b"PTU" not in magic and b"PQTTTR" not in magic:
@@ -61,7 +57,7 @@ def _read_ptu_header(path: str) -> tuple[dict, int]:
             blen = struct.unpack("<q", tagval)[0]
             blob = bytes(buf[pos:pos+blen])
             pos += blen
-            val: object = blob.decode("utf-8", errors="replace").rstrip("\x00") \
+            val = blob.decode("utf-8", errors="replace").rstrip("\x00") \
                           if fmt == "str" else blob
         elif fmt:
             val = struct.unpack(f"<{fmt}", tagval)[0]
@@ -83,7 +79,7 @@ class PTUFile:
     This class reads PicoQuant PTU files and provides methods to extract
     summed decays and pixel stacks.
     """
-    def __init__(self, path: str, verbose: bool = True):
+    def __init__(self, path, verbose=True):
         self.path    = str(path)
         self.verbose = verbose
         self.tags, self._data_offset = _read_ptu_header(path)
@@ -105,7 +101,7 @@ class PTUFile:
         self.photon_channel = None
         self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
         # Pile-up metrics — populated after summed_decay() is called
-        self._total_photons: int | None = None
+        self._total_photons = None
         # pixel_time in seconds
         pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)   # in ms? check units
         self.pixel_time = pixel_time_ms * 1e-3                      # convert to seconds
@@ -123,7 +119,7 @@ class PTUFile:
             # print(f"  Records  : {self.n_records:,}")
             print(' ')
 
-    def _load_records(self) -> np.ndarray:
+    def _load_records(self):
         size = Path(self.path).stat().st_size - self._data_offset
         n    = size // 4
         with open(self.path, "rb") as fh:
@@ -143,7 +139,7 @@ class PTUFile:
         max_dtime = dtime[ch != 0xF].max()
         return int(max_dtime) + 1
 
-    def summed_decay(self, channel: int | None = None) -> np.ndarray:
+    def summed_decay(self, channel=None):
         records = self._load_records()
         ch, dtime, _ = self._decode_picoharp_t3(records)
         special = ch == 0xF
@@ -164,7 +160,7 @@ class PTUFile:
         return decay[:self.n_bins]
 
     @property
-    def pileup_fraction(self) -> float | None:
+    def pileup_fraction(self):
         """Fraction of sync pulses that detected a photon (0–1).
 
         Above ~0.05 (5 %) pile-up causes measurable lifetime shortening bias
@@ -181,7 +177,7 @@ class PTUFile:
             return None
         return self._total_photons / self.n_records
 
-    def raw_pixel_stack(self, channel: int | None = None, binning: int = 1) -> np.ndarray:
+    def raw_pixel_stack(self, channel=None, binning=1):
         """
         Build a (Y, X, H) uint32 histogram stack.
 
@@ -200,7 +196,6 @@ class PTUFile:
         overflow_mask = (ch == 0xF) & (dtime == 0)
         overflow_cumsum = np.cumsum(overflow_mask.astype(np.int64)) * T3WRAPAROUND
         nsync_corrected = nsync.astype(np.int64) + overflow_cumsum
-        # ─
 
         special  = ch == 0xF
         ph_mask  = (~special) & (ch == ch_use)
@@ -265,8 +260,8 @@ class PTUFile:
 
         return stack
 
-    def pixel_stack(self, channel: int | None = None,
-                    binning: int = 1) -> np.ndarray:
+    def pixel_stack(self, channel=None,
+                    binning=1):
         if self.photon_channel is None:
             self.summed_decay(channel=channel)
         ch_use = channel if channel is not None else self.photon_channel
@@ -284,7 +279,6 @@ class PTUFile:
         overflow_mask = (ch == 0xF) & (dtime == 0)
         overflow_cumsum = np.cumsum(overflow_mask.astype(np.int64)) * T3WRAPAROUND
         nsync_corrected = nsync.astype(np.int64) + overflow_cumsum
-        # ─
 
         special  = ch == 0xF
         ph_mask  = (~special) & (ch == ch_use)
@@ -345,10 +339,10 @@ class PTUFile:
         cls,
         path,
         histogram,
-        tcspc_res: float,
-        frequency: float,
-        channel: int = 1,
-    ) -> int:
+        tcspc_res,
+        frequency,
+        channel=1,
+    ):
         """Write a (Y, X, H) histogram as a PicoHarpT3 PTU file.
 
         Produces a file readable by this class and by ptufile without any
@@ -395,7 +389,7 @@ class PTUFile:
         TYPE_STR   = 0x4001FFFF
         TYPE_EMPTY = 0xFFFF0008
 
-        def _tag(ident: str, tagtyp: int, value, idx: int = -1) -> bytes:
+        def _tag(ident, tagtyp, value, idx=-1):
             head = (
                 ident.encode("ascii")[:32].ljust(32, b"\x00")
                 + struct.pack("<i", idx)
@@ -415,7 +409,7 @@ class PTUFile:
         records     = []
         nsync_floor = 0   # running overflow baseline
 
-        def _advance(target: int) -> None:
+        def _advance(target):
             nonlocal nsync_floor
             while target - nsync_floor >= T3WRAPAROUND:
                 records.append(np.uint32(0xF0000000))
@@ -488,15 +482,15 @@ class PTUArray5D:
     Note: Currently assumes single-frame data. Frame detection needs to be
     implemented based on your specific PTU file structure.
     """
-    def __init__(self, ptu_file: PTUFile, binning: int = 1):
+    def __init__(self, ptu_file, binning=1):
         self.ptu = ptu_file
         self.binning = binning
         self.n_y_out = self.ptu.n_y // binning
         self.n_x_out = self.ptu.n_x // binning
         self._load_and_process()
 
-    def _find_frames(self, records: np.ndarray, ch: np.ndarray, 
-                     dtime: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _find_frames(self, records, ch,
+                     dtime):
         """
         Detect frame boundaries from markers.
         
@@ -624,9 +618,8 @@ class PTUArray5D:
         """Laser repetition frequency in Hz."""
         return 1.0 / (self.n_bins * self.tcspc_res)
     
-# UTILITY FUNCTIONS - Compatible with custom PTUFile
-def read_ptu(path: str, binning: int = 1, channel: Optional[int] = None,
-             verbose: bool = False) -> Tuple[np.ndarray, Dict[str, Any]]:
+def read_ptu(path, binning=1, channel=None,
+             verbose=False):
     """
     Read a PTU file and return the FLIM data array and metadata.
     
@@ -663,7 +656,7 @@ def read_ptu(path: str, binning: int = 1, channel: Optional[int] = None,
     return data, metadata
 
 
-def read_ptu_5d(path: str, binning: int = 1, verbose: bool = False) -> Tuple[np.ndarray, Dict[str, Any]]:
+def read_ptu_5d(path, binning=1, verbose=False):
     """
     Read a PTU file and return 5D FLIM data array and metadata.
     
@@ -710,7 +703,7 @@ def read_ptu_5d(path: str, binning: int = 1, verbose: bool = False) -> Tuple[np.
     return data, metadata
 
 
-def get_intensity_image(path: str, binning: int = 1, channel: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+def get_intensity_image(path, binning=1, channel=None):
     """
     Get a 2D intensity image from a PTU file by summing histogram bins.
     
@@ -731,7 +724,7 @@ def get_intensity_image(path: str, binning: int = 1, channel: Optional[int] = No
     return img, metadata
 
 
-def get_flim_data(path: str, binning: int = 1, channel: Optional[int] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+def get_flim_data(path, binning=1, channel=None):
     """
     Get the full FLIM data cube from a PTU file.
     
@@ -748,7 +741,7 @@ def get_flim_data(path: str, binning: int = 1, channel: Optional[int] = None) ->
     return read_ptu(path, binning=binning, channel=channel, verbose=False)
 
 
-def normalise_flim(flim: Optional[np.ndarray]) -> Optional[np.ndarray]:
+def normalise_flim(flim):
     """
     Ensure a FLIM cube has shape (Y, X, T).
     
@@ -783,7 +776,7 @@ def normalise_flim(flim: Optional[np.ndarray]) -> Optional[np.ndarray]:
     return None
 
 
-def create_time_axis(n_bins: int, tcspc_resolution: float) -> np.ndarray:
+def create_time_axis(n_bins, tcspc_resolution):
     """
     Create time axis in nanoseconds for FLIM fitting.
     
@@ -797,7 +790,7 @@ def create_time_axis(n_bins: int, tcspc_resolution: float) -> np.ndarray:
     return np.arange(n_bins) * tcspc_resolution * 1e9
 
 
-def decode_ptu(ptu_file: str) -> Tuple[Dict[str, Any], np.ndarray, Dict[str, Any]]:
+def decode_ptu(ptu_file):
     """
     Legacy function for backwards compatibility.
     
@@ -815,7 +808,7 @@ def decode_ptu(ptu_file: str) -> Tuple[Dict[str, Any], np.ndarray, Dict[str, Any
     return metadata['tags'], img, metadata
 
 
-def decode_t3_record(ptu_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def decode_t3_record(ptu_path):
     """
     Decode T3 records from a PTU file.
 
@@ -865,9 +858,9 @@ def decode_t3_record(ptu_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]
     return ch, dtime, nsync
 
 
-def decode_ptu_raw_cube(ptu_path: str, n_bins: Optional[int] = None,
-                        tile_shape: Optional[Tuple[int, int]] = None,
-                        channel: Optional[int] = None) -> np.ndarray:
+def decode_ptu_raw_cube(ptu_path, n_bins=None,
+                        tile_shape=None,
+                        channel=None):
     """
     Return a raw FLIM cube (Y, X, H) from a PTU file.
 

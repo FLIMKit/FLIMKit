@@ -1,23 +1,20 @@
-from __future__ import annotations
-
 import numpy as np
 from pathlib import Path
-from typing import Optional
 
 
 def make_lifetime_image(
-    canvas: dict,
-    output_dir: Path,
-    roi_name: str,
-    tau_min_ns: float = 0.0,
-    tau_max_ns: float = 5.0,
-    smooth_sigma_px: float = 0.0,   # 0 = no smoothing; use >0 only for display PNGs
-    intensity_percentile_lo: float = 0.0,
-    intensity_percentile_hi: float = 99.0,
-    gamma: float = 0.4,
-    dpi: int = 200,
-    verbose: bool = True,
-) -> Path:
+    canvas,
+    output_dir,
+    roi_name,
+    tau_min_ns=0.0,
+    tau_max_ns=5.0,
+    smooth_sigma_px=0.0,
+    intensity_percentile_lo=0.0,
+    intensity_percentile_hi=99.0,
+    gamma=0.4,
+    dpi=200,
+    verbose=True,
+):
     """
     Generate an intensity-weighted lifetime colour PNG from an assembled canvas.
 
@@ -72,7 +69,6 @@ def make_lifetime_image(
     int_map = np.asarray(canvas['intensity'],    dtype=float)
     valid   = np.isfinite(tau_map) & (int_map > 0)
 
-    # ── NaN-aware Gaussian smooth (sigma=0 → no smoothing) ─────────────────
     if smooth_sigma_px > 0:
         tau_filled = np.where(valid, tau_map, 0.0)
         w          = valid.astype(float)
@@ -83,7 +79,6 @@ def make_lifetime_image(
     else:
         tau_smooth = np.where(valid, tau_map, np.nan)
 
-    # ── Save uint16 TIFF (τ scaled over tau_min–tau_max range) ───────────────
     if _has_tifffile:
         # TIF uses unsmoothed tau_map (NaN->0 for unfitted pixels).
         # tau_smooth is only for the PNG - it fills in nearby unfitted
@@ -101,7 +96,6 @@ def make_lifetime_image(
             print(f"  ✓ τ TIFF → {tiff_path}  "
                   f"(uint16, {tau_min_ns}–{tau_max_ns} ns → 0–65535)")
         
-        # ── Also save full-range float32 TIFF (unscaled, preserves complete dynamic range) ───
         # Full-range TIF: also use tau_map so unfitted pixels are NaN, not filled.
         tau_full = np.where(valid, tau_map, np.nan).astype(np.float32)
         tiff_full_path = output_dir / f"{roi_name}_tau_intensity_weighted_fullrange.tif"
@@ -113,7 +107,6 @@ def make_lifetime_image(
             print(f"  ✓ τ full-range TIFF → {tiff_full_path}  "
                   f"(float32, {tau_fmin:.3f}–{tau_fmax:.3f} ns, unscaled)")
 
-    # ── Colour mapping ─────────────────────────────────────────────────────
     tau_norm = np.clip(
         (tau_smooth - tau_min_ns) / (tau_max_ns - tau_min_ns + 1e-12),
         0.0, 1.0)
@@ -141,13 +134,11 @@ def make_lifetime_image(
     rgb[~valid] = 0.0
     rgb = np.clip(rgb, 0.0, 1.0)
 
-    # ── Save pure-image PNG (no axes) ──────────────────────────────────────
     png_path = output_dir / f"{roi_name}_tau_intensity_weighted.png"
     plt.imsave(str(png_path), rgb, dpi=dpi)
     if verbose:
         print(f"  ✓ lifetime PNG → {png_path}")
 
-    # ── Save annotated preview with colourbar ─────────────────────────────
     fig, (ax, cax) = plt.subplots(
         1, 2, figsize=(14, 6),
         gridspec_kw={'width_ratios': [1, 0.03]})
@@ -176,7 +167,6 @@ def make_lifetime_image(
     if verbose:
         print(f"  ✓ preview PNG → {preview_path}")
 
-    # ── Stats ──────────────────────────────────────────────────────────────
     if verbose and valid.any():
         tau_v = tau_map[valid]
         print(f"  τ_amp  median={np.nanmedian(tau_v):.3f}  "
@@ -188,13 +178,13 @@ def make_lifetime_image(
     return png_path
 
 def make_component_rgb_tiff(
-    canvas: dict,
-    output_dir: Path,
-    roi_name: str,
-    n_exp: int,
-    intensity_percentile_hi: float = 99.0,
-    verbose: bool = True,
-) -> Path:
+    canvas,
+    output_dir,
+    roi_name,
+    n_exp,
+    intensity_percentile_hi=99.0,
+    verbose=True,
+):
     """
     Save a per-component amplitude RGB TIFF.
 

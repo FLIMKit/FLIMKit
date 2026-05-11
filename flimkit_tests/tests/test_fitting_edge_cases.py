@@ -57,7 +57,6 @@ class TestPerPixelFitting:
         maps = fit_per_pixel(stack, 97e-12, n_bins, irf, has_tail=False, fit_bg=True, fit_sigma=False, global_popt=global_popt, n_exp=1, min_photons=1)
         assert np.isnan(maps['tau_mean_amp'][0, 0])
 
-    # -- free-tau tests --
 
     def test_free_tau_returns_tau_maps_for_nexp2(self):
         """free_tau=True should populate tau_1 / tau_2 per pixel (not fixed to global)."""

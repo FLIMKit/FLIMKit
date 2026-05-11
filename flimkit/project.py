@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, Dict
 
 #  Leica .sptw sub-folder names to search for tile PTUs 
 _SPTW_CANDIDATES = [
@@ -21,20 +18,20 @@ class ScanRecord:
     stem:          str
     scan_type:     str            # "fov" | "xlif"
     source_path:   str            # absolute path to .ptu or .xlif
-    ptu_dir:       Optional[str] = None  # absolute path to .sptw folder (XLIF only)
-    out_st:        Optional[str] = None  # base output dir last used (XLIF only)
-    output_prefix: Optional[str] = None  # sv_out_fov prefix last used (FOV only)
-    xlsx_path:     Optional[str] = None  # paired .xlsx file path (FOV only, e.g. file.ptu -> file.xlsx)
+    ptu_dir:       str | None = None
+    out_st:        str | None = None
+    output_prefix: str | None = None
+    xlsx_path:     str | None = None
 
     #  derived helpers 
 
     @property
-    def roi_clean(self) -> str:
+    def roi_clean(self):
         """Stem with spaces replaced — used by the stitch pipeline for subfolder naming."""
         return self.stem.replace(" ", "_")
 
     @property
-    def session_path(self) -> Optional[Path]:
+    def session_path(self):
         """Return the fit session .npz path if it exists, else None."""
         if self.scan_type == "fov":
             p = Path(self.source_path)
@@ -46,7 +43,7 @@ class ScanRecord:
         return candidate if candidate.exists() else None
 
     @property
-    def phasor_session_path(self) -> Optional[Path]:
+    def phasor_session_path(self):
         """Return the phasor session .npz path if it exists, else None."""
         if self.scan_type != "fov":
             return None
@@ -55,11 +52,11 @@ class ScanRecord:
         return candidate if candidate.exists() else None
 
     @property
-    def has_session(self) -> bool:
+    def has_session(self):
         return self.session_path is not None
 
     @property
-    def has_phasor_session(self) -> bool:
+    def has_phasor_session(self):
         return self.phasor_session_path is not None
 
 
@@ -79,16 +76,16 @@ class ProjectFile:
         pf.save()
     """
 
-    def __init__(self, project_dir: Path):
-        self.project_dir: Path = Path(project_dir).resolve()
-        self.output_base: Path = self.project_dir / DEFAULT_OUTPUT_SUBDIR
-        self.scans: Dict[str, ScanRecord] = {}
-        self.config: Dict = {}  # per-project config overrides
+    def __init__(self, project_dir):
+        self.project_dir = Path(project_dir).resolve()
+        self.output_base = self.project_dir / DEFAULT_OUTPUT_SUBDIR
+        self.scans = {}
+        self.config = {}  # per-project config overrides
 
     # persistence
 
     @classmethod
-    def load_or_create(cls, project_dir: Path) -> "ProjectFile":
+    def load_or_create(cls, project_dir):
         """
         Load project.json if it exists, then rescan the folder for new files.
         New files are added; existing records are not overwritten.
@@ -164,7 +161,7 @@ class ProjectFile:
                     xlsx_path     = None,
                 )
 
-    def _find_sptw(self, xlif: Path) -> Optional[Path]:
+    def _find_sptw(self, xlif):
         """
         Locate the .sptw sub-folder that holds the tile PTUs for *xlif*.
 
@@ -184,11 +181,11 @@ class ProjectFile:
 
     def update_after_fit(
         self,
-        stem: str,
+        stem,
         *,
-        out_st: Optional[str] = None,
-        output_prefix: Optional[str] = None,
-        ptu_dir: Optional[str] = None,
+        out_st=None,
+        output_prefix=None,
+        ptu_dir=None,
     ):
         """
         Record the output locations used in a completed fit so the browser
@@ -212,7 +209,7 @@ class ProjectFile:
 
     #  convenience
 
-    def default_out_st(self, stem: str) -> str:
+    def default_out_st(self, stem):
         """
         Return the base output directory for an XLIF scan.
         Uses the stored value if available, otherwise the project output_base.
@@ -222,7 +219,7 @@ class ProjectFile:
             return rec.out_st
         return str(self.output_base)
 
-    def default_output_prefix(self, stem: str) -> str:
+    def default_output_prefix(self, stem):
         """Return the output prefix for a FOV scan (defaults to PTU base name)."""
         rec = self.scans.get(stem)
         if rec and rec.output_prefix:

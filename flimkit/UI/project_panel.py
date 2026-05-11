@@ -1,14 +1,6 @@
-from __future__ import annotations
-
 import tkinter as tk
 from tkinter import ttk, filedialog
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    # Avoid circular import — only used for type hints.
-    from flimkit.UI.gui import FLIMKitApp
-    from flimkit.project import ProjectFile, ScanRecord
 
 
 #  visual constants 
@@ -35,12 +27,12 @@ class ProjectBrowserPanel:
       - triggers auto-load of the session .npz if one exists
     """
 
-    def __init__(self, parent: tk.Widget, app: "FLIMKitApp", width: int = 170):
+    def __init__(self, parent, app, width=170):
         self._app   = app
         self._width = width
 
-        self._project: Optional["ProjectFile"] = None
-        self._stems:   list[str] = []   # parallel to Listbox rows
+        self._project = None
+        self._stems   = []   # parallel to Listbox rows
 
         #  outer frame (fixed width, no propagation) 
         self.frame = ttk.Frame(parent, width=width)
@@ -99,10 +91,10 @@ class ProjectBrowserPanel:
 
     def on_fit_done(
         self,
-        stem: str,
-        out_st: Optional[str] = None,
-        output_prefix: Optional[str] = None,
-        ptu_dir: Optional[str] = None,
+        stem,
+        out_st=None,
+        output_prefix=None,
+        ptu_dir=None,
     ):
         """
         Call this after a fit completes so the project file is updated and
@@ -126,7 +118,7 @@ class ProjectBrowserPanel:
         self._project.save()
         self._refresh()
 
-    def on_phasor_done(self, stem: str):
+    def on_phasor_done(self, stem):
         """Call after a phasor session is auto-saved to refresh indicators."""
         if self._project is None:
             return
@@ -142,7 +134,7 @@ class ProjectBrowserPanel:
         # Users can use File > Open Project Folder... instead
         pass
 
-    def load_folder(self, folder: str):
+    def load_folder(self, folder):
         """Load project from a given folder path."""
         if not folder:
             return
@@ -213,7 +205,7 @@ class ProjectBrowserPanel:
         finally:
             self._selecting = False
 
-    def _load_scan(self, rec: "ScanRecord"):
+    def _load_scan(self, rec):
         app = self._app
 
         # Cancel any pending after() loads from previous scan selection

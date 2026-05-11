@@ -36,10 +36,8 @@ TAU_D = MOCK_FRET_TAU_D
 TAU_A = MOCK_FRET_TAU_A
 
 
-# ---------------------------------------------------------------------------
 # Mock data ground-truth verification
 # (These tests prove the generators produce genuine FRET phasors.)
-# ---------------------------------------------------------------------------
 
 class TestFRETMockData:
     """Verify that the mock-data generators produce phasors that actually lie
@@ -105,9 +103,7 @@ class TestFRETMockData:
         assert donor.valid_mask.all(), "Some pixels fell below the photon threshold."
 
 
-# ---------------------------------------------------------------------------
 # Stage 1: Data Contracts
-# ---------------------------------------------------------------------------
 
 class TestFRETChannelData:
     def test_valid_construction(self):
@@ -227,9 +223,7 @@ class TestFRETResult:
         assert "Acceptor model" in out
 
 
-# ---------------------------------------------------------------------------
 # Stage 2: Compatibility Layer
-# ---------------------------------------------------------------------------
 
 class TestRequirePhasorpyFretApi:
     def test_passes_with_installed_phasorpy(self):
@@ -306,9 +300,7 @@ class TestPredictFretTrajectory:
         assert t['donor_g'][-1] > t['donor_g'][0]
 
 
-# ---------------------------------------------------------------------------
 # Stage 3: Donor-Only Solver
-# ---------------------------------------------------------------------------
 
 class TestFitDonorFret:
     @pytest.mark.parametrize("E_true", [0.2, 0.5, 0.8])
@@ -368,9 +360,7 @@ class TestFitDonorFret:
         assert not em['converged'].any()
 
 
-# ---------------------------------------------------------------------------
 # Stage 4: Joint Donor+Acceptor Solver
-# ---------------------------------------------------------------------------
 
 class TestFitJointFret:
     @pytest.mark.parametrize("E_true", [0.3, 0.6])
@@ -423,9 +413,7 @@ class TestFitJointFret:
             fit_joint_fret(donor, acceptor, params)
 
 
-# ---------------------------------------------------------------------------
 # Stage 5: Pixelwise Maps
-# ---------------------------------------------------------------------------
 
 class TestMapFretEfficiency:
     def test_output_shape(self):
@@ -475,9 +463,7 @@ class TestMapFretEfficiency:
         assert np.nanmean(em['efficiency']) == pytest.approx(0.6, abs=0.05)
 
 
-# ---------------------------------------------------------------------------
 # Stage 6: Visualization
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
 def _headless_mpl():

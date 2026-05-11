@@ -1,15 +1,14 @@
 import numpy as np
 import tifffile
 from pathlib import Path
-from typing import Dict, Any, Optional
 
 
 def save_fit_summary_txt(
-    summary: Dict[str, Any],
-    output_path: Path,
-    n_exp: int = 2,
-    strategy: str = "gaussian",
-    metadata: Optional[Dict] = None
+    summary,
+    output_path,
+    n_exp=2,
+    strategy="gaussian",
+    metadata=None
 ):
     """
     Save fit results to a human-readable text file.
@@ -107,17 +106,17 @@ def save_fit_summary_txt(
 
 
 def save_weighted_tau_images(
-    pixel_maps: Dict[str, np.ndarray],
-    output_dir: Path,
-    roi_name: str = "ROI",
-    n_exp: int = 2,
-    save_intensity: bool = True,
-    save_amplitude: bool = True,
-    tau_display_min: float = None,
-    tau_display_max: float = None,
-    intensity_display_min: float = None,
-    intensity_display_max: float = None,
-    target_shape: Optional[tuple] = None,
+    pixel_maps,
+    output_dir,
+    roi_name="ROI",
+    n_exp=2,
+    save_intensity=True,
+    save_amplitude=True,
+    tau_display_min=None,
+    tau_display_max=None,
+    intensity_display_min=None,
+    intensity_display_max=None,
+    target_shape=None,
 ):
     """
     Save intensity-weighted and/or amplitude-weighted tau images.
@@ -145,7 +144,6 @@ def save_weighted_tau_images(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Upsample pixel_maps to full canvas resolution when target_shape given ──
     # stitch_flim_tiles saves *_stitched_intensity.tif at full (H, W).
     # fit_per_pixel with binning>1 returns maps at (H//b, W//b).
     # Nearest-neighbour resize corrects the mismatch without blurring values.
@@ -299,10 +297,10 @@ def save_weighted_tau_images(
 
 
 def save_individual_tau_maps(
-    pixel_maps: Dict[str, np.ndarray],
-    output_dir: Path,
-    roi_name: str = "ROI",
-    n_exp: int = 2
+    pixel_maps,
+    output_dir,
+    roi_name="ROI",
+    n_exp=2
 ):
     """
     Save individual lifetime component maps.
@@ -341,19 +339,19 @@ def save_individual_tau_maps(
 
 
 def create_complete_output_package(
-    summary: Dict[str, Any],
-    pixel_maps: Optional[Dict[str, np.ndarray]],
-    output_dir: Path,
-    roi_name: str,
-    n_exp: int,
-    strategy: str,
-    metadata: Optional[Dict] = None,
-    save_individual_components: bool = True,
-    tau_display_min: float = None,
-    tau_display_max: float = None,
-    intensity_display_min: float = None,
-    intensity_display_max: float = None,
-    target_shape: Optional[tuple] = None,
+    summary,
+    pixel_maps,
+    output_dir,
+    roi_name,
+    n_exp,
+    strategy,
+    metadata=None,
+    save_individual_components=True,
+    tau_display_min=None,
+    tau_display_max=None,
+    intensity_display_min=None,
+    intensity_display_max=None,
+    target_shape=None,
 ):
     """
     Create complete output package with all results.

@@ -46,7 +46,6 @@ def calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequ
     signal_time_ns = signal.coords['H'].values
     irf_on_signal = np.interp(signal_time_ns, irf_time_ns, irf_counts, left=0, right=0)
 
-    # ── Compute the IRF phasor (should be near (1,0) for a delta function) ──
     mean_irf, real_irf, imag_irf = phasor_from_signal(
         irf_on_signal[np.newaxis, :], axis=-1
     )

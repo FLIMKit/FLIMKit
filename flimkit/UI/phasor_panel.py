@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -24,14 +21,14 @@ from phasorpy.plot import PhasorPlot
 _COLORS = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b']
 
 
-def _hex_to_rgb01(h: str) -> tuple:
+def _hex_to_rgb01(h):
     h = h.lstrip('#')
     return (int(h[0:2], 16) / 255.0,
             int(h[2:4], 16) / 255.0,
             int(h[4:6], 16) / 255.0)
 
 
-def _tau_phi_scalar(g: float, s: float, freq_mhz: float) -> float:
+def _tau_phi_scalar(g, s, freq_mhz):
     """Return τ_φ (ns) for a single (G, S) point.
 
     phasorpy.phasor_to_apparent_lifetime returns a scalar (not array) when
@@ -44,36 +41,36 @@ def _tau_phi_scalar(g: float, s: float, freq_mhz: float) -> float:
 class PhasorViewPanel:
     """Embedded image-top / phasor-bottom interactive panel."""
 
-    def __init__(self, parent, max_cursors: int = 6):
+    def __init__(self, parent, max_cursors=6):
         self.max_cursors = max_cursors
         self.on_change = None   # optional callback(panel) after cursor/param changes
 
 
-        self._real:  Optional[np.ndarray] = None
-        self._imag:  Optional[np.ndarray] = None
-        self._mean:  Optional[np.ndarray] = None
-        self._disp:  Optional[np.ndarray] = None   # display/intensity image
-        self._freq:  float = 80.0                  # MHz
-        self._valid: Optional[np.ndarray] = None   # boolean (min-photons)
+        self._real  = None
+        self._imag  = None
+        self._mean  = None
+        self._disp  = None   # display/intensity image
+        self._freq  = 80.0                  # MHz
+        self._valid = None   # boolean (min-photons)
 
 
-        self._cursors: list = []                    # {center_g, center_s, color}
-        self._cursor_artists: list = []
+        self._cursors = []                    # {center_g, center_s, color}
+        self._cursor_artists = []
 
-        self._fret_trajectory: Optional[dict] = None  # last overlaid FRET traj
-        self._peak_results:    Optional[dict] = None  # last find-peaks result
+        self._fret_trajectory = None  # last overlaid FRET traj
+        self._peak_results    = None  # last find-peaks result
 
         self._mode_var = tk.StringVar(value='ellipse')  # 'ellipse' | 'poly'
-        self._poly_pts: list = []                       # in-progress polygon vertices [(g,s)]
-        self._poly_line: Optional[list] = None          # rubber-band artists
+        self._poly_pts = []                       # in-progress polygon vertices [(g,s)]
+        self._poly_line = None          # rubber-band artists
 
-        self._drag_idx:  Optional[int] = None           # cursor index being dragged
-        self._drag_last: tuple = (0.0, 0.0)             # last (g, s) during drag
+        self._drag_idx  = None           # cursor index being dragged
+        self._drag_last = (0.0, 0.0)             # last (g, s) during drag
 
         # Per-cursor decay fitting
-        self._ptu_path:  Optional[str] = None   # set by FLIMKitApp after load
-        self._channel:   Optional[int] = None   # set by FLIMKitApp after load
-        self._last_fit_result: Optional[dict] = None  # cached result for reopen
+        self._ptu_path  = None   # set by FLIMKitApp after load
+        self._channel   = None   # set by FLIMKitApp after load
+        self._last_fit_result = None  # cached result for reopen
         self.run_with_progress = None
         self.get_fit_params    = None
 
@@ -124,8 +121,11 @@ class PhasorViewPanel:
                         command=self._on_mode_change).pack(
             side="left", padx=(0, 8))
 
-        # Ellipse-specific controls (hidden in polygon mode)
-        self._ellipse_ctrl_frame = ttk.Frame(row0)
+        # Ellipse-specific controls on their own row so labels/sliders are not
+        # clipped by the top-row buttons on narrower window widths.
+        row_params = ttk.Frame(ctrl)
+        row_params.pack(side="top", fill="x", pady=(2, 0))
+        self._ellipse_ctrl_frame = ttk.Frame(row_params)
         self._ellipse_ctrl_frame.pack(side="left")
         ttk.Label(self._ellipse_ctrl_frame, text="Radius:").pack(side="left")
         ttk.Scale(self._ellipse_ctrl_frame, variable=self._radius,
@@ -204,12 +204,12 @@ class PhasorViewPanel:
             fontsize=9, color="#999999")
 
     def set_data(self,
-                 real_cal: np.ndarray,
-                 imag_cal: np.ndarray,
-                 mean: np.ndarray,
-                 frequency: float,
-                 display_image: Optional[np.ndarray] = None,
-                 min_photons: float = 0.01):
+                 real_cal,
+                 imag_cal,
+                 mean,
+                 frequency,
+                 display_image=None,
+                 min_photons=0.01):
         """Load phasor arrays and render the phasor histogram.
         Must be called from the Tk main thread.
         """
@@ -233,7 +233,7 @@ class PhasorViewPanel:
             f"✓ {n_valid} valid pixels  |  {frequency:.1f} MHz  "
             f"|  click phasor to place cursor")
 
-    def load_session(self, session: dict, min_photons: float = 0.01):
+    def load_session(self, session, min_photons=0.01):
         """Restore a previously saved session dict (from phasor_launcher)."""
         self.set_data(
             session['real_cal'], session['imag_cal'],
@@ -263,7 +263,7 @@ class PhasorViewPanel:
             self._redraw_cursors()
             self._analyse()
 
-    def get_session_dict(self) -> dict:
+    def get_session_dict(self):
         """Return a dict compatible with phasor_launcher.save_session."""
         r  = self._radius.get()
         rm = r * self._ratio.get()
@@ -383,7 +383,7 @@ class PhasorViewPanel:
         if self._poly_pts:
             self._update_poly_artist()
 
-    def _redraw_image(self, masks: Optional[np.ndarray]):
+    def _redraw_image(self, masks):
         """Update the intensity/overlay image panel."""
         self._ax_img.cla()
         self._ax_img.set_facecolor('black')
@@ -414,14 +414,14 @@ class PhasorViewPanel:
 
     #  FRET trajectory overlay
 
-    def overlay_fret_trajectory(self, traj: dict) -> None:
+    def overlay_fret_trajectory(self, traj):
         """Overlay a FRET trajectory dict (from predict_fret_trajectory) on the phasor."""
         self._fret_trajectory = traj
         self._redraw_phasor()
         self._redraw_cursors()
         self._canvas.draw_idle()
 
-    def clear_fret_overlay(self) -> None:
+    def clear_fret_overlay(self):
         """Remove any FRET trajectory and peaks overlay from the phasor."""
         self._fret_trajectory = None
         self._peak_results = None
@@ -429,7 +429,7 @@ class PhasorViewPanel:
         self._redraw_cursors()
         self._canvas.draw_idle()
 
-    def _redraw_fret_overlay(self) -> None:
+    def _redraw_fret_overlay(self):
         if self._fret_trajectory is None:
             return
         traj = self._fret_trajectory
@@ -447,14 +447,14 @@ class PhasorViewPanel:
 
     #  Peaks overlay
 
-    def overlay_peaks(self, peaks: dict) -> None:
+    def overlay_peaks(self, peaks):
         """Overlay detected phasor peaks on the phasor plot."""
         self._peak_results = peaks
         self._redraw_phasor()
         self._redraw_cursors()
         self._canvas.draw_idle()
 
-    def _redraw_peaks_overlay(self) -> None:
+    def _redraw_peaks_overlay(self):
         if self._peak_results is None:
             return
         peaks = self._peak_results
@@ -539,7 +539,7 @@ class PhasorViewPanel:
         print(f"{'─' * 50}")
         self._canvas.draw_idle()
 
-    def _mask_from_polygon(self, vertices: list) -> np.ndarray:
+    def _mask_from_polygon(self, vertices):
         """Boolean mask: True where (G, S) lies inside the polygon."""
         verts = np.asarray(vertices, dtype=float)  # (N, 2) — columns: G, S
         pts   = np.column_stack([self._real.ravel(), self._imag.ravel()])
@@ -677,7 +677,7 @@ class PhasorViewPanel:
         self._redraw_cursors()
         self._canvas.draw_idle()
 
-    def _hit_test(self, g: float, s: float) -> Optional[int]:
+    def _hit_test(self, g, s):
         """Return index of the cursor that contains or is near (g, s), else None."""
         r = self._radius.get()
         for i, cur in enumerate(self._cursors):
@@ -782,7 +782,7 @@ class PhasorViewPanel:
             "Polygon cancelled. Left-click to start a new one.")
 
     #  Per-cursor decay fitting
-    def _build_cursor_union_mask(self) -> Optional[np.ndarray]:
+    def _build_cursor_union_mask(self):
         """Return a boolean (Y×X) union mask for all current cursors.
 
         Returns None if there are no cursors or no phasor data loaded.

@@ -29,6 +29,7 @@ from .utils.enhanced_outputs import (
 )
 from .utils.lifetime_image import make_lifetime_image
 from .image.tools import make_intensity_image, make_cell_mask, apply_intensity_threshold, pick_intensity_threshold
+from ._version import fitter_version
 
 
 def _make_operation_progress_callback(operation_name, progress_window_manager):
@@ -822,7 +823,7 @@ def single_FOV_flim_fit_inquire():
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     """Core fitting routine – identical to original single_FOV_flim_fit body."""
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v14  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     print(f"\n[1] PTU: {args.ptu}")
@@ -1247,9 +1248,7 @@ def stitch_and_fit(interactive=False):
         _run_stitch_and_fit(args)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 #  Per-tile fitting pipeline
-# ══════════════════════════════════════════════════════════════════════════════
 
 def tile_fit_inquire():
     """Interactive prompt for per-tile fitting parameters."""
@@ -1409,7 +1408,6 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         n_exp          = args.nexp,
     )
 
-    # ── Upsample canvas to full tile resolution when binning > 1 ──────
     # fit_flim_tiles computes the canvas at (H//binning, W//binning)
     # using effective_pixel_size_m = pixel_size_m * binning.  Batch
     # hardcodes binning=1 so its canvas is always full-res; single-ROI

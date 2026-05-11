@@ -17,3 +17,16 @@ tqdm==4.67.3
 tkinterdnd2==0.4.3
 xarray==2026.1.0
 TKinterModernThemes
+
+# GPU acceleration (optional, installed by install.py)
+# macOS (Apple Silicon): MLX for Metal GPU + PyTorch/MPS fallback
+#   mlx
+#   torch  (CPU wheel from pytorch.org - MPS is built-in on macOS ≥ 12.3)
+#
+# Linux / Windows NVIDIA: PyTorch CUDA
+#   torch --index-url https://download.pytorch.org/whl/cu126
+#
+# Linux AMD ROCm: PyTorch ROCm
+#   torch --index-url https://download.pytorch.org/whl/rocm6.2
+#
+# Run  python install.py  to automatically install the right variant.

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import sys
 from pathlib import Path
@@ -10,7 +8,7 @@ import numpy as np
 
 # Helpers: yes/no, path prompts, file-dialog save
 
-def _yes_no(question: str) -> bool:
+def _yes_no(question):
     """Ask a yes/no question via inquirer and return True for Yes."""
     import inquirer
     ans = inquirer.prompt([inquirer.List(
@@ -18,7 +16,7 @@ def _yes_no(question: str) -> bool:
     return ans['yesno'] == 'Yes'
 
 
-def _ask_path(message: str, *, optional: bool = False) -> str | None:
+def _ask_path(message, *, optional=False):
     """Ask the user for a file path via inquirer (with tab-completion)."""
     import inquirer
     hint = " (leave blank to skip)" if optional else ""
@@ -73,16 +71,16 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
 
 # Save / Load
 
-def save_session(path: str, *,
-                 real_cal: np.ndarray,
-                 imag_cal: np.ndarray,
-                 mean: np.ndarray,
-                 frequency: float,
-                 cursors: list[dict],
-                 params: dict,
-                 ptu_file: str | None = None,
-                 irf_file: str | None = None,
-                 display_image: np.ndarray | None = None) -> None:
+def save_session(path, *,
+                 real_cal,
+                 imag_cal,
+                 mean,
+                 frequency,
+                 cursors,
+                 params,
+                 ptu_file=None,
+                 irf_file=None,
+                 display_image=None):
     """Persist phasor data **and** cursor state to a *.npz* file.
 
     Parameters
@@ -128,7 +126,7 @@ def save_session(path: str, *,
     print(f"Session saved → {path}  ({n} cursor(s))")
 
 
-def load_session(path: str) -> dict:
+def load_session(path):
     """Load a previously saved session from a *.npz* file.
 
     Returns
@@ -170,7 +168,7 @@ def load_session(path: str) -> dict:
 
 # Pipeline: PTU → phasor → (optional) calibration
 
-def get_ptu_active_channels(ptu_path: str) -> list[int]:
+def get_ptu_active_channels(ptu_path):
     """Return the sorted list of photon channels present in a PTU file."""
     from .PTU.reader import PTUFile
 
@@ -181,7 +179,7 @@ def get_ptu_active_channels(ptu_path: str) -> list[int]:
     return sorted(int(channel) for channel in active_channels)
 
 
-def _prompt_ptu_channel(active_channels: list[int]) -> int:
+def _prompt_ptu_channel(active_channels):
     """Prompt for a PTU channel via the CLI inquirer flow."""
     import inquirer
 
@@ -199,11 +197,11 @@ def _prompt_ptu_channel(active_channels: list[int]) -> int:
 
 
 def resolve_ptu_channel(
-    ptu_path: str,
-    channel: int | None = None,
+    ptu_path,
+    channel=None,
     *,
     prompt_fn=None,
-) -> int:
+):
     """Resolve which PTU channel to use, prompting if required."""
     active_channels = get_ptu_active_channels(ptu_path)
     if not active_channels:
@@ -234,7 +232,7 @@ def resolve_ptu_channel(
         )
     return selected_channel
 
-def _process_ptu(ptu_path: str, irf_path: str | None = None, channel: int | None = None) -> dict:
+def _process_ptu(ptu_path, irf_path=None, channel=None):
     """Load a PTU file, compute phasors, optionally calibrate with IRF.
 
     Parameters
@@ -298,15 +296,15 @@ def _process_ptu(ptu_path: str, irf_path: str | None = None, channel: int | None
 
 # Main launcher
 
-def launch_phasor(ptu_path: str | None = None,
-                  irf_path: str | None = None,
-                  machine_irf_path: str | None = None,
-                  session_path: str | None = None,
+def launch_phasor(ptu_path=None,
+                  irf_path=None,
+                  machine_irf_path=None,
+                  session_path=None,
                   *,
-                  channel: int | None = None,
-                  min_photons: float = 0.01,
-                  max_cursors: int = 6,
-                  figsize: tuple[float, float] = (8, 5)) -> dict:
+                  channel=None,
+                  min_photons=0.01,
+                  max_cursors=6,
+                  figsize=(8, 5)):
     """Interactive phasor FLIM analysis with save / load support.
 
     If no arguments are supplied a file-dialog prompts for the input.
@@ -432,7 +430,7 @@ def launch_phasor(ptu_path: str | None = None,
     return state
 
 
-def phasor_inquire() -> dict:
+def phasor_inquire():
     """Full guided prompt → launch_phasor().  No arguments required."""
     print("\n--- Interactive Phasor Analysis ---")
     return launch_phasor()   # all prompts happen inside

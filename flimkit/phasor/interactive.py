@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -16,7 +14,7 @@ from phasorpy.component import phasor_component_fraction
 _COLORS = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b']
 
 
-def _in_notebook() -> bool:
+def _in_notebook():
     """Return True when running inside a Jupyter/IPython notebook."""
     try:
         from IPython import get_ipython
@@ -28,26 +26,26 @@ def _in_notebook() -> bool:
         return False
 
 
-def _ellipse_angle_rad(cg: float, cs: float, mode: str) -> float:
+def _ellipse_angle_rad(cg, cs, mode):
     """Return the rotation angle (radians) that phasorpy uses for *mode*."""
     if mode == 'semicircle':
         return np.arctan2(cs, cg - 0.5) + np.pi / 2.0
     return np.arctan2(cs, cg)
 
 def phasor_cursor_tool(
-    real_cal: np.ndarray,
-    imag_cal: np.ndarray,
-    mean: np.ndarray,
-    frequency: float,
+    real_cal,
+    imag_cal,
+    mean,
+    frequency,
     *,
-    display_image: np.ndarray | None = None,
-    min_photons: float = 0.01,
-    max_cursors: int = 6,
-    figsize: tuple[float, float] = (8, 5),
-    initial_cursors: list[dict] | None = None,
-    initial_params: dict | None = None,
-    on_save: callable | None = None,
-) -> dict:
+    display_image=None,
+    min_photons=0.01,
+    max_cursors=6,
+    figsize=(8, 5),
+    initial_cursors=None,
+    initial_params=None,
+    on_save=None,
+):
     """Launch an interactive phasor cursor selection widget.
 
     Click on the phasor plot to place elliptical cursors.  The first two
@@ -111,13 +109,13 @@ def phasor_cursor_tool(
     s_all = ic[valid]
 
     # Mutable state returned to caller
-    state: dict = {
+    state = {
         'cursors': [],
         'masks': None,
         'fig': None,
         'ax': None,
     }
-    cursor_artists: list = []
+    cursor_artists = []
 
     # Parameter store (values read by helpers)
     params = dict(radius=0.05, radius_minor=0.03, angle_mode='semicircle')
@@ -552,7 +550,6 @@ def phasor_cursor_tool(
         display(results_out)
 
     else:
-        # ── matplotlib.widgets for standalone scripts ────────
         from matplotlib.widgets import Slider, Button, RadioButtons
 
         ax_rad = fig.add_axes([0.15, 0.17, 0.55, 0.03])

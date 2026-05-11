@@ -14,6 +14,11 @@ from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau)
 from ..configs import MIN_PHOTONS_PERPIX
 
+# Module-level GPU backend cache — resolved once on first call.
+# Sentinel _GPU_BACKEND_UNSET means "not yet checked".
+_GPU_BACKEND_UNSET = object()
+_gpu_backend_cache = _GPU_BACKEND_UNSET
+
 def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                has_tail, fit_bg, fit_sigma,
                n_exp, tau_min_ns, tau_max_ns,
@@ -137,7 +142,6 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
         print(f"  Differential evolution: popsize={de_popsize}, "
               f"maxiter={de_maxiter}, workers={workers}")
 
-        # --- Log-tau reparameterisation for DE ---
         bounds_log = list(bounds)
         for i in range(n_exp):
             lo_tau, hi_tau = bounds[i]
@@ -303,7 +307,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   tau_min_ns=None, tau_max_ns=None,
                   correct_pileup=False, n_sync=0,
                   progress_callback=None,
-                  free_tau=False) -> dict:
+                  free_tau=False,
+                  use_gpu="auto",
+                  gpu_backend=None) -> dict:
     ny, nx, _ = stack.shape
     # Per-pixel sync count: distribute total sync pulses evenly across pixels
     _n_sync_px = int(n_sync / max(ny * nx, 1)) if correct_pileup and n_sync > 0 else 0
@@ -327,6 +333,51 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         np.real(np.fft.ifft(np.fft.fft(b) * irf_fft)) for b in basis
     ])  # (n_exp, n_bins)
     A = conv_basis.T   # (n_bins, n_exp)
+
+    # GPU fast path — batches all pixels in one or two matrix operations.
+    # Skipped when free_tau=True (LM solver not yet batched) or when no
+    # GPU backend is available.
+    # use_gpu="auto"  → use GPU if one is detected (default)
+    # use_gpu=True    → same as "auto" but raises if GPU is explicitly wanted
+    # use_gpu=False   → always use CPU path
+    global _gpu_backend_cache
+    if use_gpu is not False and not free_tau:
+        _backend = gpu_backend
+        if _backend is None:
+            if _gpu_backend_cache is _GPU_BACKEND_UNSET:
+                try:
+                    from flimkit.GPU import get_backend
+                    _gpu_backend_cache = get_backend()
+                except Exception:
+                    _gpu_backend_cache = None
+            _backend = _gpu_backend_cache
+
+        if _backend is not None:
+            if n_exp == 1:
+                _lo = (tau_min_ns if tau_min_ns is not None
+                       else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
+                _hi = (tau_max_ns if tau_max_ns is not None
+                       else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
+                _N_GRID = 200
+                _tau_grid   = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
+                _irf_fft_g  = np.fft.fft(irf_fixed)
+                _basis_grid = np.array([
+                    np.real(np.fft.ifft(
+                        np.fft.fft(np.exp(-t_axis / max(tau, 1e-15))) * _irf_fft_g))
+                    for tau in _tau_grid
+                ])
+                _bb_grid = np.maximum((_basis_grid ** 2).sum(axis=1), 1e-20)
+                return _backend.batch_grid_scan_1exp(
+                    stack, _basis_grid, _bb_grid, _tau_grid,
+                    min_photons, correct_pileup, _n_sync_px,
+                    progress_callback,
+                )
+            else:
+                return _backend.batch_fixed_tau(
+                    stack, A, taus_fixed,
+                    min_photons, correct_pileup, _n_sync_px,
+                    progress_callback,
+                )
 
     maps = dict(
         intensity    = stack.sum(axis=2),

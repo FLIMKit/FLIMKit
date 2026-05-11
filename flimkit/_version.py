@@ -1,4 +1,5 @@
-__version__ = "0.9.9-stable" #Fixed tests
+__version__ = "0.9.9-testing-GPU" #Fixed tests
+fitter_version = "16"
 
 roadmap = '''Flim program roadmap:
 Version history:

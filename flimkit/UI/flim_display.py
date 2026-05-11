@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, PowerNorm
-from typing import Dict, Tuple, Optional, Union
 
 
 # Colormap presets
@@ -15,9 +14,9 @@ COLORMAPS = {
 
 
 def compute_intensity_weighted_lifetime(
-    pixel_maps: Dict[str, np.ndarray],
-    intensity: np.ndarray,
-    n_exp: int = 2,
+    pixel_maps,
+    intensity,
+    n_exp=2,
 ) -> np.ndarray:
     """τ_int = Σ(τᵢ × aᵢ) / total_intensity. Returns (Y,X) float32; unfitted=NaN."""
     # Pre-computed shortcuts (fastest paths)
@@ -55,12 +54,12 @@ def compute_intensity_weighted_lifetime(
 
 
 def apply_color_scale(
-    image: np.ndarray,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    gamma: float = 1.0,
-    percentile_auto: Tuple[float, float] = (2, 98),
-) -> np.ndarray:
+    image,
+    vmin=None,
+    vmax=None,
+    gamma=1.0,
+    percentile_auto=(2, 98),
+):
     # Create working copy, preserve NaN
     valid_mask = ~np.isnan(image)
     valid_pixels = image[valid_mask]
@@ -90,17 +89,17 @@ def apply_color_scale(
     return normalized
 
 
-def get_colormap(name: str = 'viridis') -> plt.cm.ScalarMappable:
+def get_colormap(name='viridis'):
     cmap_name = COLORMAPS.get(name, name)
     return plt.cm.get_cmap(cmap_name)
 
 
 def compute_region_stats(
-    lifetime_map: np.ndarray,
-    intensity_map: np.ndarray,
-    region_mask: np.ndarray,
-    full_stats: bool = False,
-) -> Dict[str, Union[float, dict]]:
+    lifetime_map,
+    intensity_map,
+    region_mask,
+    full_stats=False,
+):
     """Extract region mask, compute median_tau, mean_amplitude, photon_count, n_pixels. Excludes NaN."""
     # Extract pixels in region
     region_lifetime = lifetime_map[region_mask]
@@ -137,10 +136,10 @@ def compute_region_stats(
 
 
 def mask_to_rgba(
-    mask: np.ndarray,
-    color: Tuple[float, float, float] = (1.0, 1.0, 1.0),
-    alpha: float = 0.3,
-) -> np.ndarray:
+    mask,
+    color=(1.0, 1.0, 1.0),
+    alpha=0.3,
+):
     rgba = np.zeros((*mask.shape, 4), dtype=np.float32)
     rgba[mask, 0] = color[0]  # R
     rgba[mask, 1] = color[1]  # G

@@ -72,6 +72,23 @@ build_machine_irf_from_folder(
 )
 ```
 
+## GPU Acceleration
+
+Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported backend is detected. This applies to both single-FOV and tile-ROI pipelines. The same `fit_per_pixel()` function is used in both.
+
+| Backend | Hardware | Notes |
+|---|---|---|
+| MLX | Apple Silicon (M1/M2/M3/M4) | Detected automatically |
+| PyTorch MPS | Apple Silicon | Fallback if MLX not installed |
+| PyTorch CUDA | NVIDIA | `pip install torch --index-url https://download.pytorch.org/whl/cu126` |
+| PyTorch ROCm | AMD | `pip install torch --index-url https://download.pytorch.org/whl/rocm6.2` |
+
+`python install.py` detects your hardware and installs the right backend. GPU is used automatically, no extra flags needed.
+
+**Limitations:** `--free-tau-perpixel` mode (LM solver) is CPU-only regardless of GPU availability. `fit_summed` (single global fit) is always CPU, it's fast enough not to matter.
+
+**Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
+
 ## Tests
 
 Not strictly necessary, but useful after making code changes.

@@ -1,10 +1,6 @@
 import time
 import numpy as np
-from numpy.typing import DTypeLike
 from .reader import PTUFile, PTUArray5D
-from os import PathLike
-from typing import Any, Literal, Sequence
-from types import EllipsisType
 
 def filter_photons_with_mask(ptu_path, mask, channel=None, binning=1, verbose=False):
     """
@@ -236,15 +232,15 @@ def filter_photons_with_mask_optimized(ptu_path, mask, channel=None, binning=1, 
     return stack.astype(np.float32)
 
 def signal_from_PTUFile(
-    filename: str | PathLike[Any],
+    filename,
     /,
     *,
-    dtype: DTypeLike | None = None,
-    frame: int | None = None,
-    channel: int | None = 0,
-    dtime: int | None = 0,
-    binning: int = 1,
-    keepdims: bool = False,
+    dtype=None,
+    frame=None,
+    channel=0,
+    dtime=0,
+    binning=1,
+    keepdims=False,
 ):
     """Return TCSPC histogram and metadata from a PTU T3 mode file.
 
