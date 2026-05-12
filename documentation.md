@@ -81,7 +81,15 @@ pip install -r requirements.txt
 python validate_installation.py
 ```
 
-Runs 9 checks: dependencies, module imports, XLIF parsing, stitching, fitting, phasor pipeline, and per-tile fit pipeline. All should pass.
+Runs 10 checks: dependencies, module imports, XLIF parsing, stitching, fitting, phasor pipeline, per-tile fit pipeline, and GPU backend dispatch. All should pass.
+
+### Hardware Limits
+
+```bash
+python hardware_limits.py
+```
+
+Stress-tests the machine by ramping canvas sizes (64×64 → 4096×4096) and measuring fixed-tau GPU and free-tau CPU throughput. Reports peak pixels/second, RAM headroom, and estimated wall-clock times for common acquisition sizes. Useful for understanding what canvas sizes are feasible before starting a long batch run.
 
 ---
 
@@ -666,7 +674,8 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 ├── fit_cli.py                     # FLIM fitting CLI
 ├── phasor_cli.py                  # Phasor analysis CLI
 ├── build_and_sign.py              # PyInstaller build + codesign
-├── validate_installation.py       # Installation sanity check
+├── validate_installation.py       # Installation sanity check (10 checks)
+├── _hardware_limits.py            # Hardware stress test — throughput & RAM headroom
 ├── requirements.txt
 │
 ├── flimkit/
@@ -818,7 +827,7 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app — the default IRF path is resolved at startup and won't update mid-session.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` mode always runs on CPU regardless of GPU availability.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` with n_exp ≥ 2 uses batched Adam on GPU; it only falls back to CPU when no backend is detected.
 
 **Tile stitching produces visible seams**  
 Check that the max drift setting isn't too restrictive. If registration looks fine but seams persist, it's likely a sample contrast issue at tile boundaries rather than a registration failure.

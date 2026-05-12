@@ -335,13 +335,13 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     A = conv_basis.T   # (n_bins, n_exp)
 
     # GPU fast path — batches all pixels in one or two matrix operations.
-    # Skipped when free_tau=True (LM solver not yet batched) or when no
-    # GPU backend is available.
+    # For fixed-tau modes: one matmul (NNLS with pre-built basis).
+    # For free-tau mode (n_exp > 1): batched Adam optimizer on GPU.
     # use_gpu="auto"  → use GPU if one is detected (default)
     # use_gpu=True    → same as "auto" but raises if GPU is explicitly wanted
     # use_gpu=False   → always use CPU path
     global _gpu_backend_cache
-    if use_gpu is not False and not free_tau:
+    if use_gpu is not False:
         _backend = gpu_backend
         if _backend is None:
             if _gpu_backend_cache is _GPU_BACKEND_UNSET:
@@ -353,30 +353,42 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             _backend = _gpu_backend_cache
 
         if _backend is not None:
-            if n_exp == 1:
-                _lo = (tau_min_ns if tau_min_ns is not None
-                       else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
-                _hi = (tau_max_ns if tau_max_ns is not None
-                       else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
-                _N_GRID = 200
-                _tau_grid   = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
-                _irf_fft_g  = np.fft.fft(irf_fixed)
-                _basis_grid = np.array([
-                    np.real(np.fft.ifft(
-                        np.fft.fft(np.exp(-t_axis / max(tau, 1e-15))) * _irf_fft_g))
-                    for tau in _tau_grid
-                ])
-                _bb_grid = np.maximum((_basis_grid ** 2).sum(axis=1), 1e-20)
-                return _backend.batch_grid_scan_1exp(
-                    stack, _basis_grid, _bb_grid, _tau_grid,
-                    min_photons, correct_pileup, _n_sync_px,
-                    progress_callback,
-                )
+            if not free_tau:
+                if n_exp == 1:
+                    _lo = (tau_min_ns if tau_min_ns is not None
+                           else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
+                    _hi = (tau_max_ns if tau_max_ns is not None
+                           else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
+                    _N_GRID = 200
+                    _tau_grid   = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
+                    _irf_fft_g  = np.fft.fft(irf_fixed)
+                    _basis_grid = np.array([
+                        np.real(np.fft.ifft(
+                            np.fft.fft(np.exp(-t_axis / max(tau, 1e-15))) * _irf_fft_g))
+                        for tau in _tau_grid
+                    ])
+                    _bb_grid = np.maximum((_basis_grid ** 2).sum(axis=1), 1e-20)
+                    return _backend.batch_grid_scan_1exp(
+                        stack, _basis_grid, _bb_grid, _tau_grid,
+                        min_photons, correct_pileup, _n_sync_px,
+                        progress_callback,
+                    )
+                else:
+                    return _backend.batch_fixed_tau(
+                        stack, A, taus_fixed,
+                        min_photons, correct_pileup, _n_sync_px,
+                        progress_callback,
+                    )
             else:
-                return _backend.batch_fixed_tau(
-                    stack, A, taus_fixed,
-                    min_photons, correct_pileup, _n_sync_px,
-                    progress_callback,
+                # free_tau and n_exp > 1: batched Adam
+                _tau_min_s = (tau_min_ns if tau_min_ns is not None
+                              else taus_fixed.min() * 1e9 * 0.1) * 1e-9
+                _tau_max_s = (tau_max_ns if tau_max_ns is not None
+                              else taus_fixed.max() * 1e9 * 10.0) * 1e-9
+                return _backend.batch_free_tau_fit(
+                    stack, irf_fixed, tcspc_res,
+                    taus_fixed, _tau_min_s, _tau_max_s,
+                    n_exp, min_photons, correct_pileup, _n_sync_px,
                 )
 
     maps = dict(

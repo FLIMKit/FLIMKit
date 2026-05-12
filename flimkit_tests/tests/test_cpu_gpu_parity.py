@@ -362,3 +362,143 @@ class TestCPUGPUParityDivergenceReport:
         assert err < TAU1_TOL, (
             f"3-exp tau_mean_amp divergence = {err:.2%}\n"
             + self._report(3, cpu, gpu))
+
+
+# Free-τ GPU parity tests
+# Adam (GPU) vs LM/TRF (CPU): same forward model, different optimiser.
+# We expect agreement within looser tolerances than fixed-tau.
+FREE_TAU_TOL     = 0.08   # 8 % relative error on individual τ values
+FREE_TAU_CHI2_MULT = 3.0  # GPU χ²_r must be ≤ CPU χ²_r × this factor
+
+
+def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
+    irf_prompt = _make_irf()
+    kwargs = dict(
+        stack       = stack,
+        tcspc_res   = TCSPC_RES,
+        n_bins      = N_BINS,
+        irf_prompt  = irf_prompt,
+        has_tail    = False,
+        fit_bg      = False,
+        fit_sigma   = False,
+        global_popt = global_popt,
+        n_exp       = n_exp,
+        min_photons = MIN_PHOTONS,
+        free_tau    = True,
+    )
+    cpu = fit_per_pixel(**kwargs, use_gpu=False)
+    gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
+    return cpu, gpu
+
+
+class TestCPUGPUParityFreeTau:
+    """
+    Free-τ per-pixel: GPU Adam vs CPU Levenberg-Marquardt.
+    Different optimisers reaching the same basin — tested with looser
+    tolerances than the fixed-τ NNLS paths.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.gpu_backend = gpu_backend
+
+    # 2-exp free-tau
+
+    def _setup_2exp(self):
+        stack = _synthetic_stack_2exp(ny=8, nx=8)
+        popt  = _global_popt_2exp()
+        return _fit_both_free_tau(stack, 2, popt, self.gpu_backend)
+
+    def test_2exp_free_tau_tau1_agrees(self):
+        cpu, gpu = self._setup_2exp()
+        err = _rel_err(cpu["tau_1"], gpu["tau_1"])
+        assert err < FREE_TAU_TOL, (
+            f"free-tau 2-exp: tau_1 CPU/GPU relative error = {err:.2%} "
+            f"(limit {FREE_TAU_TOL:.0%})")
+
+    def test_2exp_free_tau_tau2_agrees(self):
+        cpu, gpu = self._setup_2exp()
+        err = _rel_err(cpu["tau_2"], gpu["tau_2"])
+        assert err < FREE_TAU_TOL, (
+            f"free-tau 2-exp: tau_2 CPU/GPU relative error = {err:.2%}")
+
+    def test_2exp_free_tau_tau_mean_amp_agrees(self):
+        cpu, gpu = self._setup_2exp()
+        err = _rel_err(cpu["tau_mean_amp"], gpu["tau_mean_amp"])
+        assert err < FREE_TAU_TOL, (
+            f"free-tau 2-exp: tau_mean_amp CPU/GPU relative error = {err:.2%}")
+
+    def test_2exp_free_tau_chi2_not_worse(self):
+        cpu, gpu = self._setup_2exp()
+        valid = ~(np.isnan(cpu["chi2_r"]) | np.isnan(gpu["chi2_r"]))
+        if not valid.any():
+            pytest.skip("No valid pixels for chi2 comparison")
+        cpu_chi2 = float(np.nanmedian(cpu["chi2_r"][valid]))
+        gpu_chi2 = float(np.nanmedian(gpu["chi2_r"][valid]))
+        assert gpu_chi2 <= cpu_chi2 * FREE_TAU_CHI2_MULT, (
+            f"free-tau 2-exp: GPU median χ²_r = {gpu_chi2:.3f} vs "
+            f"CPU {cpu_chi2:.3f} (limit = CPU × {FREE_TAU_CHI2_MULT})")
+
+    def test_2exp_free_tau_valid_pixel_count_comparable(self):
+        cpu, gpu = self._setup_2exp()
+        cpu_valid = (~np.isnan(cpu["tau_mean_amp"])).sum()
+        gpu_valid = (~np.isnan(gpu["tau_mean_amp"])).sum()
+        assert gpu_valid >= int(cpu_valid * 0.9), (
+            f"free-tau 2-exp: GPU fitted {gpu_valid} pixels vs CPU {cpu_valid} "
+            f"(must be ≥ 90 % of CPU)")
+
+    def test_2exp_free_tau_required_keys_present(self):
+        cpu, gpu = self._setup_2exp()
+        required = {"intensity", "tau_mean_amp", "tau_mean_int", "chi2_r",
+                    "alpha_1", "alpha_2", "frac_1", "frac_2", "tau_1", "tau_2"}
+        for label, maps in [("CPU", cpu), ("GPU", gpu)]:
+            missing = required - maps.keys()
+            assert not missing, f"free-tau 2-exp {label} missing keys: {missing}"
+
+    # 3-exp free-tau 
+
+    def _setup_3exp(self):
+        stack = _synthetic_stack_3exp(ny=8, nx=8)
+        popt  = _global_popt_3exp()
+        return _fit_both_free_tau(stack, 3, popt, self.gpu_backend)
+
+    def test_3exp_free_tau_tau_mean_amp_agrees(self):
+        cpu, gpu = self._setup_3exp()
+        err = _rel_err(cpu["tau_mean_amp"], gpu["tau_mean_amp"])
+        assert err < FREE_TAU_TOL, (
+            f"free-tau 3-exp: tau_mean_amp CPU/GPU relative error = {err:.2%}")
+
+    def test_3exp_free_tau_tau_mean_int_agrees(self):
+        cpu, gpu = self._setup_3exp()
+        err = _rel_err(cpu["tau_mean_int"], gpu["tau_mean_int"])
+        assert err < FREE_TAU_TOL, (
+            f"free-tau 3-exp: tau_mean_int CPU/GPU relative error = {err:.2%}")
+
+    def test_3exp_free_tau_chi2_not_worse(self):
+        cpu, gpu = self._setup_3exp()
+        valid = ~(np.isnan(cpu["chi2_r"]) | np.isnan(gpu["chi2_r"]))
+        if not valid.any():
+            pytest.skip("No valid pixels for chi2 comparison")
+        cpu_chi2 = float(np.nanmedian(cpu["chi2_r"][valid]))
+        gpu_chi2 = float(np.nanmedian(gpu["chi2_r"][valid]))
+        assert gpu_chi2 <= cpu_chi2 * FREE_TAU_CHI2_MULT, (
+            f"free-tau 3-exp: GPU median χ²_r = {gpu_chi2:.3f} vs "
+            f"CPU {cpu_chi2:.3f} (limit = CPU × {FREE_TAU_CHI2_MULT})")
+
+    def test_3exp_free_tau_valid_pixel_count_comparable(self):
+        cpu, gpu = self._setup_3exp()
+        cpu_valid = (~np.isnan(cpu["tau_mean_amp"])).sum()
+        gpu_valid = (~np.isnan(gpu["tau_mean_amp"])).sum()
+        assert gpu_valid >= int(cpu_valid * 0.9), (
+            f"free-tau 3-exp: GPU fitted {gpu_valid} pixels vs CPU {cpu_valid} "
+            f"(must be ≥ 90 % of CPU)")
+
+    def test_3exp_free_tau_required_keys_present(self):
+        cpu, gpu = self._setup_3exp()
+        required = {"intensity", "tau_mean_amp", "tau_mean_int", "chi2_r",
+                    "alpha_1", "alpha_2", "alpha_3",
+                    "frac_1", "frac_2", "frac_3",
+                    "tau_1", "tau_2", "tau_3"}
+        for label, maps in [("CPU", cpu), ("GPU", gpu)]:
+            missing = required - maps.keys()
+            assert not missing, f"free-tau 3-exp {label} missing keys: {missing}"

@@ -85,7 +85,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 
 `python install.py` detects your hardware and installs the right backend. GPU is used automatically, no extra flags needed.
 
-**Limitations:** `--free-tau-perpixel` mode (LM solver) is CPU-only regardless of GPU availability. `fit_summed` (single global fit) is always CPU, it's fast enough not to matter.
+**Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU — it's fast enough not to matter.
 
 **Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
 

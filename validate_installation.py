@@ -474,6 +474,114 @@ def test_phasor_pipeline():
         return False
 
 
+def check_gpu_backend():
+    """Check GPU backend detection and free-tau dispatch.
+
+    Notes
+    -----
+    Free-tau fitting always uses parallel CPU threads (scipy TRF via
+    ThreadPoolExecutor) regardless of platform or GPU.  The 'GPU' path
+    provides multi-core parallelism over the sequential CPU loop, not
+    hardware GPU acceleration.  The fixed-tau path *does* use real GPU
+    matrix operations (Metal/MPS on macOS, CUDA on Linux/Windows).
+    """
+    print_header("Checking GPU Backend")
+
+    try:
+        from flimkit.GPU import get_backend
+        backend = get_backend()
+
+        if backend is None:
+            print_warning("No GPU backend available — GPU path will not be used")
+            print_warning("Install mlx (Apple Silicon) or torch (CUDA) for GPU support")
+            return True  # not a hard failure
+
+        backend_name = type(backend).__name__
+        print_success(f"GPU backend detected: {backend_name}")
+
+        import numpy as np
+        from flimkit.FLIM.fitters import fit_per_pixel
+        from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
+        from flimkit.GPU._base import _BackendMixin
+        from flimkit_tests.mock_data import (
+            MOCK_TCSPC_RES, MOCK_IRF_FWHM_BINS, MOCK_IRF_CENTER,
+            generate_synthetic_biexp_decay,
+        )
+
+        N_BINS   = 256
+        TCSPC    = MOCK_TCSPC_RES
+        NY, NX   = 4, 4
+
+        irf_fwhm_ns = MOCK_IRF_FWHM_BINS * TCSPC * 1e9
+        irf = gaussian_irf_from_fwhm(N_BINS, TCSPC, irf_fwhm_ns, MOCK_IRF_CENTER)
+
+        pixel = generate_synthetic_biexp_decay(N_BINS, TCSPC, peak_counts=5_000, noise=True)
+        stack = np.broadcast_to(pixel, (NY, NX, N_BINS)).copy()   # (NY, NX, N_BINS)
+
+        # Approximate global fit result: [tau1, tau2, amp1, amp2, shift]
+        TAU1_S = 0.5e-9; TAU2_S = 3.0e-9
+        global_popt = np.array([TAU1_S, TAU2_S, 0.4, 0.6, 0.0])
+
+        kwargs = dict(
+            stack=stack, tcspc_res=TCSPC, n_bins=N_BINS, irf_prompt=irf,
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=global_popt, n_exp=2, min_photons=50, free_tau=True,
+        )
+
+        call_count = [0]
+        orig_fn = type(backend).batch_free_tau_fit
+        def _patched(self, *a, **kw):
+            call_count[0] += 1
+            return orig_fn(self, *a, **kw)
+        type(backend).batch_free_tau_fit = _patched
+        try:
+            fit_per_pixel(**kwargs, use_gpu=False)
+            cpu_calls = call_count[0]
+            fit_per_pixel(**kwargs, gpu_backend=backend)
+            gpu_calls = call_count[0]
+        finally:
+            type(backend).batch_free_tau_fit = orig_fn
+
+        assert cpu_calls == 0,           "batch_free_tau_fit called during CPU run"
+        assert gpu_calls - cpu_calls == 1, "batch_free_tau_fit NOT called during GPU run"
+        print_success("GPU dispatch: batch_free_tau_fit called correctly")
+
+        pixel_calls = [0]
+        orig_sp = _BackendMixin._scipy_parallel_free_tau_fit
+        def _patched_sp(raw_valid, bg_valid, *a, **kw):
+            pixel_calls[0] += len(raw_valid)
+            return orig_sp(raw_valid, bg_valid, *a, **kw)
+        _BackendMixin._scipy_parallel_free_tau_fit = staticmethod(_patched_sp)
+        try:
+            gpu_maps = fit_per_pixel(**kwargs, gpu_backend=backend)
+        finally:
+            _BackendMixin._scipy_parallel_free_tau_fit = staticmethod(orig_sp)
+
+        n_valid = int((~np.isnan(gpu_maps["tau_mean_amp"])).sum())
+        assert pixel_calls[0] > 0, "No pixels reached the scipy solver"
+        assert pixel_calls[0] >= n_valid
+        print_success(
+            f"Pixel solver: {pixel_calls[0]} pixels fitted, "
+            f"{n_valid} valid in output"
+        )
+
+        print_warning(
+            f"Free-tau fitting uses parallel CPU threads (scipy TRF), "
+            f"not {backend_name} GPU hardware"
+        )
+        print_warning(
+            "Fixed-tau fitting uses real GPU matrix ops — "
+            "GPU acceleration is active for that path"
+        )
+
+        return True
+
+    except Exception as e:
+        print_error(f"GPU backend check failed: {e}")
+        traceback.print_exc()
+        return False
+
+
 def test_tile_fit_pipeline():
     """Test the per-tile fit → assemble → save pipeline with mocked PTU I/O."""
     print_header("Testing Per-Tile Fit Pipeline")
@@ -649,6 +757,7 @@ def main():
     results.append(("Dependencies", check_dependencies()))
     results.append(("Simplified Integration Files", check_simplified_integration()))
     results.append(("Module Imports", check_modules_import()))
+    results.append(("GPU Backend", check_gpu_backend()))
     results.append(("XML/XLIF Parsing", test_xml_parsing()))
     results.append(("Mock Data Generation", test_mock_data()))
     results.append(("Tile Stitching", test_stitching()))

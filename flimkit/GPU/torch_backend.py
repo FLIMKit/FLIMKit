@@ -155,3 +155,79 @@ class TorchBackend(_BackendMixin):
         for i in np.where(valid_mask)[0]:
             bg[i] = estimate_bg(flat[i], int(peak_bins[i]))
         return bg
+
+    def batch_free_tau_fit(
+        self,
+        stack,
+        irf_array,
+        tcspc_res,
+        taus_init,
+        tau_min_s,
+        tau_max_s,
+        n_exp,
+        min_photons,
+        correct_pileup,
+        n_sync_px,
+        n_steps=50,
+        lr=None,
+    ):
+        """Batched Levenberg-Marquardt for free-τ fitting — all pixels in parallel.
+
+        Forward model (per pixel b, component k):
+            basis_k(τ_k) = IFFT( FFT(exp(-t/τ_k)) * FFT(irf) )
+            model_b      = Σ_k α_k · basis_k + bg_b
+        Weighted residual:
+            r_bt = (model_bt - raw_bt) / sqrt(max(raw_bt, 1))   (Neyman √wt)
+
+        Works in PHYSICAL [τ, α] space — same coordinate system as scipy TRF —
+        with simple bound-clipping on each step.  This gives the same convergence
+        path and local minimum as the CPU reference, unlike a log/softplus
+        reparametrisation (different curvature → different path → different basin).
+
+        Analytical Jacobian:
+            ∂r_i/∂τ_k = α_k · IFFT(FFT(t/τ_k² · exp(-t/τ_k)) · IRF_fft)_i / √wt_i
+            ∂r_i/∂α_k = basis_k_i / √wt_i
+
+        LM update: (J^T J + λ·diag(J^T J)) δ = -J^T r
+        per-pixel λ: ×0.1 on accept, ×10 on reject.
+        """
+        torch = self._torch
+        ny, nx, n_bins = stack.shape
+        taus_ns_init   = taus_init * 1e9
+
+        flat           = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        intensity_flat = flat.sum(axis=1)
+        valid_mask     = intensity_flat >= min_photons
+        valid_idx      = np.where(valid_mask)[0]
+
+        maps = self._init_maps(
+            ny, nx, n_exp,
+            intensity=stack.sum(axis=2),
+            taus_fixed_ns=taus_ns_init,
+            free_tau=True,
+        )
+        if valid_idx.size == 0:
+            return maps
+
+        bg_flat = self._estimate_bg_batch(flat, valid_mask)
+        dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)
+        if correct_pileup and n_sync_px > 0:
+            for idx in valid_idx:
+                dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
+
+        raw_valid = flat[valid_idx].astype(np.float32)       # (B, n_bins)
+        bg_valid  = bg_flat[valid_idx].astype(np.float32)    # (B,)
+        B         = len(valid_idx)
+
+        taus_out, amps_out, chi2r_out, _, valid_b = self._scipy_parallel_free_tau_fit(
+            raw_valid, bg_valid, irf_array, tcspc_res,
+            taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
+        )
+
+        self._scatter_free_tau(
+            maps, valid_idx=valid_idx[valid_b],
+            taus_s=taus_out[valid_b], amps=amps_out[valid_b],
+            chi2_r=chi2r_out[valid_b],
+            ny=ny, nx=nx, n_exp=n_exp,
+        )
+        return maps
