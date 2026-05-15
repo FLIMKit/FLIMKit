@@ -105,9 +105,13 @@ def check_dependencies():
         except ImportError:
             missing_required.append(package)
     
+    _import_name = {
+        'pytest-cov':   'pytest_cov',
+        'pytest-xdist': 'xdist',
+    }
     for package in optional:
         try:
-            __import__(package.replace('-', '_'))
+            __import__(_import_name.get(package, package.replace('-', '_')))
         except ImportError:
             missing_optional.append(package)
     
