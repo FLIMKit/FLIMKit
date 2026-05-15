@@ -5,7 +5,7 @@
 FLIMKit is a Python toolkit for FLIM data from Leica SP8/FALCON (or any PTU-based system). Built as a drop-in for Leica LAS X FLIM analysis, with two workflows:
 
 - **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, and batch processing
-- **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, two-component decomposition, automatic peak detection, session save/load
+- **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, spatial filtering (gaussian/median/wavelet), two-component decomposition, automatic peak detection, session save/load
 
 Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
@@ -18,8 +18,14 @@ Python ≥ 3.12 required.
 ```bash
 git clone https://github.com/alex1075/FLIMKit.git
 cd FLIMKit
-pip install -r requirements.txt
-python validate_installation.py   # 9 checks — all should pass
+python install.py             # auto-detects GPU and installs the right backend
+python validate_installation.py   # 10 checks — all should pass
+```
+
+For development work (PyInstaller + test dependencies):
+
+```bash
+python install.py --dev
 ```
 
 Or download the compiled app from the Releases tab (no Python needed).
@@ -52,6 +58,10 @@ python phasor_cli.py --ptu data.ptu --irf irf.xlsx
 ```python
 from flimkit.phasor_launcher import launch_phasor
 state = launch_phasor('data.ptu', irf_path='irf.xlsx')
+
+# With spatial phasor filtering
+state = launch_phasor('data.ptu', irf_path='irf.xlsx',
+                      phasor_filter='gaussian', filter_kwargs={'sigma': 1.5})
 ```
 
 ## Machine IRF (do this first)
@@ -83,7 +93,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 | PyTorch CUDA | NVIDIA | `pip install torch --index-url https://download.pytorch.org/whl/cu126` |
 | PyTorch ROCm | AMD | `pip install torch --index-url https://download.pytorch.org/whl/rocm6.2` |
 
-`python install.py` detects your hardware and installs the right backend. GPU is used automatically, no extra flags needed.
+`python install.py` detects your hardware and installs the right backend automatically. No extra flags needed at runtime.
 
 **Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU — it's fast enough not to matter.
 
@@ -94,6 +104,8 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 Not strictly necessary, but useful after making code changes.
 
 ```bash
+python install.py --dev          # install test requirements first
+
 cd flimkit_tests
 python run_tests.py              # all tests
 python run_tests.py -c           # with coverage report

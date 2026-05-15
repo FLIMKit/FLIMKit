@@ -11,7 +11,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Ellipse, Polygon as MplPolygon
 from matplotlib.path import Path as MplPath
 
-# phasorpy v0.9 — all signatures verified
+# phasorpy v0.10 — all signatures verified
 from phasorpy.cursor import mask_from_elliptic_cursor, pseudo_color
 from phasorpy.lifetime import phasor_to_apparent_lifetime, phasor_semicircle_intersect
 from phasorpy.component import phasor_component_fraction
@@ -48,10 +48,17 @@ class PhasorViewPanel:
 
         self._real  = None
         self._imag  = None
+        self._real_raw = None   # unfiltered originals (for reset)
+        self._imag_raw = None
         self._mean  = None
         self._disp  = None   # display/intensity image
         self._freq  = 80.0                  # MHz
         self._valid = None   # boolean (min-photons)
+
+        # Phasor filter state
+        self._filter_method = tk.StringVar(value='none')
+        self._filter_sigma  = tk.DoubleVar(value=1.0)
+        self._filter_size   = tk.IntVar(value=3)
 
 
         self._cursors = []                    # {center_g, center_s, color}
@@ -157,9 +164,88 @@ class PhasorViewPanel:
         ttk.Button(row1, text="View Fit",
                    command=self._view_last_fit_result).pack(side="left")
 
+        # Row 2: phasor filter controls
+        row_filt = ttk.Frame(ctrl)
+        row_filt.pack(side="top", fill="x", pady=(2, 0))
+        ttk.Label(row_filt, text="Phasor filter:").pack(side="left")
+        ttk.Combobox(
+            row_filt, textvariable=self._filter_method,
+            values=['none', 'gaussian', 'median', 'wavelet'],
+            state='readonly', width=9,
+        ).pack(side="left", padx=(2, 6))
+        self._filter_method.trace_add("write", lambda *_: self._on_filter_method_change())
+
+        self._filt_sigma_frame = ttk.Frame(row_filt)
+        self._filt_sigma_frame.pack(side="left")
+        ttk.Label(self._filt_sigma_frame, text="σ:").pack(side="left")
+        ttk.Spinbox(self._filt_sigma_frame, textvariable=self._filter_sigma,
+                    from_=0.5, to=10.0, increment=0.5, width=5).pack(side="left", padx=(2, 6))
+
+        self._filt_size_frame = ttk.Frame(row_filt)
+        self._filt_size_frame.pack(side="left")
+        ttk.Label(self._filt_size_frame, text="size:").pack(side="left")
+        ttk.Spinbox(self._filt_size_frame, textvariable=self._filter_size,
+                    from_=3, to=15, increment=2, width=4).pack(side="left", padx=(2, 6))
+        self._filt_size_frame.pack_forget()   # hidden until median/wavelet selected
+
+        ttk.Button(row_filt, text="Apply",
+                   command=self._on_filter_apply).pack(side="left", padx=(0, 4))
+        ttk.Button(row_filt, text="Reset",
+                   command=self._on_filter_reset).pack(side="left")
+
     def _update_param_labels(self):
         self._radius_lbl.configure(text=f"{self._radius.get():.3f}")
         self._ratio_lbl.configure(text=f"{self._ratio.get():.2f}")
+
+    def _on_filter_method_change(self):
+        method = self._filter_method.get()
+        if method == 'gaussian':
+            self._filt_sigma_frame.pack(side='left')
+            self._filt_size_frame.pack_forget()
+        elif method in ('median', 'wavelet'):
+            self._filt_sigma_frame.pack_forget()
+            self._filt_size_frame.pack(side='left')
+        else:
+            self._filt_sigma_frame.pack_forget()
+            self._filt_size_frame.pack_forget()
+
+    def _on_filter_apply(self):
+        if self._real_raw is None:
+            return
+        method = self._filter_method.get()
+        if method == 'none':
+            return
+        from flimkit.phasor.filters import phasor_filter
+        kwargs = {}
+        if method == 'gaussian':
+            kwargs['sigma'] = float(self._filter_sigma.get())
+        elif method in ('median', 'wavelet'):
+            kwargs['size'] = int(self._filter_size.get())
+        try:
+            self._real, self._imag = phasor_filter(
+                self._real_raw.copy(), self._imag_raw.copy(), method,
+                mean=self._mean, **kwargs)
+        except Exception as exc:
+            messagebox.showerror("Filter error", str(exc))
+            return
+        self._redraw_phasor()
+        self._redraw_cursors()
+        self._canvas.draw_idle()
+        self._status_var.set(
+            f"Phasor filter applied: {method}  "
+            + (f"(\u03c3={kwargs.get('sigma', '')})" if method == 'gaussian'
+               else f"(size={kwargs.get('size', '')})"))
+
+    def _on_filter_reset(self):
+        if self._real_raw is None:
+            return
+        self._real = self._real_raw.copy()
+        self._imag = self._imag_raw.copy()
+        self._filter_method.set('none')
+        self._redraw_phasor()
+        self._redraw_cursors()
+        self._canvas.draw_idle()
+        self._status_var.set("Phasor filter reset.")
 
     def _build_figure(self):
         fig_frame = ttk.Frame(self.frame)
@@ -213,8 +299,10 @@ class PhasorViewPanel:
         """Load phasor arrays and render the phasor histogram.
         Must be called from the Tk main thread.
         """
-        self._real  = np.asarray(real_cal,      dtype=float).squeeze()
-        self._imag  = np.asarray(imag_cal,      dtype=float).squeeze()
+        self._real_raw = np.asarray(real_cal, dtype=float).squeeze()
+        self._imag_raw = np.asarray(imag_cal, dtype=float).squeeze()
+        self._real  = self._real_raw.copy()
+        self._imag  = self._imag_raw.copy()
         self._mean  = np.asarray(mean,          dtype=float).squeeze()
         self._disp  = (np.asarray(display_image, dtype=float).squeeze()
                        if display_image is not None else self._mean.copy())

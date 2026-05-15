@@ -130,8 +130,8 @@ def _install_gpu(token, dry_run):
 def main():
     parser = argparse.ArgumentParser(
         description="FLIMKit installer — installs core + platform-appropriate GPU deps")
-    parser.add_argument("--no-gpu",  action="store_true",
-                        help="Only install core requirements, skip GPU packages")
+    parser.add_argument("--dev",     action="store_true",
+                        help="Also install PyInstaller and test requirements")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print install commands without executing them")
     args = parser.parse_args()
@@ -139,6 +139,7 @@ def main():
     print(f"  Python   : {sys.version.split()[0]}")
     print(f"  Platform : {sys.platform}  ({platform.machine()})")
     print(f"  Dry-run  : {args.dry_run}")
+    print(f"  Dev deps : {'install' if args.dev else 'skip (use --dev to include)'}")
     req_file = Path(__file__).parent / "requirements.txt"
     _hdr("Installing core requirements")
     filtered_lines = []
@@ -160,15 +161,33 @@ def main():
         _err("Core requirements failed — aborting.")
         return 1
     _ok("Core requirements installed")
-    if args.no_gpu:
-        _info("--no-gpu flag set: skipping GPU packages.")
-    else:
-        token = _detect_gpu()
-        _info(f"Detected GPU target: {token.upper()}")
-        _install_gpu(token, dry_run=args.dry_run)
+
+    if args.dev:
+        _hdr("Installing PyInstaller")
+        ok = _pip("pyinstaller", dry_run=args.dry_run)
+        if ok:
+            _ok("PyInstaller installed")
+        else:
+            _err("PyInstaller install failed — continuing.")
+
+        test_req = Path(__file__).parent / "flimkit_tests" / "requirements_test.txt"
+        if test_req.exists():
+            _hdr("Installing test requirements")
+            ok = _run([sys.executable, "-m", "pip", "install", "--upgrade",
+                       "-r", str(test_req)], dry_run=args.dry_run)
+            if ok:
+                _ok("Test requirements installed")
+            else:
+                _err("Test requirements install failed — continuing.")
+        else:
+            _info(f"Test requirements file not found: {test_req}")
+
+    token = _detect_gpu()
+    _info(f"Detected GPU target: {token.upper()}")
+    _install_gpu(token, dry_run=args.dry_run)
     _hdr("Installation complete")
     _ok("Run  python validate_installation.py  to verify the setup.")
-    if not args.no_gpu and token != "cpu":
+    if token != "cpu":
         _ok(f"GPU backend will be auto-detected at runtime via  flimkit.GPU.get_backend().")
     print()
     return 0

@@ -57,7 +57,8 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 | `scipy` | Optimisers (Levenberg–Marquardt, Differential Evolution), signal processing |
 | `matplotlib` | Plotting (decay curves, lifetime maps, phasor plots) |
 | `xarray` | Labelled N-D arrays for FLIM signals |
-| `phasorpy` (0.9) | Phasor computation, calibration, cursor masking, lifetime conversion |
+| `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
+| `PyWavelets` | Wavelet-based phasor denoising |
 | `ptufile` | Low-level PTU file reading |
 | `inquirer` | Interactive terminal prompts |
 | `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
@@ -72,7 +73,14 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 ```bash
 git clone https://github.com/alex1075/FLIMKit.git
 cd FLIMKit
-pip install -r requirements.txt
+python install.py
+```
+
+`install.py` installs core requirements, then auto-detects and installs the right GPU backend (MLX on Apple Silicon, CUDA on NVIDIA, ROCm on AMD, CPU-only fallback). No flags needed for a standard install.
+
+```bash
+python install.py --dev      # also installs PyInstaller and test requirements
+python install.py --dry-run  # preview commands without executing
 ```
 
 ### Validate Installation
@@ -97,7 +105,7 @@ Stress-tests the machine by ramping canvas sizes (64×64 → 4096×4096) and mea
 
 Download the compiled app from the Releases tab if you don't want to deal with Python.
 
-Double-click to run. macOS will complain it's unsigned — that's expected, a dev certificate costs money and this is free. Right-click → Open to bypass Gatekeeper on first launch.
+Double-click to run. macOS will complain it's unsigned. That's expected, a dev certificate costs money and this is free. Right-click → Open to bypass Gatekeeper on first launch.
 
 From source:
 
@@ -131,7 +139,7 @@ Go to **Fit settings** and fill in:
 - **IRF method**: Machine IRF is recommended if you've built one. IRF XLSX works if you have a LAS X export for that specific PTU (right-click the summed/tail decay in the FLIM window → Export to Excel). Scatter PTU if you measured one directly. If none of those are available, use "Estimate from decay" and set FWHM to roughly 0.3–0.5 ns.
 - **Number of exponentials**: 1, 2, or 3. Beyond 3 the math gets shaky and the biology harder to interpret, so that's the cap. 
 - **Lifetime bounds**: 0.145–45 ns by default. Adjust if you're working with unusually short or long lifetimes.
-- **Fitting mode**: Full runs both summed and per-pixel fitting and is needed to generate the FLIM image in the UI. If you just want global lifetime values for the whole FOV, use FAST — per-pixel fitting is slow, especially with more exponentials.
+- **Fitting mode**: Full runs both summed and per-pixel fitting and is needed to generate the FLIM image in the UI. If you just want global lifetime values for the whole FOV, use FAST. Per-pixel fitting is slow, especially with more exponentials.
 - **Output prefix**: defaults to the PTU filename in the PTU directory. Change it to keep outputs organised.
 
 **Masking and thresholding:**
@@ -222,9 +230,21 @@ Sessions save to `.npz` allowing you to come back later and pick up where you le
 
 **Phasor panel controls:**
 
-- **Clear all / Undo** — remove everything or step back one cursor at a time
-- **Save session** — writes phasor arrays + cursor state to `.npz`
-- **Radius / Minor:major sliders** — resize the cursor in real time; stats update immediately
+- **Clear all / Undo**: remove everything or step back one cursor at a time
+- **Save session**: writes phasor arrays + cursor state to `.npz`
+- **Radius / Minor:major sliders**: resize the cursor in real time; stats update immediately
+
+**Spatial filtering:**
+
+A filter row sits above the cursor controls. Select a method, set parameters, and click **Apply**. Reset restores the original unfiltered data.
+
+| Method | Parameter | Description |
+|---|---|---|
+| `gaussian` | σ (0.5–10 px) | Gaussian smoothing via phasorpy's NaN-aware implementation |
+| `median` | size (3–15 px, odd) | Median filter; removes outlier pixels while preserving edges |
+| `wavelet` | none | Wavelet soft-thresholding (Daubechies db4, MAD noise estimator) |
+
+Filtering is applied in phasor space (G and S coordinates) after calibration. The phasor plot and cursor stats update immediately after applying.
 
 ---
 
@@ -386,6 +406,14 @@ state = launch_phasor()
 # Pass paths directly
 state = launch_phasor('data.ptu', irf_path='irf.xlsx')
 
+# With spatial phasor filtering
+state = launch_phasor('data.ptu', irf_path='irf.xlsx',
+                      phasor_filter='gaussian', filter_kwargs={'sigma': 1.5})
+state = launch_phasor('data.ptu', irf_path='irf.xlsx',
+                      phasor_filter='median',   filter_kwargs={'size': 5})
+state = launch_phasor('data.ptu', irf_path='irf.xlsx',
+                      phasor_filter='wavelet')
+
 # Resume a saved session
 state = launch_phasor(session_path='session.npz')
 
@@ -493,6 +521,16 @@ All defaults live in `flimkit/configs.py` and can be overridden via CLI args or 
 | `MIN_PHOTONS_PERPIX` | 10 | Minimum photons for per-pixel fitting |
 | `OUT_NAME` | `'flim_out'` | Default output prefix |
 
+### Phasor Filtering Defaults
+
+| Parameter | Default | Description |
+|---|---|---|
+| `PHASOR_FILTER` | `None` | Filter method: `'gaussian'`, `'median'`, `'wavelet'`, or `None` |
+| `PHASOR_FILTER_SIGMA` | 1.0 | Gaussian σ in pixels |
+| `PHASOR_FILTER_SIZE` | 3 | Median filter kernel size (pixels) |
+| `PHASOR_FILTER_WAVELET` | `'db4'` | Wavelet family for wavelet denoising |
+| `PHASOR_FILTER_LEVEL` | 1 | Wavelet decomposition level |
+
 ### Optimiser Settings
 
 | Parameter | Default | Description |
@@ -597,6 +635,9 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 - **`calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequency)`** — phase/modulation correction via IRF phasor
 - **`calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy, frequency)`** — calibrate using a machine IRF `.npy`. Reads companion `_meta.json` for time resolution; interpolates onto the signal time axis.
 
+#### `filters.py`
+- **`phasor_filter(real, imag, method, *, mean=None, sigma=1.0, size=3, wavelet='db4', level=1, threshold_mode='soft')`** — apply a spatial filter to calibrated phasor G/S arrays. When `mean` is supplied, the phasorpy 0.10 NaN-aware C implementation is used for Gaussian and median; otherwise falls back to scipy. Wavelet denoising uses PyWavelets with a MAD noise estimator. Returns `(real_f, imag_f)`.
+
 #### `interactive.py`
 - **`phasor_cursor_tool(real_cal, imag_cal, mean, frequency, ...)`** — interactive phasor cursor widget. Works in Jupyter (ipywidgets) and standalone scripts (matplotlib.widgets). Click-to-place elliptic cursors, adjustable radius/angle, per-cursor τ_φ maps, two-component decomposition, Undo/Peaks/Export/Save.
 
@@ -626,7 +667,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 - **`_ask_roi_fit_options(params)`** — modal dialog for overriding n_exp, τ bounds, and cost function before a per-ROI fit. Returns an updated params dict or None if cancelled.
 
 #### `phasor_panel.py`
-- **`PhasorViewPanel(parent, max_cursors=6)`** — embedded Tkinter widget with `FigureCanvasTkAgg`. Top axes: FOV intensity image (colourised once cursors are placed); bottom axes: phasor histogram. Controls: Clear, Undo, Save session, Radius slider, Minor/major slider.
+- **`PhasorViewPanel(parent, max_cursors=6)`** — embedded Tkinter widget with `FigureCanvasTkAgg`. Top axes: FOV intensity image (colourised once cursors are placed); bottom axes: phasor histogram. Controls: Clear, Undo, Save session, Radius slider, Minor/major slider, spatial filter row (method selector, σ/size spinboxes, Apply, Reset).
   - `.set_data(real_cal, imag_cal, mean, frequency, display_image, min_photons)` — load phasor data; call on main thread
   - `.load_session(session, min_photons)` — restore a saved `.npz` session
   - `.get_session_dict()` — export current state for saving
@@ -675,7 +716,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 ├── phasor_cli.py                  # Phasor analysis CLI
 ├── build_and_sign.py              # PyInstaller build + codesign
 ├── validate_installation.py       # Installation sanity check (10 checks)
-├── _hardware_limits.py            # Hardware stress test — throughput & RAM headroom
+├── hardware_limits.py             # Hardware stress test — throughput & RAM headroom
 ├── requirements.txt
 │
 ├── flimkit/
@@ -705,7 +746,8 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 │   ├── phasor/
 │   │   ├── signal.py              # Phasor computation & calibration
 │   │   ├── interactive.py         # Interactive cursor tool
-│   │   └── peaks.py               # Automatic peak detection
+│   │   ├── peaks.py               # Automatic peak detection
+│   │   └── filters.py             # Spatial phasor filtering (gaussian/median/wavelet)
 │   │
 │   ├── image/
 │   │   └── tools.py               # Intensity images, cell masking
@@ -740,7 +782,7 @@ FLIMKit can be packaged as a standalone executable — no Python needed on the t
 ### Build
 
 ```bash
-pip install pyinstaller
+python install.py --dev   # installs PyInstaller (and test requirements)
 python build_and_sign.py
 ```
 
@@ -780,7 +822,7 @@ Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). Th
 ## Testing
 
 ```bash
-pip install -r flimkit_tests/requirements_test.txt
+python install.py --dev   # installs test requirements (and PyInstaller)
 
 cd flimkit_tests
 python run_tests.py              # all tests

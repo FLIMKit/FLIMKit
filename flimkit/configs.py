@@ -95,6 +95,14 @@ TAU_DISPLAY_MAX = None   # ns – maximum lifetime for weighted-tau images
 INTENSITY_DISPLAY_MIN = None  # photon counts – minimum intensity
 INTENSITY_DISPLAY_MAX = None  # photon counts – maximum intensity
 
+# Phasor-domain spatial filtering applied after calibration.
+# Set to None to disable.  Options: None, 'gaussian', 'median', 'wavelet'.
+PHASOR_FILTER = None          # filter method
+PHASOR_FILTER_SIGMA = 1.0     # Gaussian sigma (pixels)
+PHASOR_FILTER_SIZE = 3        # median kernel size (pixels)
+PHASOR_FILTER_WAVELET = 'db4' # wavelet family for wavelet denoising
+PHASOR_FILTER_LEVEL = 1       # wavelet decomposition level
+
 # Other specific settings:
 channels = None # Set to None to fit all channels in the PTU file. Override with --channel when running the code.
 OUT_NAME = "flim_out" # Default output directory name. Override with --out when running the code.

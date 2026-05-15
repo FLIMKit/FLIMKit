@@ -8,7 +8,8 @@ opencv_python==4.13.0.90
 openpyxl==3.1.5
 pandas==3.0.1
 Pillow>=10.0.0
-phasorpy==0.9
+phasorpy==0.10
+PyWavelets>=1.4.0
 ptufile==2026.1.14
 pytest==9.0.2
 scipy==1.17.1

@@ -903,6 +903,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
             print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
                   f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
+    xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
         print(f"\n[3] XLSX: {args.xlsx}")
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)

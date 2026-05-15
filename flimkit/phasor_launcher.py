@@ -232,7 +232,8 @@ def resolve_ptu_channel(
         )
     return selected_channel
 
-def _process_ptu(ptu_path, irf_path=None, channel=None):
+def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
+                 filter_kwargs=None):
     """Load a PTU file, compute phasors, optionally calibrate with IRF.
 
     Parameters
@@ -243,6 +244,12 @@ def _process_ptu(ptu_path, irf_path=None, channel=None):
         Path to IRF calibration file.
     channel : int, optional
         Detection channel to use. If None, will auto-detect or prompt user.
+    phasor_filter : {'gaussian', 'median', 'wavelet', None}
+        Spatial filter applied to the phasor coordinates after calibration.
+        ``None`` disables filtering.
+    filter_kwargs : dict, optional
+        Extra keyword arguments forwarded to
+        :func:`~flimkit.phasor.filters.phasor_filter`.
 
     Returns dict with ``real_cal``, ``imag_cal``, ``mean``, ``frequency``,
     and ``display_image`` (nsync-based intensity for correct spatial overlay).
@@ -283,6 +290,17 @@ def _process_ptu(ptu_path, irf_path=None, channel=None):
         print("⚠  No IRF — using uncalibrated phasor coordinates.")
         real_cal, imag_cal = real, imag
 
+    if phasor_filter:
+        from .phasor.filters import phasor_filter as _filter_fn
+        print(f"Applying phasor filter: {phasor_filter} …")
+        real_cal, imag_cal = _filter_fn(
+            np.asarray(real_cal, dtype=float),
+            np.asarray(imag_cal, dtype=float),
+            phasor_filter,
+            mean=np.asarray(mean, dtype=float),
+            **(filter_kwargs or {}),
+        )
+
     return dict(
         real_cal=np.asarray(real_cal),
         imag_cal=np.asarray(imag_cal),
@@ -302,6 +320,8 @@ def launch_phasor(ptu_path=None,
                   session_path=None,
                   *,
                   channel=None,
+                  phasor_filter=None,
+                  filter_kwargs=None,
                   min_photons=0.01,
                   max_cursors=6,
                   figsize=(8, 5)):
@@ -320,6 +340,13 @@ def launch_phasor(ptu_path=None,
     channel : int, optional
         Detection channel to use. If None and multiple channels exist,
         the user will be prompted to choose.
+    phasor_filter : {'gaussian', 'median', 'wavelet', None}
+        Spatial filter applied to the phasor G/S arrays after calibration.
+        ``None`` (default) disables filtering.
+    filter_kwargs : dict, optional
+        Extra keyword arguments forwarded to the filter.  Common keys:
+        ``sigma`` (Gaussian), ``size`` (median), ``wavelet`` / ``level``
+        (wavelet).
     min_photons, max_cursors, figsize
         Forwarded to :func:`~flimkit.phasor.interactive.phasor_cursor_tool`.
 
@@ -395,7 +422,9 @@ def launch_phasor(ptu_path=None,
         # machine_irf_path takes precedence as the calibration source
         # if no XLSX IRF is supplied
         effective_irf = irf_path or machine_irf_path
-        data = _process_ptu(ptu_path, effective_irf, channel=channel)
+        data = _process_ptu(ptu_path, effective_irf, channel=channel,
+                            phasor_filter=phasor_filter,
+                            filter_kwargs=filter_kwargs)
     _data = data          # capture for closure
 
     def _save_callback(state, params):
