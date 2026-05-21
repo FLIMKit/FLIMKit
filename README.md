@@ -30,6 +30,37 @@ python install.py --dev
 
 Or download the compiled app from the Releases tab (no Python needed).
 
+## Docker / TrueNAS SCALE
+
+A pre-built image is available on Docker Hub. It runs the full desktop GUI in a browser via xpra (no installation needed on the client).
+
+**Pull and run:**
+
+```bash
+docker run -d \
+  -p 14500:14500 \
+  -v /path/to/your/data:/data \
+  --name flimkit \
+  alex1075/flimkit:latest
+```
+
+Then open **http://localhost:14500** in your browser. PTU files and data should be placed in the folder you mount to `/data` — use the file dialog inside the app to navigate there.
+
+**TrueNAS SCALE (Custom App):**
+
+1. Apps → Discover Apps → Custom App
+2. Paste the contents of `docker-compose.yaml` from this repo
+3. Edit the volume paths to match your pool (e.g. `/mnt/tank/microscopy:/data`)
+4. Deploy — TrueNAS will pull the image automatically
+
+**Build from source** (required if you want to push your own changes):
+
+```bash
+python build_docker.py        # builds linux/amd64, pushes to Docker Hub
+```
+
+Requires Docker Desktop with buildx. On Apple Silicon, buildx cross-compiles for `linux/amd64` automatically.
+
 ## Usage
 
 ### Desktop GUI

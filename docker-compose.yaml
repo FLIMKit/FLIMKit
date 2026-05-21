@@ -1,0 +1,14 @@
+services:
+  flimkit:
+    image: alex1075/flimkit:latest
+    build: .
+    ports:
+      - "14500:14500"
+    volumes:
+      - /mnt/tank/microscopy:/data
+      - /mnt/tank/flimkit-config:/config
+    environment:
+      - FLIMKIT_DATA_DIR=/data
+      - FLIMKIT_CONFIG_DIR=/config
+    restart: unless-stopped
+    shm_size: 512m

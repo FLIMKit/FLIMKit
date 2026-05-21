@@ -1,0 +1,42 @@
+FROM python:3.12-slim-bookworm
+
+# xpra is not in the standard Debian repos — add xpra.org's own apt source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl gnupg ca-certificates \
+    && curl -fsSL https://xpra.org/gpg.asc \
+       | gpg --dearmor -o /usr/share/keyrings/xpra.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/xpra.gpg] https://xpra.org/stable/bookworm/ ./" \
+       > /etc/apt/sources.list.d/xpra.list \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        xpra \
+        python3-tk \
+        libgl1 \
+        libglib2.0-0 \
+        libx11-6 \
+        libxext6 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxrandr2 \
+        fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
+    && pip install --no-cache-dir -r requirements-docker.txt \
+    && rm requirements-docker.txt
+
+COPY . .
+
+RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 14500
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
