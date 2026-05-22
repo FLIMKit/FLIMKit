@@ -1,4 +1,4 @@
-__version__ = "0.9.10-testing-GPU" #Fixed tests
+__version__ = "0.9.12-latest" #Fixed tests
 fitter_version = "16"
 
 roadmap = '''Flim program roadmap:
@@ -26,5 +26,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.9 -> UI fixes
 0.9.10 -> fixed GPU tests
 0.9.11 -> updated PhasorPy calls to match latest version (0.10.0) and added phasor filtering options
+0.9.12 -> changed masking to use cellpose-SAM
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

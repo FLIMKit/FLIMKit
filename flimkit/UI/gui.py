@@ -4117,10 +4117,36 @@ Built with Python, Tkinter, NumPy, and SciPy.
                             ax_decay.grid(True, alpha=0.3)
                             ax_decay.tick_params(labelsize=8, colors='white')
 
+                            # Reconstruct fit_result from session data for export
+                            _SESSION_ONLY_KEYS = {
+                                'timestamp', 'source', 'form_state_json', 'fov_ptu_path',
+                                'fov_lifetime_map', 'fov_intensity_map', 'fov_color_scale',
+                                'fov_n_exp', 'fov_regions', 'summary_params', 'summary_values',
+                                'summary_units', 'decay', 'time_ns', 'irf_prompt',
+                            }
+                            fit_result_for_export = {
+                                k: v for k, v in session_data.items()
+                                if k not in _SESSION_ONLY_KEYS
+                                and not k.endswith('_json')
+                                and isinstance(v, np.ndarray)
+                                and v.ndim == 2
+                            }
+                            # Fallback: use FOV maps if no pixel-map arrays found
+                            if not fit_result_for_export:
+                                if isinstance(session_data.get('fov_intensity_map'), np.ndarray):
+                                    fit_result_for_export['intensity'] = session_data['fov_intensity_map']
+                                if isinstance(session_data.get('fov_lifetime_map'), np.ndarray):
+                                    fit_result_for_export['lifetime'] = session_data['fov_lifetime_map']
+                            self._res.set_fit_result(
+                                fit_result_for_export,
+                                str(ptu_path.parent),
+                                npz_path=str(session_file),
+                                scan_name=self._current_scan_stem(),
+                            )
+
                             # Update status
                             self._res._status.set("✓ Session restored — ready to export or re-fit")
                             self._fov_preview._ctrl_frame.grid()
-                            self._res._export_btn.configure(state="normal")
                             self._fov_preview._canvas_mpl.draw_idle()
                             print("[Auto-Load] ✓ Session restored")
                         except Exception as e:
