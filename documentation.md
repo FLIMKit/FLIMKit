@@ -892,6 +892,9 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 **Tile stitching** — phase-correlation registration algorithm:
 > Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463–1465. https://doi.org/10.1093/bioinformatics/btp184
 
+**Cellpose-SAM** — cell segmentation model used for masking:
+> Pachitariu, M. and Stringer, C. (2025). Cellpose-SAM: segment anything in microscopy images. *bioRxiv*. https://doi.org/10.1101/2025.04.28.651001
+
 ---
 
 ## Contact
