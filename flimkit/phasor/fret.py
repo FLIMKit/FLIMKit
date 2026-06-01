@@ -3,21 +3,6 @@ import numpy as np
 
 @dataclass
 class FRETChannelData:
-    """Calibrated phasor arrays for one detection channel.
-
-    Parameters
-    ----------
-    real_cal : ndarray
-        Calibrated per-pixel phasor G (real) component, shape ``(Y, X)``.
-    imag_cal : ndarray
-        Calibrated per-pixel phasor S (imaginary) component, same shape.
-    mean : ndarray
-        Per-pixel mean photon intensity, same spatial shape.
-    frequency : float
-        Laser modulation / repetition frequency in MHz.
-    min_photons : float
-        Pixels with ``mean < min_photons`` are excluded from fitting.
-    """
 
     real_cal:     np.ndarray
     imag_cal:     np.ndarray
@@ -46,51 +31,19 @@ class FRETChannelData:
 
     @property
     def valid_mask(self):
-        """Boolean mask of pixels that meet the photon threshold and are finite."""
         return (self.mean >= self.min_photons) & np.isfinite(self.real_cal)
 
     @property
     def valid_g(self):
-        """G (real) values of valid pixels, flattened."""
         return self.real_cal[self.valid_mask]
 
     @property
     def valid_s(self):
-        """S (imaginary) values of valid pixels, flattened."""
         return self.imag_cal[self.valid_mask]
 
 
 @dataclass
 class FRETModelParameters:
-    """Parameters describing the FRET system for the phasorpy forward model.
-
-    Parameter names and defaults match
-    ``phasorpy.lifetime.phasor_from_fret_donor`` and
-    ``phasor_from_fret_acceptor`` directly.  All lifetimes are in **ns** and
-    frequency in **MHz** (``unit_conversion = 1e-3``).
-
-    Parameters
-    ----------
-    donor_lifetime : float
-        Unquenched donor lifetime in ns.
-    fret_efficiency : float
-        FRET efficiency in [0, 1].
-    donor_fretting : float
-        Fraction of donor molecules participating in FRET, in [0, 1].
-    donor_background : float
-        Weight of background in the donor channel relative to unquenched donor.
-    background_real, background_imag : float
-        Phasor coordinates of the background signal.
-    acceptor_lifetime : float or None
-        Acceptor lifetime in ns.  Required for joint donor+acceptor fits.
-    donor_bleedthrough : float
-        Weight of donor signal in the acceptor channel relative to fully
-        sensitized acceptor (see phasorpy docs).
-    acceptor_bleedthrough : float
-        Weight of directly excited acceptor relative to sensitized acceptor.
-    acceptor_background : float
-        Weight of background in the acceptor channel.
-    """
 
     donor_lifetime:        float
     fret_efficiency:       float = 0.0
@@ -119,11 +72,6 @@ class FRETModelParameters:
 
 @dataclass
 class FRETBounds:
-    """Optimization bounds for each free FRET model parameter.
-
-    Each field is a ``(lower, upper)`` tuple.  Set both values equal to fix
-    that parameter at a constant during fitting.
-    """
 
     fret_efficiency:       tuple[float, float] = (0.0,  1.0)
     donor_fretting:        tuple[float, float] = (0.0,  1.0)
@@ -138,13 +86,11 @@ class FRETBounds:
         return dict(lb=lo, ub=hi)
 
     def donor_only_scipy(self):
-        """SciPy ``bounds`` dict for the three donor-only free parameters."""
         return self._as_scipy(
             ('fret_efficiency', 'donor_fretting', 'donor_background')
         )
 
     def joint_scipy(self):
-        """SciPy ``bounds`` dict for the six joint free parameters."""
         return self._as_scipy((
             'fret_efficiency', 'donor_fretting',
             'donor_background', 'donor_bleedthrough',
@@ -154,29 +100,6 @@ class FRETBounds:
 
 @dataclass
 class FRETResult:
-    """Result of a FRET phasor fitting operation.
-
-    Attributes
-    ----------
-    fret_efficiency : float
-        Fitted FRET efficiency.
-    donor_fretting : float
-        Fitted fraction of donors participating in FRET.
-    donor_background : float
-        Fitted background weight in the donor channel.
-    donor_real_model, donor_imag_model : float
-        Phasor coordinates of the fitted donor model.
-    residual : float
-        Final weighted sum-of-squared residuals.
-    donor_bleedthrough, acceptor_bleedthrough, acceptor_background : float
-        Fitted nuisance terms (joint fits only; 0.0 for donor-only fits).
-    acceptor_real_model, acceptor_imag_model : float or None
-        Phasor coordinates of the fitted acceptor model (joint fits only).
-    converged : bool
-        Whether the optimizer converged.
-    message : str
-        Optimizer status message.
-    """
 
     fret_efficiency:       float
     donor_fretting:        float
@@ -190,11 +113,10 @@ class FRETResult:
     acceptor_real_model:   float | None = None
     acceptor_imag_model:   float | None = None
     converged:             bool = True
-    message:               str  = ""
+    message:               str  = ''
 
     def print_summary(self):
-        """Print a human-readable summary to stdout."""
-        print("\u2550\u2550\u2550 FRET fit result \u2550\u2550\u2550")
+        print('\u2550\u2550\u2550 FRET fit result \u2550\u2550\u2550')
         print(f"  FRET efficiency    : {self.fret_efficiency:.4f}")
         print(f"  Donor fretting     : {self.donor_fretting:.4f}")
         print(f"  Donor background   : {self.donor_background:.4f}")
@@ -207,13 +129,10 @@ class FRETResult:
             print(f"  Acceptor bleedthrough: {self.acceptor_bleedthrough:.4f}")
             print(f"  Acceptor background : {self.acceptor_background:.4f}")
         print(f"  Residual           : {self.residual:.6g}")
-        status = "\u2713 converged" if self.converged else "\u2717 did not converge"
+        status = '\u2713 converged' if self.converged else '\u2717 did not converge'
         print(f"  Optimizer          : {status}  \u2014 {self.message}")
 
 def _require_phasorpy_fret_api():
-    """Raise ``ImportError`` with actionable guidance if the phasorpy FRET API
-    is absent or the signatures differ from what FLIMKit expects.
-    """
     try:
         from phasorpy.lifetime import (  # noqa: F401
             phasor_from_fret_donor,
@@ -221,8 +140,8 @@ def _require_phasorpy_fret_api():
         )
     except ImportError as exc:
         raise ImportError(
-            "FRET analysis requires phasorpy >= 0.9 with "
-            "phasor_from_fret_donor and phasor_from_fret_acceptor.  "
+            'FRET analysis requires phasorpy >= 0.9 with '
+            'phasor_from_fret_donor and phasor_from_fret_acceptor.  '
             "Install with:  pip install 'phasorpy>=0.9'"
         ) from exc
 
@@ -243,19 +162,6 @@ def _require_phasorpy_fret_api():
 
 
 def _single_lifetime_phasor(frequency, lifetime):
-    """Return the theoretical ``(G, S)`` phasor for a single-exponential lifetime.
-
-    Parameters
-    ----------
-    frequency : float
-        Modulation frequency in MHz.
-    lifetime : float
-        Fluorescence lifetime in ns.
-
-    Returns
-    -------
-    (real, imag) : tuple of float
-    """
     from phasorpy.lifetime import phasor_from_lifetime
     real, imag = phasor_from_lifetime(frequency, lifetime)
     return float(np.squeeze(real)), float(np.squeeze(imag))
@@ -271,15 +177,6 @@ def _fret_donor_phasor(
     background_real=0.0,
     background_imag=0.0,
 ):
-    """Return the model donor-channel ``(G, S)`` phasor via phasorpy.
-
-    Thin wrapper around ``phasorpy.lifetime.phasor_from_fret_donor`` with
-    explicit MHz/ns unit conversion (``unit_conversion=1e-3``).
-
-    Returns
-    -------
-    (real, imag) : tuple of float
-    """
     from phasorpy.lifetime import phasor_from_fret_donor
     real, imag = phasor_from_fret_donor(
         frequency, donor_lifetime,
@@ -306,15 +203,6 @@ def _fret_acceptor_phasor(
     background_real=0.0,
     background_imag=0.0,
 ):
-    """Return the model acceptor-channel ``(G, S)`` phasor via phasorpy.
-
-    Thin wrapper around ``phasorpy.lifetime.phasor_from_fret_acceptor`` with
-    explicit MHz/ns unit conversion (``unit_conversion=1e-3``).
-
-    Returns
-    -------
-    (real, imag) : tuple of float
-    """
     from phasorpy.lifetime import phasor_from_fret_acceptor
     real, imag = phasor_from_fret_acceptor(
         frequency, donor_lifetime, acceptor_lifetime,
@@ -344,39 +232,6 @@ def predict_fret_trajectory(
     acceptor_background=0.0,
     n_points=100,
 ):
-    """Generate model donor and acceptor phasor trajectories across FRET efficiency.
-
-    Calls ``phasorpy.lifetime.phasor_from_fret_donor`` (and optionally
-    ``phasor_from_fret_acceptor``) over a sweep of efficiency values from 0 to 1.
-    Useful for overlaying the expected trajectory on a phasor histogram before
-    fitting.
-
-    Parameters
-    ----------
-    frequency : float
-        Modulation frequency in MHz.
-    donor_lifetime : float
-        Unquenched donor lifetime in ns.
-    acceptor_lifetime : float or None
-        Acceptor lifetime in ns.  Supply to also compute the acceptor trajectory.
-    donor_fretting : float
-        Fraction of donors participating in FRET.
-    donor_background, background_real, background_imag : float
-        Donor channel background terms.
-    donor_bleedthrough, acceptor_bleedthrough, acceptor_background : float
-        Acceptor channel nuisance terms (only used when *acceptor_lifetime* is given).
-    n_points : int
-        Number of efficiency points spanning [0, 1].
-
-    Returns
-    -------
-    dict with keys:
-
-    * ``efficiency``  \u2013 1-D array of efficiency values (0 \u2192 1)
-    * ``donor_g``, ``donor_s``       \u2013 donor model trajectory arrays
-    * ``acceptor_g``, ``acceptor_s`` \u2013 acceptor model trajectory arrays
-      (or ``None`` when *acceptor_lifetime* is not given)
-    """
     _require_phasorpy_fret_api()
     efficiencies = np.linspace(0.0, 1.0, n_points)
 
@@ -423,29 +278,6 @@ def fit_donor_fret(
     *,
     weight_by_photons=True,
 ):
-    """Fit donor-channel FRET parameters to the photon-weighted phasor centroid.
-
-    Minimises the Euclidean distance between the phasorpy donor FRET model
-    and the weighted mean phasor of all pixels that pass the photon threshold
-    in *donor*.  Free parameters are ``fret_efficiency``, ``donor_fretting``,
-    and ``donor_background``; all other model values are held fixed from *params*.
-
-    Parameters
-    ----------
-    donor : FRETChannelData
-        Calibrated donor-channel phasor data.
-    params : FRETModelParameters
-        Starting values and fixed parameters.  ``donor_lifetime``,
-        ``background_real``, and ``background_imag`` are held constant.
-    bounds : FRETBounds or None
-        Optimization bounds.  Defaults to ``FRETBounds()`` when ``None``.
-    weight_by_photons : bool
-        If ``True``, weight the centroid by per-pixel photon counts.
-
-    Returns
-    -------
-    FRETResult
-    """
     _require_phasorpy_fret_api()
     from phasorpy.lifetime import phasor_from_fret_donor
     from scipy.optimize import least_squares
@@ -525,44 +357,9 @@ def fit_joint_fret(
     *,
     weight_by_photons=True,
 ):
-    """Fit FRET parameters jointly from donor and acceptor phasor centroids.
-
-    Minimises the combined Euclidean distance between phasorpy forward-model
-    predictions and the photon-weighted mean phasors of both channels.  The
-    four residuals (donor G, donor S, acceptor G, acceptor S) are equally
-    weighted.  Free parameters are ``fret_efficiency``, ``donor_fretting``,
-    ``donor_background``, ``donor_bleedthrough``, ``acceptor_bleedthrough``,
-    and ``acceptor_background``; ``donor_lifetime``, ``acceptor_lifetime``,
-    ``background_real``, and ``background_imag`` are held fixed from *params*.
-
-    Parameters
-    ----------
-    donor : FRETChannelData
-        Calibrated donor-channel phasor data.
-    acceptor : FRETChannelData
-        Calibrated acceptor-channel phasor data.  Must have the same spatial
-        shape as *donor*.
-    params : FRETModelParameters
-        Starting values and fixed parameters.  ``acceptor_lifetime`` must be
-        set (not ``None``).
-    bounds : FRETBounds or None
-        Optimization bounds.  Defaults to ``FRETBounds()`` when ``None``.
-    weight_by_photons : bool
-        If ``True``, weight each channel's centroid by per-pixel photon counts.
-
-    Returns
-    -------
-    FRETResult
-
-    Raises
-    ------
-    ValueError
-        If ``params.acceptor_lifetime`` is ``None`` or the donor and acceptor
-        arrays have different shapes.
-    """
     if params.acceptor_lifetime is None:
         raise ValueError(
-            "fit_joint_fret requires params.acceptor_lifetime to be set."
+            'fit_joint_fret requires params.acceptor_lifetime to be set.'
         )
     if donor.real_cal.shape != acceptor.real_cal.shape:
         raise ValueError(
@@ -697,35 +494,6 @@ def map_fret_efficiency(
     acceptor: Optional[FRETChannelData] = None,
     weight_by_photons: bool = True,
 ) -> dict:
-    """Compute per-pixel FRET efficiency by fitting each pixel independently.
-
-    Applies :func:`fit_donor_fret` (or :func:`fit_joint_fret` when *acceptor*
-    is supplied) to every pixel that passes the photon threshold.  Pixels
-    below the threshold are filled with ``nan``.
-
-    Parameters
-    ----------
-    donor : FRETChannelData
-        Calibrated donor-channel phasor data.
-    params : FRETModelParameters
-        Starting values and fixed parameters shared across all pixels.
-    bounds : FRETBounds or None
-        Optimization bounds.  Defaults to ``FRETBounds()`` when ``None``.
-    acceptor : FRETChannelData or None
-        Calibrated acceptor-channel phasor data.  When supplied, joint fitting
-        is used; ``params.acceptor_lifetime`` must be set.
-    weight_by_photons : bool
-        Passed through to the per-pixel solver.
-
-    Returns
-    -------
-    dict with keys:
-
-    * ``efficiency``   -- 2-D array, shape ``(Y, X)``, ``nan`` where masked
-    * ``fretting``     -- 2-D array of fitted ``donor_fretting``
-    * ``residual``     -- 2-D array of per-pixel fit cost
-    * ``converged``    -- 2-D bool array
-    """
     if bounds is None:
         bounds = FRETBounds()
 
@@ -793,35 +561,6 @@ def plot_fret_trajectory(
     donor_kw: Optional[dict] = None,
     acceptor_kw: Optional[dict] = None,
 ) -> tuple:
-    """Overlay FRET model trajectory curves on a phasor axes.
-
-    Parameters
-    ----------
-    frequency : float
-        Modulation frequency in MHz.
-    donor_lifetime : float
-        Unquenched donor lifetime in ns.
-    acceptor_lifetime : float or None
-        Acceptor lifetime in ns.  Supply to also plot the acceptor trajectory.
-    donor_fretting : float
-        Fraction of donors participating in FRET.
-    n_points : int
-        Number of efficiency points spanning [0, 1].
-    ax : matplotlib Axes or None
-        Axes to draw on.  Creates a new figure/axes when ``None``.
-    donor_kw : dict or None
-        Keyword arguments forwarded to the donor ``ax.plot`` call.
-        Defaults to ``{'color': 'steelblue', 'label': 'donor trajectory'}``.
-    acceptor_kw : dict or None
-        Keyword arguments forwarded to the acceptor ``ax.plot`` call.
-        Defaults to ``{'color': 'tomato', 'label': 'acceptor trajectory'}``.
-
-    Returns
-    -------
-    (ax, lines) : tuple
-        *ax* is the Axes drawn on; *lines* is a list of the ``Line2D`` objects
-        added (one for donor, optionally one for acceptor).
-    """
     import matplotlib.pyplot as plt
 
     traj = predict_fret_trajectory(
@@ -864,38 +603,6 @@ def plot_fret_fit(
     scatter_kw: Optional[dict] = None,
     trajectory_kw: Optional[dict] = None,
 ) -> tuple:
-    """Plot measured phasors, the fitted model point, and the FRET trajectory.
-
-    Parameters
-    ----------
-    donor : FRETChannelData
-        Calibrated donor phasor data (valid pixels are scatter-plotted).
-    result : FRETResult
-        Fitted result whose model point is highlighted.
-    frequency : float
-        Modulation frequency in MHz.
-    donor_lifetime : float
-        Unquenched donor lifetime in ns.
-    acceptor : FRETChannelData or None
-        Acceptor channel data to scatter-plot alongside the donor.
-    acceptor_lifetime : float or None
-        Required when *acceptor* is supplied to draw the acceptor trajectory.
-    n_trajectory : int
-        Number of efficiency points for the trajectory curve.
-    ax : matplotlib Axes or None
-        Axes to draw on.  Creates a new figure/axes when ``None``.
-    scatter_kw : dict or None
-        Keyword arguments forwarded to the donor scatter ``ax.plot`` call.
-    trajectory_kw : dict or None
-        Keyword arguments forwarded to :func:`plot_fret_trajectory`.
-
-    Returns
-    -------
-    (ax, artists) : tuple
-        *ax* is the Axes; *artists* is a dict with keys ``'donor_scatter'``,
-        ``'donor_model'``, and optionally ``'acceptor_scatter'``,
-        ``'acceptor_model'``.
-    """
     import matplotlib.pyplot as plt
 
     if ax is None:

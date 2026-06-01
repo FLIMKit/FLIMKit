@@ -3,7 +3,6 @@ import time
 import subprocess
 
 def clear():
-    """Clear the terminal screen."""
     command = 'cls' if os.name == 'nt' else 'clear'
     subprocess.run(command, shell=True)
 
@@ -17,8 +16,7 @@ from colorama import init, Style
 init()
 
 def reset_color():
-    """Reset terminal colors/styles."""
-    print(Style.RESET_ALL, end="")    
+    print(Style.RESET_ALL, end='')    
 
 def display_banner():
     clear()
@@ -37,8 +35,8 @@ def display_banner():
 
 def selection_program():
     for x in range (0,5):  
-        b = "Loading" + "." * x
-        print (b, end="\r")
+        b = 'Loading' + '.' * x
+        print (b, end='\r')
         time.sleep(1)
 
 def flim_fitting_banner():
@@ -70,7 +68,7 @@ def banner_goodbye():
     time.sleep(2)
     reset_color()
 
-def warnings_banner(text=""):
+def warnings_banner(text=''):
     clear()
     print(bcolors.WARNING + r'''
 

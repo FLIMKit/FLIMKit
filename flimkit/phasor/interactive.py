@@ -15,7 +15,6 @@ _COLORS = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b']
 
 
 def _in_notebook():
-    """Return True when running inside a Jupyter/IPython notebook."""
     try:
         from IPython import get_ipython
         shell = get_ipython()
@@ -27,7 +26,6 @@ def _in_notebook():
 
 
 def _ellipse_angle_rad(cg, cs, mode):
-    """Return the rotation angle (radians) that phasorpy uses for *mode*."""
     if mode == 'semicircle':
         return np.arctan2(cs, cg - 0.5) + np.pi / 2.0
     return np.arctan2(cs, cg)
@@ -46,55 +44,6 @@ def phasor_cursor_tool(
     initial_params=None,
     on_save=None,
 ):
-    """Launch an interactive phasor cursor selection widget.
-
-    Click on the phasor plot to place elliptical cursors.  The first two
-    cursors additionally define a two-component decomposition line through
-    the universal semicircle.
-
-    Works in Jupyter notebooks (uses ipywidgets for sliders / buttons) and
-    in plain Python scripts (uses matplotlib.widgets; call ``plt.show()``
-    afterwards or let this function block).
-
-    Parameters
-    ----------
-    real_cal : ndarray
-        Calibrated phasor real (G) component, shape ``(…, Y, X)``.
-    imag_cal : ndarray
-        Calibrated phasor imaginary (S) component, same shape.
-    mean : ndarray
-        Mean intensity image, same spatial shape.
-    frequency : float
-        Laser-repetition / modulation frequency in **MHz**.
-    display_image : ndarray, optional
-        Spatially-correct intensity image for the pseudo-colour FOV overlay.
-        Built from nsync-timed pixel assignment (``raw_pixel_stack``).  If
-        *None*, falls back to *mean*.
-    min_photons : float, optional
-        Minimum mean-intensity to consider a pixel valid (default 0.01).
-    max_cursors : int, optional
-        Maximum number of cursors (default 6).
-    figsize : tuple, optional
-        Size of the phasor figure.
-    initial_cursors : list of dict, optional
-        Pre-loaded cursors, each ``{'center_g', 'center_s', 'color'}``.
-        Used to restore a previously saved session.
-    initial_params : dict, optional
-        Pre-loaded ellipse parameters ``{'radius', 'radius_minor',
-        'angle_mode'}``.  Merged with defaults.
-    on_save : callable, optional
-        Callback ``on_save(state, params)`` invoked when the user clicks
-        the *Save* button.  If *None*, no save button is shown.
-
-    Returns
-    -------
-    state : dict
-        Mutable dictionary that is updated live.  Keys include:
-
-        * ``'cursors'`` – list of ``{'center_g', 'center_s', 'color'}``
-        * ``'masks'`` – ndarray of boolean masks ``(n_cursors, Y, X)``
-        * ``'fig'`` / ``'ax'`` – matplotlib figure and axes
-    """
     notebook = _in_notebook()
 
     # Prepare data
@@ -199,7 +148,7 @@ def phasor_cursor_tool(
         if not cursors:
             state['masks'] = None
             _begin_output()
-            print("Click on the phasor plot to place elliptical cursors.")
+            print('Click on the phasor plot to place elliptical cursors.')
             _end_output()
             return
 
@@ -229,7 +178,7 @@ def phasor_cursor_tool(
         if n_cols == 1:
             axes2 = [axes2]
 
-        # Panel 0 – pseudo-colour overlay
+        # Panel 0 - pseudo-colour overlay
         ax_pc = axes2[0]
         mask_list = [masks[i] for i in range(n_cursors)]
         colors_rgb = np.array([
@@ -282,7 +231,7 @@ def phasor_cursor_tool(
             print(
                 f"C{ci+1}: {n_px} px  "
                 f"τ_φ = {np.nanmin(tau_phi):.2f}"
-                f"–{np.nanmax(tau_phi):.2f} ns "
+                f"-{np.nanmax(tau_phi):.2f} ns "
                 f"(med {med:.2f})  │  "
                 f"τ_m med = {mod_str} ns")
 
@@ -339,7 +288,7 @@ def phasor_cursor_tool(
                 ax_dec.set_title('Two-component (C1↔C2)')
 
                 print(
-                    f"\n═══ Two-component decomposition (C1–C2) ═══")
+                    f"\n═══ Two-component decomposition (C1-C2) ═══")
                 print(
                     f"  τ₁ = {tau1:.3f} ns  "
                     f"(G={float(gi0):.4f}, S={float(si0):.4f})")
@@ -383,7 +332,7 @@ def phasor_cursor_tool(
         state['masks'] = None
         _redraw()
         _begin_output()
-        print("Cleared. Click on the phasor plot to place cursors.")
+        print('Cleared. Click on the phasor plot to place cursors.')
         _end_output()
 
     def _on_undo(_ignored=None):
@@ -396,7 +345,7 @@ def phasor_cursor_tool(
             else:
                 state['masks'] = None
                 _begin_output()
-                print("All cursors removed. Click to place new ones.")
+                print('All cursors removed. Click to place new ones.')
                 _end_output()
 
     def _on_param_change(_ignored=None):
@@ -459,7 +408,7 @@ def phasor_cursor_tool(
                            ('SVG', '*.svg'), ('All files', '*')])
             root.destroy()
         except Exception:
-            path = input("Save image path [phasor_plot.png]: ").strip() or 'phasor_plot.png'
+            path = input('Save image path [phasor_plot.png]: ').strip() or 'phasor_plot.png'
         if path:
             state['fig'].savefig(path, dpi=300, bbox_inches='tight')
             print(f"Figure exported → {path}")
@@ -511,9 +460,9 @@ def phasor_cursor_tool(
         btn_undo = widgets.Button(description='Undo last', button_style='')
         btn_save = widgets.Button(description='💾 Save',
                                   button_style='success') if on_save else None
-        btn_export = widgets.Button(description='📷 Export',
+        btn_export = widgets.Button(description='Export',
                                     button_style='info')
-        btn_peaks = widgets.Button(description='🔍 Peaks',
+        btn_peaks = widgets.Button(description='Peaks',
                                    button_style='')
 
         def _ipyw_radius(change):
@@ -607,8 +556,8 @@ def phasor_cursor_tool(
                                  mpl_btn_save)
 
     print(f"Plotting {valid.sum()} valid pixels")
-    print("ℹ  Click on the phasor to place elliptical cursors.  "
-          "First two define the decomposition line.")
+    print(' Click on the phasor to place elliptical cursors.  '
+          'First two define the decomposition line.')
 
     if not notebook:
         plt.show()

@@ -3,22 +3,6 @@ import numpy as np
 from .reader import PTUFile, PTUArray5D
 
 def filter_photons_with_mask(ptu_path, mask, channel=None, binning=1, verbose=False):
-    """
-    Filter photons from a PTU file using a cell mask.
-    
-    Keeps photons where mask[y, x] != 0 (non-zero / white).
-    Discards photons where mask[y, x] == 0 (black).
-    
-    Args:
-        ptu_path: Path to PTU file
-        mask: 2D numpy array (Y, X) with 0 = discard, non-zero = keep
-        channel: Detection channel (None = auto-detect)
-        binning: Spatial binning factor (default: 1)
-        verbose: Print progress messages
-    
-    Returns:
-        stack: 3D array (Y, X, H) with filtered photon histograms
-    """
     ptu = PTUFile(str(ptu_path), verbose=False)
     
     if channel is None:
@@ -75,8 +59,8 @@ def filter_photons_with_mask(ptu_path, mask, channel=None, binning=1, verbose=Fa
         if row >= ny_out:
             continue
         
-        lo = np.searchsorted(ph_idx, ls, side="right")
-        hi = np.searchsorted(ph_idx, le, side="left")
+        lo = np.searchsorted(ph_idx, ls, side='right')
+        hi = np.searchsorted(ph_idx, le, side='left')
         if hi <= lo:
             continue
         
@@ -119,22 +103,6 @@ import numpy as np
 from .reader import PTUFile
 
 def filter_photons_with_mask_optimized(ptu_path, mask, channel=None, binning=1, verbose=False):
-    """
-    Filter photons from a PTU file using a cell mask (optimized version).
-    
-    Keeps photons where mask[y, x] != 0 (non-zero / white).
-    Discards photons where mask[y, x] == 0 (black).
-    
-    Args:
-        ptu_path: Path to PTU file
-        mask: 2D numpy array (Y, X) with 0 = discard, non-zero = keep
-        channel: Detection channel (None = auto-detect)
-        binning: Spatial binning factor (default: 1)
-        verbose: Print progress messages
-    
-    Returns:
-        stack: 3D array (Y, X, H) with filtered photon histograms
-    """
     ptu = PTUFile(str(ptu_path), verbose=False)
 
     # Auto-detect channel
@@ -197,8 +165,8 @@ def filter_photons_with_mask_optimized(ptu_path, mask, channel=None, binning=1, 
             continue
 
         # Photons in this line
-        lo = np.searchsorted(ph_idx, ls, side="right")
-        hi = np.searchsorted(ph_idx, le, side="left")
+        lo = np.searchsorted(ph_idx, ls, side='right')
+        hi = np.searchsorted(ph_idx, le, side='left')
         if hi <= lo:
             continue
 
@@ -242,43 +210,6 @@ def signal_from_PTUFile(
     binning=1,
     keepdims=False,
 ):
-    """Return TCSPC histogram and metadata from a PTU T3 mode file.
-
-    Uses flimkit's PTUFile / PTUArray5D for decoding instead of ptufile.
-
-    Parameters
-    
-    filename : str or Path
-        Path to a PicoQuant PTU file.
-    dtype : dtype_like, optional, default: uint16
-        Unsigned integer type for the histogram array.
-    frame : int, optional
-        If < 0, integrate (sum) over the time/frame axis.
-        If >= 0, select that single frame.
-        If None, keep all frames.
-    channel : int, optional, default: 0
-        Detection channel index to return.
-        If < 0, integrate (sum) over the channel axis.
-        If None, keep all channels.
-    dtime : int, optional, default: 0
-        Number of histogram bins to keep.
-        0  -> use all bins in one period (default).
-        >0 -> keep the first *dtime* bins.
-        <0 -> integrate (sum) over the histogram axis.
-    binning : int, optional, default: 1
-        Spatial binning factor applied when building the pixel stack.
-    keepdims : bool, optional, default: False
-        If True, reduced axes are kept as length-1 dimensions.
-
-    Returns
-    -
-    xarray.DataArray
-        TCSPC histogram with axes ``'TYXCH'``.
-
-        - ``coords['H']``: delay-time bin centres in nanoseconds.
-        - ``attrs['frequency']``: laser repetition frequency in MHz.
-        - ``attrs['ptu_tags']``: raw tag dictionary from the PTU header.
-    """
     from xarray import DataArray
 
     ptu = PTUFile(str(filename), verbose=False)

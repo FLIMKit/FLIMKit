@@ -3,7 +3,6 @@ from flimkit.GPU._base import _BackendMixin
 from flimkit.FLIM.fit_tools import estimate_bg, coates_pileup_correction
 
 class MLXBackend(_BackendMixin):
-    """GPU backend using Apple MLX — Metal GPU with zero-copy unified memory."""
 
     def __init__(self):
         import mlx.core as mx
@@ -23,7 +22,6 @@ class MLXBackend(_BackendMixin):
         n_sync_px,
         progress_callback=None,
     ):
-        """Fit all pixels at once using fixed lifetimes — Metal does one big matmul."""
         mx = self._mx
         ny, nx, n_bins = stack.shape
         n_exp = A.shape[1]
@@ -82,7 +80,6 @@ class MLXBackend(_BackendMixin):
         n_sync_px,
         progress_callback=None,
     ):
-        """Fit all pixels by finding the best τ from a log-spaced grid — n_exp=1 only."""
         mx = self._mx
         ny, nx, n_bins = stack.shape
         N_GRID = len(tau_grid)
@@ -147,7 +144,6 @@ class MLXBackend(_BackendMixin):
 
     @staticmethod
     def _estimate_bg_batch(flat, valid_mask):
-        """Per-pixel background estimate using the same logic as estimate_bg()."""
         n_pix = flat.shape[0]
         bg = np.zeros(n_pix, dtype=np.float32)
         peak_bins = flat.argmax(axis=1)
@@ -170,14 +166,6 @@ class MLXBackend(_BackendMixin):
         n_steps=50,
         lr=None,
     ):
-        """Batched Levenberg-Marquardt for free-τ fitting on MLX/Metal.
-
-        Works in PHYSICAL [τ, α] space — same coordinate system as scipy TRF —
-        with simple bound-clipping on each step.  This gives the same convergence
-        path and local minimum as the CPU reference.
-        Analytical Jacobian via rfft.  Normal equations solved with
-        numpy.linalg.solve (matrices are at most 6×6).
-        """
         mx = self._mx
         ny, nx, n_bins = stack.shape
         taus_ns_init   = taus_init * 1e9

@@ -3,7 +3,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-# Disable tqdm globally – all progress is shown via progress windows instead
+# Disable tqdm globally - all progress is shown via progress windows instead
 tqdm.disable = True
 
 from scipy.optimize import least_squares, differential_evolution, nnls
@@ -14,7 +14,7 @@ from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau)
 from ..configs import MIN_PHOTONS_PERPIX
 
-# Module-level GPU backend cache — resolved once on first call.
+# Module-level GPU backend cache - resolved once on first call.
 # Sentinel _GPU_BACKEND_UNSET means "not yet checked".
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
@@ -22,34 +22,21 @@ _gpu_backend_cache = _GPU_BACKEND_UNSET
 def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                has_tail, fit_bg, fit_sigma,
                n_exp, tau_min_ns, tau_max_ns,
-               optimizer="de", n_restarts=8,
+               optimizer='de', n_restarts=8,
                de_popsize=15, de_maxiter=1000,
                workers=-1, polish=True,
-               cost_function="poisson",
+               cost_function='poisson',
                sigma_max=3.0,
                irf_shift_bins=2) -> tuple[np.ndarray, dict]:
-    """Fit summed FLIM decay via reconvolution.
-
-    Parameters
-    ----------
-    cost_function : str, optional
-        ``'poisson'`` — Poisson deviance / C-statistic (recommended, default).
-        ``'chi2'``    — Neyman chi-squared (legacy: weighted least-squares on
-                        normalised decay).
-    sigma_max : float, optional
-        Upper bound for the IRF Gaussian broadening parameter σ (bins).
-        Only used when ``fit_sigma=True``.  Default 3.0 (full).
-        Set to 0.5 for the balanced “half-sigma” mode.
-    """
 
     tau_min  = tau_min_ns * 1e-9
     tau_max  = tau_max_ns * 1e-9
 
-    if cost_function not in ("chi2", "poisson"):
+    if cost_function not in ('chi2', 'poisson'):
         raise ValueError(f"Unknown cost_function: {cost_function!r}")
     decay_work = decay.astype(float)    # raw counts (both paths)
     if decay_work.max() == 0:
-        raise ValueError("Decay has zero maximum – cannot fit.")
+        raise ValueError('Decay has zero maximum - cannot fit.')
     scale = 1.0
 
     peak_bin = int(np.argmax(decay_work))
@@ -69,8 +56,8 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
           f", upper bound = {bg_upper:.3f} "
           f"({'free param' if fit_bg else 'fixed'})")
     print(f"  σ broadening: {'free param (σ≤' + f'{sigma_max:.1f})' if fit_sigma else 'fixed at 0'}")
-    print(f"  Fit window: bins {fit_start}–{fit_end} "
-          f"({fit_start*tcspc_res*1e9:.2f}–{fit_end*tcspc_res*1e9:.2f} ns), "
+    print(f"  Fit window: bins {fit_start}-{fit_end} "
+          f"({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), "
           f"{fit_end-fit_start} bins")
 
     lo, hi  = _build_bounds(n_exp, tau_min, tau_max, decay_work.max(),
@@ -80,7 +67,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     bounds  = list(zip(lo, hi))
 
     # Define residual / cost functions
-    if cost_function == "chi2":
+    if cost_function == 'chi2':
         weights = np.sqrt(np.maximum(decay_work[fit_start:fit_end], 1.0))
 
         def residuals(params):
@@ -92,7 +79,6 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
 
     else:  # poisson
         def residuals(params):
-            """Signed Poisson deviance residuals for LM."""
             model_vals = reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
                 n_exp, bg_fixed, has_tail, fit_bg, fit_sigma)
@@ -106,7 +92,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             r[m < n] *= -1                   # sign = data > model
             return r
 
-    if optimizer == "lm_multistart":
+    if optimizer == 'lm_multistart':
         rng       = np.random.default_rng(42)
         best_res  = None
         best_cost = np.inf
@@ -119,13 +105,13 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                           has_tail, fit_bg, fit_sigma, bg_init,
                           tau_override=tau_ov)
             try:
-                res = least_squares(residuals, p0, bounds=(lo, hi), method="trf",
+                res = least_squares(residuals, p0, bounds=(lo, hi), method='trf',
                                     max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
             except Exception as exc:
                 print(f"    Restart {i:2d}: failed ({exc})")
                 continue
-            tag = "log-spaced" if i == 0 else "random    "
+            tag = 'log-spaced' if i == 0 else 'random    '
             if res.cost < best_cost:
                 best_cost = res.cost
                 best_res  = res
@@ -134,11 +120,11 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                 print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}")
 
         if best_res is None:
-            raise RuntimeError("All restarts failed.")
+            raise RuntimeError('All restarts failed.')
         popt_work = best_res.x
         message   = best_res.message
 
-    elif optimizer == "de":
+    elif optimizer == 'de':
         print(f"  Differential evolution: popsize={de_popsize}, "
               f"maxiter={de_maxiter}, workers={workers}")
 
@@ -147,7 +133,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             lo_tau, hi_tau = bounds[i]
             bounds_log[i] = (np.log10(lo_tau), np.log10(hi_tau))
 
-        if cost_function == "poisson":
+        if cost_function == 'poisson':
             cost_fn = _DECostPoissonLogTau(
                 tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                 has_tail, fit_bg, fit_sigma,
@@ -172,19 +158,19 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
         message = f"DE success={de_res.success}, fun={de_res.fun:.4e}"
 
         if polish:
-            print("  Running final LM polish...")
-            # Clip strictly inside bounds — DE can land exactly on a bound
+            print('  Running final LM polish...')
+            # Clip strictly inside bounds - DE can land exactly on a bound
             # which causes least_squares to raise "Initial guess outside bounds"
             eps = 1e-10
             popt_work = np.clip(popt_work, np.asarray(lo) + eps, np.asarray(hi) - eps)
             try:
                 pol = least_squares(residuals, popt_work, bounds=(lo, hi),
-                                    method="trf", max_nfev=5000,
+                                    method='trf', max_nfev=5000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
                 popt_work = pol.x
                 message  += f"; polished cost={pol.cost:.4e}"
             except ValueError as e:
-                print(f"  Warning: LM polish failed ({e}) — using DE result")
+                print(f"  Warning: LM polish failed ({e}) - using DE result")
     else:
         raise ValueError(f"Unknown optimizer: {optimizer!r}")
 
@@ -200,7 +186,6 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
 def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
                   n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
                   fit_start, fit_end, message=None) -> dict:
-    """Unpack params in the same order as reconvolution_model."""
 
     taus  = popt[:n_exp]
     amps  = popt[n_exp:2*n_exp]
@@ -308,7 +293,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   correct_pileup=False, n_sync=0,
                   progress_callback=None,
                   free_tau=False,
-                  use_gpu="auto",
+                  use_gpu='auto',
                   gpu_backend=None) -> dict:
     ny, nx, _ = stack.shape
     # Per-pixel sync count: distribute total sync pulses evenly across pixels
@@ -319,7 +304,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     shift = global_popt[idx]; idx += 1
     sigma = global_popt[idx] if fit_sigma else 0.0
     if fit_sigma: idx += 1
-    # skip bg — re-estimated per pixel
+    # skip bg - re-estimated per pixel
     if fit_bg: idx += 1
     tamp  = global_popt[idx]     if has_tail else 0.0
     ttau  = global_popt[idx + 1] if has_tail else 1.0
@@ -334,7 +319,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     ])  # (n_exp, n_bins)
     A = conv_basis.T   # (n_bins, n_exp)
 
-    # GPU fast path — batches all pixels in one or two matrix operations.
+    # GPU fast path - batches all pixels in one or two matrix operations.
     # For fixed-tau modes: one matmul (NNLS with pre-built basis).
     # For free-tau mode (n_exp > 1): batched Adam optimizer on GPU.
     # use_gpu="auto"  → use GPU if one is detected (default)
@@ -481,17 +466,17 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 if not good[k]:
                     continue
                 tau_ns = float(tau_v[k] * 1e9)
-                maps["tau_1"][yi, xi]        = tau_ns
-                maps["tau_mean_amp"][yi, xi] = tau_ns
-                maps["tau_mean_int"][yi, xi] = tau_ns
-                maps["alpha_1"][yi, xi]      = float(amp_v[k])
-                maps["frac_1"][yi, xi]       = 1.0
+                maps['tau_1'][yi, xi]        = tau_ns
+                maps['tau_mean_amp'][yi, xi] = tau_ns
+                maps['tau_mean_int'][yi, xi] = tau_ns
+                maps['alpha_1'][yi, xi]      = float(amp_v[k])
+                maps['frac_1'][yi, xi]       = 1.0
                 # Reduced chi² using the nearest grid basis vector
                 best_b   = basis_grid[best_g[k]]
                 model_px = float(amp_v[k]) * best_b + bg_v[k]
                 resid    = dv[k] - model_px
                 chi2_px  = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
-                maps["chi2_r"][yi, xi] = chi2_px / max(n_bins - 2, 1)
+                maps['chi2_r'][yi, xi] = chi2_px / max(n_bins - 2, 1)
                 fitted += 1
 
     elif not free_tau:
@@ -527,9 +512,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 tau_int  = float(np.dot(amps_px, taus_ns**2) / denom) \
                            if denom > 0 else np.nan
 
-                maps["tau_mean_int"][yi, xi] = tau_int
-                maps["tau_mean_amp"][yi, xi] = tau_amp
-                maps["chi2_r"][yi, xi]       = chi2_px / dof_px
+                maps['tau_mean_int'][yi, xi] = tau_int
+                maps['tau_mean_amp'][yi, xi] = tau_amp
+                maps['chi2_r'][yi, xi]       = chi2_px / dof_px
                 for i in range(n_exp):
                     maps[f"alpha_{i+1}"][yi, xi] = amps_px[i]
                     maps[f"frac_{i+1}"][yi, xi]  = fracs_px[i]
@@ -625,9 +610,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 chi2_px    = float(np.sum(resid_sol**2 / np.maximum(model_sol, 1.0)))
                 dof_px     = max(n_bins - 2 * n_exp, 1)
 
-                maps["tau_mean_int"][yi, xi] = tau_int
-                maps["tau_mean_amp"][yi, xi] = tau_amp
-                maps["chi2_r"][yi, xi]       = chi2_px / dof_px
+                maps['tau_mean_int'][yi, xi] = tau_int
+                maps['tau_mean_amp'][yi, xi] = tau_amp
+                maps['chi2_r'][yi, xi]       = chi2_px / dof_px
                 for i in range(n_exp):
                     maps[f"tau_{i+1}"][yi, xi]   = taus_ns[i]
                     maps[f"alpha_{i+1}"][yi, xi] = amps_sol[i]

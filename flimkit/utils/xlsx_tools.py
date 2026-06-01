@@ -1,18 +1,6 @@
 import pandas as pd
 
 def load_xlsx(path: str, debug: bool = False) -> dict:
-    """
-    Load LAS X FLIM export xlsx.
-    Handles duplicate 'Time [ns]' column names — pandas renames them
-    Time [ns], Time [ns].1, etc.
-
-    LAS X column order:
-        Time [ns] | Decay [Counts] | Time [ns].1 | IRF [Counts]
-        (optional) Time [ns].2 | Fit [Counts] | Time [ns].3 | Residuals [Counts]
-
-    debug=True prints raw row contents and detected columns to diagnose
-    parsing failures.
-    """
     df_raw = pd.read_excel(path, sheet_name=0, header=None)
 
     if debug:
@@ -23,7 +11,7 @@ def load_xlsx(path: str, debug: bool = False) -> dict:
             print(f"      row {i}: {vals}")
 
     # Find header row: look for a cell that is exactly (or starts with) "Time [ns]"
-    # Must NOT match "Lifetime" — require the word starts with "time ["
+    # Must NOT match "Lifetime" - require the word starts with "time ["
     header_row = None
     for i, row in df_raw.iterrows():
         vals = [str(v).strip().lower() for v in row if pd.notna(v)]
@@ -32,7 +20,7 @@ def load_xlsx(path: str, debug: bool = False) -> dict:
             break
 
     if header_row is None:
-        print(f"    ⚠ No row starting with 'Time [' found — trying row 0 as fallback")
+        print(f"    No row starting with 'Time [' found - trying row 0 as fallback")
         header_row = 0
 
     if debug:
@@ -83,7 +71,7 @@ def load_xlsx(path: str, debug: bool = False) -> dict:
     }
 
     for k, v in out.items():
-        status = f"{len(v)} pts" if v is not None else "absent"
+        status = f"{len(v)} pts" if v is not None else 'absent'
         print(f"    {k:12s}: {status}")
 
     return out

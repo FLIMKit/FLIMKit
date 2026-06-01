@@ -4,7 +4,7 @@ import tifffile
 from pathlib import Path
 from tqdm import tqdm
 
-# Disable tqdm globally – all progress is shown via progress windows instead
+# Disable tqdm globally - all progress is shown via progress windows instead
 tqdm.disable = True
 
 from ..utils.xml_utils import (
@@ -23,7 +23,7 @@ def stitch_flim_tiles(
     xlif_path,
     ptu_dir,
     output_dir,
-    ptu_basename="R 2",
+    ptu_basename='R 2',
     rotate_tiles=True,
     register_tiles=True,
     reg_max_shift_px=120,
@@ -32,39 +32,6 @@ def stitch_flim_tiles(
     progress_callback=None,
     cancel_event=None,
 ):
-    """
-    Stitch FLIM PTU tiles into a mosaic using your existing PTUFile class.
-
-    Creates:
-        - Intensity image (TIFF)
-        - FLIM histogram cube (NPY memmap)
-        - Time axis (NPY)
-        - Weight map (NPY)
-        - Metadata (JSON)
-
-    Args:
-        xlif_path: Path to XLIF metadata file
-        ptu_dir: Directory with PTU files
-        output_dir: Output directory
-        ptu_basename: PTU filename base (e.g., "R 2" → "R 2_s1.ptu")
-        rotate_tiles: Apply 90° CW rotation
-        verbose: Print progress
-
-    Returns:
-        Dict with output paths and metadata
-
-    Example:
-        >>> result = stitch_flim_tiles(
-        ...     xlif_path=Path("metadata/R 2.xlif"),
-        ...     ptu_dir=Path("PTUs/"),
-        ...     output_dir=Path("stitched/R_002/"),
-        ...     ptu_basename="R 2",
-        ... )
-        >>> # Load for fitting:
-        >>> flim = np.load(result['flim_path'], mmap_mode='r')
-        >>> time = np.load(result['time_axis_path'])
-        >>> decay = flim.sum(axis=(0,1))
-    """
     xlif_path  = Path(xlif_path)
     ptu_dir    = Path(ptu_dir)
     output_dir = Path(output_dir)
@@ -86,10 +53,10 @@ def stitch_flim_tiles(
         print(f"PTUs: {ptu_dir}")
         print(f"Output: {output_dir}")
         print()
-        print("Parsing XLIF metadata...")
+        print('Parsing XLIF metadata...')
 
     # Accept pre-computed (and optionally registered) tile positions
-    # from a prior fit_flim_tiles call — avoids re-running registration.
+    # from a prior fit_flim_tiles call - avoids re-running registration.
     if tile_positions is None:
         tile_positions = parse_xlif_tile_positions(xlif_path, ptu_basename)
     pixel_size_m, n_pixels = get_pixel_size_from_xlif(xlif_path)
@@ -98,7 +65,7 @@ def stitch_flim_tiles(
         print(f"  Found {len(tile_positions)} tiles")
         print(f"  Pixel size: {pixel_size_m * 1e6:.4f} µm")
 
-    first_tile_path = ptu_dir / tile_positions[0]["file"]
+    first_tile_path = ptu_dir / tile_positions[0]['file']
     if not first_tile_path.exists():
         raise FileNotFoundError(f"First tile not found: {first_tile_path}")
 
@@ -137,14 +104,14 @@ def stitch_flim_tiles(
     if verbose:
         print(f"  Canvas: {canvas_height} × {canvas_width} pixels")
         print()
-        print("Allocating arrays...")
+        print('Allocating arrays...')
 
     intensity_canvas = np.zeros((canvas_height, canvas_width), dtype=np.float64)
     flim_canvas = np.memmap(
         str(output_flim), dtype=np.uint32, mode='w+',
         shape=(canvas_height, canvas_width, n_time_bins))
     # Nearest-centre ownership: each pixel is owned by whichever tile centre
-    # is closest — no blending of overlapping tiles, so overlaps stay sharp.
+    # is closest - no blending of overlapping tiles, so overlaps stay sharp.
     _owner     = np.full((canvas_height, canvas_width), -1,     dtype=np.int32)
     _min_dist2 = np.full((canvas_height, canvas_width), np.inf, dtype=np.float64)
     _hists     = []   # (ti, y0, x0, hist) deferred until ownership is known
@@ -160,12 +127,12 @@ def stitch_flim_tiles(
     for i, t in enumerate(tqdm(tile_positions, desc='  Loading tiles', disable=True)):
         if cancel_event is not None and cancel_event.is_set():
             if verbose:
-                print("\nStitching cancelled by user.")
+                print('\nStitching cancelled by user.')
             break
         if progress_callback is not None:
             progress_callback(i, total_tiles)
 
-        tile_path = ptu_dir / t["file"]
+        tile_path = ptu_dir / t['file']
         if not tile_path.exists():
             if verbose:
                 print(f"  [{i+1:3d}/{len(tile_positions)}] MISSING: {t['file']}")
@@ -185,7 +152,7 @@ def stitch_flim_tiles(
                 else:
                     hist = hist[:, :, :n_time_bins]
 
-            y0, x0 = t["pixel_y"], t["pixel_x"]
+            y0, x0 = t['pixel_y'], t['pixel_x']
             y1 = min(y0 + tile_y, canvas_height)
             x1 = min(x0 + tile_x, canvas_width)
             dy, dx = y1 - y0, x1 - x0
@@ -235,15 +202,15 @@ def stitch_flim_tiles(
         # Update tile_positions with corrected coordinates
         for i, tr in enumerate(tile_results):
             if i < len(tile_positions):
-                tile_positions[i]["pixel_y"] = tr["pixel_y"]
-                tile_positions[i]["pixel_x"] = tr["pixel_x"]
+                tile_positions[i]['pixel_y'] = tr['pixel_y']
+                tile_positions[i]['pixel_x'] = tr['pixel_x']
         # Recalculate ownership map with corrected positions
         _owner[:] = -1
         _min_dist2[:] = np.inf
         for ti, (hist_ti, y0_old, x0_old, h) in enumerate(_hists):
             # Get corrected position
-            y0 = tile_positions[ti]["pixel_y"] if ti < len(tile_positions) else y0_old
-            x0 = tile_positions[ti]["pixel_x"] if ti < len(tile_positions) else x0_old
+            y0 = tile_positions[ti]['pixel_y'] if ti < len(tile_positions) else y0_old
+            x0 = tile_positions[ti]['pixel_x'] if ti < len(tile_positions) else x0_old
             y1 = min(y0 + h.shape[0], canvas_height)
             x1 = min(x0 + h.shape[1], canvas_width)
             dy, dx = y1 - y0, x1 - x0
@@ -278,7 +245,7 @@ def stitch_flim_tiles(
                 (new_canvas_height, new_canvas_width), dtype=np.float64)
             flim_canvas._mmap.close()
             flim_canvas = np.memmap(
-                str(output_flim), dtype=np.uint32, mode="w+",
+                str(output_flim), dtype=np.uint32, mode='w+',
                 shape=(new_canvas_height, new_canvas_width, n_time_bins))
             # Rebuild ownership map at the new size.
             _owner     = np.full(
@@ -302,7 +269,7 @@ def stitch_flim_tiles(
 
     # Write each tile's data only for pixels it owns
     if verbose:
-        blending_mode = "with registration" if (register_tiles and tiles_processed > 1) else "no blending"
+        blending_mode = 'with registration' if (register_tiles and tiles_processed > 1) else 'no blending'
         print(f"  Writing canvas (nearest-centre, {blending_mode})...")
     for ti, y0, x0, h in _hists:
         y1 = y0 + h.shape[0]
@@ -320,7 +287,7 @@ def stitch_flim_tiles(
         print(f"  {n_covered:,} pixels covered  "
               f"({100*n_covered/(canvas_height*canvas_width):.1f}% of canvas)  "
               f"nearest-centre selection, no blending")
-        print("Saving outputs...")
+        print('Saving outputs...')
 
     max_val = intensity_canvas.max()
     intensity_scaled = (
@@ -350,7 +317,7 @@ def stitch_flim_tiles(
     if verbose:
         for name in (output_intensity, output_flim, output_time,
                      output_weight, output_meta):
-            print(f"  ✓ {name.name}")
+            print(f"  {name.name}")
         print()
         print(f"{'='*60}")
         print(f"STITCHING COMPLETE")
@@ -378,21 +345,14 @@ def load_stitched_flim(
     output_dir,
     mode='r',
 ):
-    """
-    Load previously stitched FLIM data.
-
-    Returns
-    -------
-    (flim_cube, time_axis, intensity, metadata)
-    """
     output_dir = Path(output_dir)
 
-    meta_candidates = sorted(output_dir.glob("*_metadata.json"))
+    meta_candidates = sorted(output_dir.glob('*_metadata.json'))
     if meta_candidates:
         meta_path  = meta_candidates[0]
         roi_prefix = meta_path.name.replace('_metadata.json', '')
-    elif (output_dir / "metadata.json").exists():
-        meta_path  = output_dir / "metadata.json"
+    elif (output_dir / 'metadata.json').exists():
+        meta_path  = output_dir / 'metadata.json'
         roi_prefix = None
     else:
         raise FileNotFoundError(f"No metadata.json found in {output_dir}")
@@ -408,13 +368,13 @@ def load_stitched_flim(
         return p if p.exists() else output_dir / generic
 
     if roi_prefix:
-        time_path = _find(f"{roi_prefix}_time_axis_ns.npy",       "time_axis_ns.npy")
-        int_path  = _find(f"{roi_prefix}_stitched_intensity.tif",  "stitched_intensity.tif")
-        flim_path = _find(f"{roi_prefix}_stitched_flim_counts.npy","stitched_flim_counts.npy")
+        time_path = _find(f"{roi_prefix}_time_axis_ns.npy",       'time_axis_ns.npy')
+        int_path  = _find(f"{roi_prefix}_stitched_intensity.tif",  'stitched_intensity.tif')
+        flim_path = _find(f"{roi_prefix}_stitched_flim_counts.npy",'stitched_flim_counts.npy')
     else:
-        time_path = output_dir / "time_axis_ns.npy"
-        int_path  = output_dir / "stitched_intensity.tif"
-        flim_path = output_dir / "stitched_flim_counts.npy"
+        time_path = output_dir / 'time_axis_ns.npy'
+        int_path  = output_dir / 'stitched_intensity.tif'
+        flim_path = output_dir / 'stitched_flim_counts.npy'
 
     time_axis = np.load(str(time_path))
     intensity  = tifffile.imread(str(int_path))
@@ -428,13 +388,6 @@ def load_flim_for_fitting(
     source_dir,
     load_to_memory=False,
 ):
-    """
-    Load stitched FLIM data ready for the fitting pipeline.
-
-    Returns
-    -------
-    (stack, tcspc_res_s, n_bins)
-    """
     flim_memmap, _, _, metadata = load_stitched_flim(source_dir)
     tcspc_res = metadata['tcspc_resolution_ps'] * 1e-12
     n_bins    = metadata['n_time_bins']
@@ -443,23 +396,18 @@ def load_flim_for_fitting(
 
 
 
-# Per-tile fitting pipeline — pooled machine IRF
+# Per-tile fitting pipeline - pooled machine IRF
 def _peek_tile_width(ptu_dir, tile_positions, rotate_tiles):
-    """Load the first available tile just to get its pixel width."""
     for t in tile_positions:
         p = Path(ptu_dir) / t['file']
         if p.exists():
             _, meta = get_flim_histogram_from_ptufile(
                 p, rotate_cw=rotate_tiles, binning=1, channel=None)
             return meta['tile_shape'][1]
-    raise FileNotFoundError("No tile PTU files found to determine tile width")
+    raise FileNotFoundError('No tile PTU files found to determine tile width')
 
 
 def _resolve_tile_irf(ptu_name, irf_xlsx_dir=None, irf_xlsx_map=None):
-    """
-    Return the xlsx path to use as IRF for this tile, or None.
-    Kept for API compatibility — not used in the pooled pipeline.
-    """
     stem = Path(ptu_name).stem
     if irf_xlsx_map:
         if ptu_name in irf_xlsx_map:
@@ -474,7 +422,6 @@ def _resolve_tile_irf(ptu_name, irf_xlsx_dir=None, irf_xlsx_map=None):
 
 
 def _load_machine_irf(path):
-    """Load and normalise machine IRF. Returns (irf_norm, peak_bin)."""
     irf = np.asarray(np.load(str(path)), dtype=float).ravel()
     irf = np.maximum(irf, 0.0)
     s   = irf.sum()
@@ -486,7 +433,6 @@ def _load_machine_irf(path):
 
 def _get_tile_irf(machine_irf, pi_machine,
                   tile_peak_bin, n_bins):
-    """Shift machine IRF to tile_peak_bin, clipped/padded to n_bins."""
     irf = machine_irf.copy()
     if irf.size > n_bins:
         irf = irf[:n_bins]
@@ -501,13 +447,6 @@ def _get_tile_irf(machine_irf, pi_machine,
 
 def _adapt_pixel_maps(pixel_maps, n_exp,
                       taus_ns):
-    """
-    Remap fit_per_pixel output keys → assemble_tile_maps format.
-
-    fit_per_pixel:       intensity, tau_mean_amp, tau_mean_int, chi2_r,
-                         alpha_N, frac_N
-    assemble_tile_maps:  intensity, tau_mean_amp, chi2, tauN, aN
-    """
     adapted = {
         'intensity':    pixel_maps['intensity'],
         'tau_mean_amp': pixel_maps['tau_mean_amp'],
@@ -528,13 +467,6 @@ def _adapt_pixel_maps(pixel_maps, n_exp,
 
 
 def _phase_corr_2d(patch_a, patch_b, max_shift_y=120, max_shift_x=30):
-    """
-    2D normalised phase correlation (Kuglin & Hines 1975).
-    Returns (dy, dx, confidence):
-        dy, dx      : sub-pixel shift — patch_b is shifted (dy, dx) vs patch_a
-        confidence  : peak / mean of search region (higher = more reliable)
-    Uses Hann window and Gaussian sub-pixel fitting (Preibisch et al. 2009).
-    """
     h = min(patch_a.shape[0], patch_b.shape[0])
     w = min(patch_a.shape[1], patch_b.shape[1])
     pa = patch_a[:h, :w].astype(np.float64)
@@ -580,26 +512,6 @@ def _register_tile_columns(
     max_shift_px=120,
     verbose=True,
 ):
-    """
-    Three-pass tile registration (Preibisch et al. 2009 approach):
-
-    Pass A — column Y drift:  ~8px/col stage encoder drift measured from
-              horizontal (col) overlap zones. Cumulative per-column Y correction.
-
-    Pass B — row Y residual:  remaining Y mismatch at each row boundary measured
-              from vertical (row) overlap zones. Whole-row Y shift.
-
-    Pass C — row X residual:  X drift between rows (bidirectional scan backlash)
-              measured from vertical overlap zones. Whole-row X shift.
-
-    Key design: tiles are indexed by ORIGINAL (row_idx, col_idx) so that
-    Pass A's per-column Y corrections don't fragment the row grouping in
-    Passes B and C.
-
-    Uses 2D phase correlation with Hann windowing and Gaussian sub-pixel
-    refinement. MAD-based outlier rejection per group. Tissue-fraction
-    filter discards overlap strips that are mostly background.
-    """
     REG_MAX_SHIFT_Y = max_shift_px
     REG_MAX_SHIFT_X = 30
     MIN_CONF        = 5.0
@@ -623,14 +535,14 @@ def _register_tile_columns(
 
     if col_overlap < 4:
         if verbose:
-            print(f'  Registration: col_overlap={col_overlap}px too small — skipping')
+            print(f'  Registration: col_overlap={col_overlap}px too small - skipping')
         return tile_results
 
     if verbose:
         print(f'  Registration: {N_rows}r×{N_cols}c  '
               f'col_overlap={col_overlap}px  row_overlap={row_overlap}px')
 
-    # Index tiles by original (row_idx, col_idx) — stable across all passes
+    # Index tiles by original (row_idx, col_idx) - stable across all passes
     orig_grid = {}
     for i, tr in enumerate(tile_results):
         try:
@@ -805,7 +717,7 @@ def fit_flim_tiles(
     ptu_dir,
     output_dir,
     args,
-    ptu_basename="R 2",
+    ptu_basename='R 2',
     rotate_tiles=True,
     irf_xlsx_dir=None,
     irf_xlsx_map=None,
@@ -813,51 +725,6 @@ def fit_flim_tiles(
     progress_callback=None,
     cancel_event=None,
 ):
-    """
-    Per-tile FLIM fitting with pooled machine IRF.
-
-    Two-pass strategy — eliminates inter-tile seams in lifetime maps:
-
-    Pass 1  summed_decay() only (no pixel stacks, fast).
-            Accumulates a pooled decay across all tiles, runs fit_summed
-            once → consensus τ values + pooled_irf shared by all tiles.
-
-    Pass 2  raw_pixel_stack() one tile at a time (memory-bounded).
-            Every tile uses the same consensus τ and pooled_irf, giving an
-            identical convolution basis → smooth amplitude maps with no
-            tile boundary artefacts.
-
-    Tile registration and canvas assembly follow the globally-optimised
-    phase-correlation stitching approach of:
-
-        Preibisch, S., Saalfeld, S. and Tomancak, P. (2009).
-        "Globally optimal stitching of tiled 3D microscopic image
-        acquisitions." Bioinformatics 25(11), 1463–1465.
-        https://doi.org/10.1093/bioinformatics/btp184
-
-    Args
-    ----
-    xlif_path:       XLIF metadata file (tile positions)
-    ptu_dir:         directory containing PTU tile files
-    output_dir:      where assembled outputs are saved
-    args:            argparse.Namespace with fitting parameters:
-                       .nexp, .tau_min, .tau_max, .optimizer, .restarts,
-                       .de_population, .de_maxiter, .workers, .binning,
-                       .min_photons, .cost_function, .machine_irf
-    ptu_basename:    PTU filename base (e.g. "R 2")
-    rotate_tiles:    apply 90° CW rotation to each tile stack
-    irf_xlsx_dir:    ignored (kept for API compat)
-    irf_xlsx_map:    ignored (kept for API compat)
-    verbose:         print progress
-    progress_callback: optional callable(step, total_steps)
-    cancel_event:    optional threading.Event to abort
-
-    Returns
-    -------
-    tile_results   : list of dicts ready for assemble_tile_maps()
-    canvas_height  : int
-    canvas_width   : int
-    """
     from ..PTU.reader import PTUFile
     from ..FLIM.fitters import fit_summed, fit_per_pixel
     from ..configs import (
@@ -916,7 +783,7 @@ def fit_flim_tiles(
 
     if verbose:
         print(f"\n{'='*60}")
-        print(f"  PER-TILE FLIM FITTING — POOLED MACHINE IRF")
+        print(f"  PER-TILE FLIM FITTING - POOLED MACHINE IRF")
         print(f"{'='*60}")
         print(f"  XLIF:        {xlif_path}")
         print(f"  PTUs:        {ptu_dir}")
@@ -927,10 +794,10 @@ def fit_flim_tiles(
     total_steps = 2 * len(tile_positions)
 
     
-    # PASS 1 — pool summed decays, fit consensus τ
+    # PASS 1 - pool summed decays, fit consensus τ
     
     if verbose:
-        print("Pass 1: accumulating pooled decay (summed_decay only)...")
+        print('Pass 1: accumulating pooled decay (summed_decay only)...')
 
     tile_meta    = []
     pooled_decay = None
@@ -953,7 +820,7 @@ def fit_flim_tiles(
         n_bins = ptu.n_bins
         tcspc  = ptu.tcspc_res
 
-        # Background mask on pooled decay — zero out sub-threshold pixels so
+        # Background mask on pooled decay - zero out sub-threshold pixels so
         # glass/empty regions don't bias the consensus τ from fit_summed.
         if intensity_thr is not None:
             stack_p1 = ptu.raw_pixel_stack(channel=ptu.photon_channel)
@@ -984,7 +851,7 @@ def fit_flim_tiles(
         })
 
     if pooled_decay is None:
-        raise RuntimeError("No tiles found — check PTU_DIR and PTU_BASENAME.")
+        raise RuntimeError('No tiles found - check PTU_DIR and PTU_BASENAME.')
 
     pooled_peak = int(np.argmax(pooled_decay))
     pooled_irf  = _get_tile_irf(machine_irf, pi_machine, pooled_peak, n_bins_ref)
@@ -992,7 +859,7 @@ def fit_flim_tiles(
     if verbose:
         print(f"\n  Pooled: {len(tile_meta)} tiles  "
               f"{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}")
-        print("\n  Running consensus fit_summed on pooled decay...")
+        print('\n  Running consensus fit_summed on pooled decay...')
 
     global_popt, global_summary = fit_summed(
         pooled_decay, tcspc_ref, n_bins_ref, pooled_irf,
@@ -1014,12 +881,12 @@ def fit_flim_tiles(
         print(f"\n  Consensus τ = {[f'{t:.3f}' for t in consensus_taus_ns]} ns")
         print(f"  χ²_r (tail) = {global_summary['reduced_chi2_tail']:.4f}")
 
-    # Zero irf_shift_bins — pooled_irf is already peak-aligned
+    # Zero irf_shift_bins - pooled_irf is already peak-aligned
     popt_for_px = global_popt.copy()
     popt_for_px[2 * n_exp_] = 0.0
 
     
-    # PASS 2 — per-pixel fit, one tile at a time
+    # PASS 2 - per-pixel fit, one tile at a time
     
 
     tile_results  = []
@@ -1059,7 +926,7 @@ def fit_flim_tiles(
             tile_h, tile_w = stack.shape[:2]
 
             # Apply intensity threshold: zero out background pixels.
-            # This is separate from min_photons — min_photons is the NNLS
+            # This is separate from min_photons - min_photons is the NNLS
             # quality gate inside fit_per_pixel; intensity_threshold is an
             # explicit background mask applied before fitting.
             if intensity_thr is not None:
@@ -1117,7 +984,7 @@ def fit_flim_tiles(
               f"({tiles_skipped} errors)")
 
     #  Optional Y registration using computed intensity maps 
-    # Uses already-computed pixel_maps['intensity'] — no extra PTU reads.
+    # Uses already-computed pixel_maps['intensity'] - no extra PTU reads.
     # Corrects pixel_y in tile_results before assembly.
     if register_tiles and len(tile_results) > 1:
         tile_results = _register_tile_columns(

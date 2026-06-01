@@ -9,7 +9,6 @@ import numpy as np
 # Helpers: yes/no, path prompts, file-dialog save
 
 def _yes_no(question):
-    """Ask a yes/no question via inquirer and return True for Yes."""
     import inquirer
     ans = inquirer.prompt([inquirer.List(
         'yesno', message=question, choices=['Yes', 'No'])])
@@ -17,9 +16,8 @@ def _yes_no(question):
 
 
 def _ask_path(message, *, optional=False):
-    """Ask the user for a file path via inquirer (with tab-completion)."""
     import inquirer
-    hint = " (leave blank to skip)" if optional else ""
+    hint = ' (leave blank to skip)' if optional else ''
     ans = inquirer.prompt([
         inquirer.Path('path',
                       message=f"{message}{hint}",
@@ -32,11 +30,6 @@ def _ask_path(message, *, optional=False):
 
 
 def _pick_save_file(title: str, default_name: str) -> str | None:
-    """Open a native save-file dialog (tkinter) or fall back to input.
-
-    Reuses an existing Tk root if the GUI is already running (avoids
-    creating a second conflicting root window).
-    """
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -81,25 +74,6 @@ def save_session(path, *,
                  ptu_file=None,
                  irf_file=None,
                  display_image=None):
-    """Persist phasor data **and** cursor state to a *.npz* file.
-
-    Parameters
-    ----------
-    path : str
-        Destination file path (will get *.npz* extension if absent).
-    real_cal, imag_cal, mean : ndarray
-        Calibrated phasor arrays.
-    frequency : float
-        Modulation frequency in MHz.
-    cursors : list of dict
-        Each entry has ``'center_g'``, ``'center_s'``, ``'color'``.
-    params : dict
-        Ellipse parameters (``radius``, ``radius_minor``, ``angle_mode``).
-    ptu_file, irf_file : str or None
-        Original source paths (stored as metadata for reference).
-    display_image : ndarray or None
-        Spatially-correct intensity image (nsync-based).
-    """
     n = len(cursors)
     cursor_g = np.array([c['center_g'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
     cursor_s = np.array([c['center_s'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
@@ -127,15 +101,6 @@ def save_session(path, *,
 
 
 def load_session(path):
-    """Load a previously saved session from a *.npz* file.
-
-    Returns
-    -------
-    dict
-        Keys: ``real_cal``, ``imag_cal``, ``mean``, ``frequency``,
-        ``cursors`` (list[dict]), ``params`` (dict), ``ptu_file``,
-        ``irf_file``.
-    """
     d = np.load(path, allow_pickle=False)
     cursors = []
     g = d['cursor_g']
@@ -169,7 +134,6 @@ def load_session(path):
 # Pipeline: PTU → phasor → (optional) calibration
 
 def get_ptu_active_channels(ptu_path):
-    """Return the sorted list of photon channels present in a PTU file."""
     from .PTU.reader import PTUFile
 
     ptu = PTUFile(str(ptu_path), verbose=False)
@@ -180,7 +144,6 @@ def get_ptu_active_channels(ptu_path):
 
 
 def _prompt_ptu_channel(active_channels):
-    """Prompt for a PTU channel via the CLI inquirer flow."""
     import inquirer
 
     answer = inquirer.prompt([inquirer.List(
@@ -202,7 +165,6 @@ def resolve_ptu_channel(
     *,
     prompt_fn=None,
 ):
-    """Resolve which PTU channel to use, prompting if required."""
     active_channels = get_ptu_active_channels(ptu_path)
     if not active_channels:
         raise ValueError('No photon channels found in PTU file')
@@ -234,26 +196,6 @@ def resolve_ptu_channel(
 
 def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
                  filter_kwargs=None):
-    """Load a PTU file, compute phasors, optionally calibrate with IRF.
-
-    Parameters
-    ----------
-    ptu_path : str
-        Path to PTU file.
-    irf_path : str, optional
-        Path to IRF calibration file.
-    channel : int, optional
-        Detection channel to use. If None, will auto-detect or prompt user.
-    phasor_filter : {'gaussian', 'median', 'wavelet', None}
-        Spatial filter applied to the phasor coordinates after calibration.
-        ``None`` disables filtering.
-    filter_kwargs : dict, optional
-        Extra keyword arguments forwarded to
-        :func:`~flimkit.phasor.filters.phasor_filter`.
-
-    Returns dict with ``real_cal``, ``imag_cal``, ``mean``, ``frequency``,
-    and ``display_image`` (nsync-based intensity for correct spatial overlay).
-    """
     from phasorpy.phasor import phasor_from_signal
     from .PTU.tools import signal_from_PTUFile
     from .PTU.reader import PTUFile
@@ -266,7 +208,7 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
     signal = signal_from_PTUFile(ptu_path, dtype=np.uint32, binning=4, channel=channel)
     frequency = float(signal.attrs['frequency'])
 
-    print(f"Computing phasors (frequency = {frequency:.2f} MHz) …")
+    print(f"Computing phasors (frequency = {frequency:.2f} MHz) ...")
     mean, real, imag = phasor_from_signal(signal, axis='H')
 
     # Build a spatially-correct intensity image via raw_pixel_stack
@@ -287,12 +229,12 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
             real_cal, imag_cal = calibrate_signal_with_irf(
                 signal, real, imag, irf_time_ns, irf_counts, frequency)
     else:
-        print("⚠  No IRF — using uncalibrated phasor coordinates.")
+        print(' No IRF - using uncalibrated phasor coordinates.')
         real_cal, imag_cal = real, imag
 
     if phasor_filter:
         from .phasor.filters import phasor_filter as _filter_fn
-        print(f"Applying phasor filter: {phasor_filter} …")
+        print(f"Applying phasor filter: {phasor_filter} ...")
         real_cal, imag_cal = _filter_fn(
             np.asarray(real_cal, dtype=float),
             np.asarray(imag_cal, dtype=float),
@@ -325,36 +267,6 @@ def launch_phasor(ptu_path=None,
                   min_photons=0.01,
                   max_cursors=6,
                   figsize=(8, 5)):
-    """Interactive phasor FLIM analysis with save / load support.
-
-    If no arguments are supplied a file-dialog prompts for the input.
-
-    Parameters
-    ----------
-    ptu_path : str, optional
-        Path to a *.ptu* file.  Ignored when *session_path* is given.
-    irf_path : str, optional
-        Path to the IRF Excel calibration file.
-    session_path : str, optional
-        Path to a previously saved *.npz* session to resume.
-    channel : int, optional
-        Detection channel to use. If None and multiple channels exist,
-        the user will be prompted to choose.
-    phasor_filter : {'gaussian', 'median', 'wavelet', None}
-        Spatial filter applied to the phasor G/S arrays after calibration.
-        ``None`` (default) disables filtering.
-    filter_kwargs : dict, optional
-        Extra keyword arguments forwarded to the filter.  Common keys:
-        ``sigma`` (Gaussian), ``size`` (median), ``wavelet`` / ``level``
-        (wavelet).
-    min_photons, max_cursors, figsize
-        Forwarded to :func:`~flimkit.phasor.interactive.phasor_cursor_tool`.
-
-    Returns
-    -------
-    state : dict
-        The mutable state dict from ``phasor_cursor_tool``.
-    """
     from .phasor.interactive import phasor_cursor_tool
 
     initial_cursors = None
@@ -378,12 +290,12 @@ def launch_phasor(ptu_path=None,
         if mode.startswith('Resume'):
             session_path = _ask_path('Path to saved .npz session')
             if session_path is None:
-                print("No file specified — aborting.")
+                print('No file specified - aborting.')
                 return {}
         else:
             ptu_path = _ask_path('Path to PTU file')
             if ptu_path is None:
-                print("No file specified — aborting.")
+                print('No file specified - aborting.')
                 return {}
 
 
@@ -430,7 +342,7 @@ def launch_phasor(ptu_path=None,
     def _save_callback(state, params):
         stem = Path(src_ptu).stem if src_ptu else 'phasor_session'
         default_name = f"{stem}_session.npz"
-        out = _pick_save_file("Save phasor session", default_name)
+        out = _pick_save_file('Save phasor session', default_name)
         if out:
             save_session(
                 out,
@@ -460,8 +372,7 @@ def launch_phasor(ptu_path=None,
 
 
 def phasor_inquire():
-    """Full guided prompt → launch_phasor().  No arguments required."""
-    print("\n--- Interactive Phasor Analysis ---")
+    print('\n Interactive Phasor Analysis')
     return launch_phasor()   # all prompts happen inside
 
 

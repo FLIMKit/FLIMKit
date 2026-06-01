@@ -7,45 +7,38 @@ from ..FLIM.models import reconvolution_model
 
 
 class GPUBackend:
-    """Structural interface that every backend must satisfy.
-
-    Backends don't need to inherit from this — it's here for documentation
-    and static type-checking only.
-    """
 
     def batch_fixed_tau(
         self,
         stack,                      # (ny, nx, n_bins) float
-        A,                          # (n_bins, n_exp) — IRF-convolved basis
+        A,                          # (n_bins, n_exp) - IRF-convolved basis
         taus_fixed,                 # (n_exp,) seconds
         min_photons,
         correct_pileup,
         n_sync_px,
         progress_callback,
     ):
-        """Fit all pixels at once using fixed lifetimes (n_exp ≥ 2)."""
         raise NotImplementedError
 
     def batch_grid_scan_1exp(
         self,
         stack,                      # (ny, nx, n_bins)
         basis_grid,                 # (N_GRID, n_bins)
-        bb_grid,                    # (N_GRID,) — ||basis[j]||^2
+        bb_grid,                    # (N_GRID,) - ||basis[j]||^2
         tau_grid,                   # (N_GRID,) seconds
         min_photons,
         correct_pileup,
         n_sync_px,
         progress_callback,
     ):
-        """Fit all pixels at once by scanning a log-spaced τ grid (n_exp == 1)."""
         raise NotImplementedError
 
     def batch_free_tau_fit(
         self,
         stack,                      # (ny, nx, n_bins) float
-        irf_array,                  # (n_bins,) real — time-domain IRF (normalised)
+        irf_array,                  # (n_bins,) real - time-domain IRF (normalised)
         tcspc_res,                  # seconds per bin
-        taus_init,                  # (n_exp,) seconds — initial guess from global fit
+        taus_init,                  # (n_exp,) seconds - initial guess from global fit
         tau_min_s,                  # float
         tau_max_s,                  # float
         n_exp,
@@ -55,19 +48,12 @@ class GPUBackend:
         n_steps,
         lr,
     ):
-        """Fit all pixels simultaneously with τ as free parameters via batched Adam."""
         raise NotImplementedError
 
 
 class _BackendMixin:
-    """NumPy-level helpers shared by TorchBackend and MLXBackend.
-
-    Keeps output-map assembly and result scattering in one place so
-    both backends stay in sync without duplicating logic.
-    """
     @staticmethod
     def _init_maps(ny, nx, n_exp, intensity, taus_fixed_ns, free_tau):
-        """Allocate output maps pre-filled with NaN, matching the CPU fitter layout."""
         maps = dict(
             intensity    = intensity,
             tau_mean_int = np.full((ny, nx), np.nan),
@@ -95,7 +81,6 @@ class _BackendMixin:
         taus_ns,                    # (n_exp,)
         ny, nx,
     ):
-        """Write per-pixel amplitude/lifetime/chi2 results into the maps dict."""
         n_exp = A.shape[1]
         n_bins = A.shape[0]
 
@@ -123,9 +108,9 @@ class _BackendMixin:
 
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
 
-        maps["tau_mean_amp"][yi_arr[good], xi_arr[good]] = tau_amp[good]
-        maps["tau_mean_int"][yi_arr[good], xi_arr[good]] = tau_int[good]
-        maps["chi2_r"][yi_arr[good], xi_arr[good]]       = chi2[good] / dof
+        maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp[good]
+        maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int[good]
+        maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good] / dof
         for i in range(n_exp):
             maps[f"alpha_{i+1}"][yi_arr[good], xi_arr[good]] = amps[good, i]
             maps[f"frac_{i+1}"][yi_arr[good], xi_arr[good]]  = fracs[good, i]
@@ -142,7 +127,6 @@ class _BackendMixin:
         ny, nx,
         n_bins,
     ):
-        """Write single-exp grid-scan results into the maps dict."""
         good   = amp_v > 0
         tau_ns = tau_v * 1e9
         model  = amp_v[:, None] * basis_best + bg_v[:, None]
@@ -150,12 +134,12 @@ class _BackendMixin:
         chi2   = (resid ** 2 / np.maximum(model, 1.0)).sum(axis=1) / max(n_bins - 2, 1)
 
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
-        maps["tau_1"][yi_arr[good], xi_arr[good]]        = tau_ns[good]
-        maps["tau_mean_amp"][yi_arr[good], xi_arr[good]] = tau_ns[good]
-        maps["tau_mean_int"][yi_arr[good], xi_arr[good]] = tau_ns[good]
-        maps["alpha_1"][yi_arr[good], xi_arr[good]]      = amp_v[good]
-        maps["frac_1"][yi_arr[good], xi_arr[good]]       = 1.0
-        maps["chi2_r"][yi_arr[good], xi_arr[good]]       = chi2[good]
+        maps['tau_1'][yi_arr[good], xi_arr[good]]        = tau_ns[good]
+        maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_ns[good]
+        maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_ns[good]
+        maps['alpha_1'][yi_arr[good], xi_arr[good]]      = amp_v[good]
+        maps['frac_1'][yi_arr[good], xi_arr[good]]       = 1.0
+        maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good]
 
     @staticmethod
     def _scatter_free_tau(
@@ -167,7 +151,6 @@ class _BackendMixin:
         ny, nx,
         n_exp,
     ):
-        """Write free-τ per-pixel fit results into the maps dict."""
         amp_sum = amps.sum(axis=1)                          # (N_valid,)
         good    = amp_sum > 0
         if not good.any():
@@ -184,9 +167,9 @@ class _BackendMixin:
         )
 
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
-        maps["tau_mean_amp"][yi_arr[good], xi_arr[good]] = tau_amp[good]
-        maps["tau_mean_int"][yi_arr[good], xi_arr[good]] = tau_int[good]
-        maps["chi2_r"][yi_arr[good], xi_arr[good]]       = chi2_r[good]
+        maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp[good]
+        maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int[good]
+        maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2_r[good]
         for i in range(n_exp):
             maps[f"tau_{i+1}"][yi_arr[good], xi_arr[good]]   = taus_ns[good, i]
             maps[f"alpha_{i+1}"][yi_arr[good], xi_arr[good]] = amps[good, i]
@@ -198,26 +181,12 @@ class _BackendMixin:
         bg_valid,       # (B,)        float32
         irf_array,      # (n_bins,)   float64-compatible
         tcspc_res,      # float
-        taus_init,      # (n_exp,)    seconds — initial guess
+        taus_init,      # (n_exp,)    seconds - initial guess
         tau_min_s,      # float
         tau_max_s,      # float
         n_exp,
         n_bins,
     ):
-        """Run scipy TRF least_squares on every pixel in parallel (ThreadPoolExecutor).
-
-        Replicates the CPU free-tau path in ``fit_per_pixel`` exactly —
-        same residual function, same sorting inside the model, same bounds —
-        so CPU/GPU parity is guaranteed.
-
-        Returns
-        -------
-        taus_out  : (B, n_exp) float32  — lifetimes, sorted ascending [seconds]
-        amps_out  : (B, n_exp) float32  — amplitudes
-        chi2r_out : (B,)       float    — reduced chi2 (Pearson, model denom)
-        model_out : (B, n_bins) float32
-        valid_b   : (B,)       bool     — True where fit converged
-        """
         B = raw_valid.shape[0]
 
         amp0    = float(raw_valid.max()) / n_exp

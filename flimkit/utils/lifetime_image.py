@@ -15,32 +15,6 @@ def make_lifetime_image(
     dpi=200,
     verbose=True,
 ):
-    """
-    Generate an intensity-weighted lifetime colour PNG from an assembled canvas.
-
-    Hue      = τ_amp smoothed (NaN-aware Gaussian, removes tile seams)
-    Brightness = photon intensity (percentile-clipped + gamma)
-    Black    = unfitted / zero-intensity pixels
-
-    Also saves a float32 TIFF of the smoothed τ values in ns.
-
-    Parameters
-    ----------
-    canvas           : output of assemble_tile_maps (contains tau_mean_amp, intensity)
-    output_dir       : directory to write outputs
-    roi_name         : filename prefix
-    tau_min_ns       : colour scale minimum (ns)
-    tau_max_ns       : colour scale maximum (ns)
-    smooth_sigma_px  : Gaussian σ in pixels for NaN-aware smoothing
-    intensity_percentile_lo/hi : clip low/high intensity outliers before scaling
-    gamma            : intensity gamma (<1 boosts dim pixels)
-    dpi              : output PNG resolution
-    verbose          : print saved paths
-
-    Returns
-    -------
-    Path to the saved PNG
-    """
     import matplotlib
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
@@ -93,8 +67,8 @@ def make_lifetime_image(
         tiff_path = output_dir / f"{roi_name}_tau_intensity_weighted.tif"
         _tifffile.imwrite(str(tiff_path), tau_u16)
         if verbose:
-            print(f"  ✓ τ TIFF → {tiff_path}  "
-                  f"(uint16, {tau_min_ns}–{tau_max_ns} ns → 0–65535)")
+            print(f"  τ TIFF → {tiff_path}  "
+                  f"(uint16, {tau_min_ns}-{tau_max_ns} ns → 0-65535)")
         
         # Full-range TIF: also use tau_map so unfitted pixels are NaN, not filled.
         tau_full = np.where(valid, tau_map, np.nan).astype(np.float32)
@@ -104,21 +78,21 @@ def make_lifetime_image(
             tau_vals = tau_map[valid]
             tau_fmin = float(np.nanmin(tau_vals))
             tau_fmax = float(np.nanmax(tau_vals))
-            print(f"  ✓ τ full-range TIFF → {tiff_full_path}  "
-                  f"(float32, {tau_fmin:.3f}–{tau_fmax:.3f} ns, unscaled)")
+            print(f"  τ full-range TIFF → {tiff_full_path}  "
+                  f"(float32, {tau_fmin:.3f}-{tau_fmax:.3f} ns, unscaled)")
 
     tau_norm = np.clip(
         (tau_smooth - tau_min_ns) / (tau_max_ns - tau_min_ns + 1e-12),
         0.0, 1.0)
 
     int_vals = int_map[valid]
-    # lo=0 — never clip the low end; dim tissue stays dim but visible.
+    # lo=0 - never clip the low end; dim tissue stays dim but visible.
     # Clipping lo to a non-zero percentile turns the dimmest real tissue black.
     lo = 0.0
     hi = float(np.percentile(int_vals, intensity_percentile_hi))
     hi = max(hi, 1e-6)
 
-    # Hard-clip to hi only — removes outlier bright pixels (tile edges, cell
+    # Hard-clip to hi only - removes outlier bright pixels (tile edges, cell
     # clusters) that would otherwise compress bulk tissue toward zero.
     int_clipped = np.clip(int_map, 0.0, hi)
     int_norm = np.power(
@@ -137,14 +111,14 @@ def make_lifetime_image(
     png_path = output_dir / f"{roi_name}_tau_intensity_weighted.png"
     plt.imsave(str(png_path), rgb, dpi=dpi)
     if verbose:
-        print(f"  ✓ lifetime PNG → {png_path}")
+        print(f"  lifetime PNG → {png_path}")
 
     fig, (ax, cax) = plt.subplots(
         1, 2, figsize=(14, 6),
         gridspec_kw={'width_ratios': [1, 0.03]})
     ax.imshow(rgb, interpolation='nearest', aspect='equal')
     ax.set_title(
-        f"{roi_name}  τ_amp {tau_min_ns}–{tau_max_ns} ns  "
+        f"{roi_name}  τ_amp {tau_min_ns}-{tau_max_ns} ns  "
         f"σ={smooth_sigma_px} px  γ={gamma}",
         fontsize=10, color='black')
     ax.axis('off')
@@ -156,7 +130,7 @@ def make_lifetime_image(
         norm=mcolors.Normalize(tau_min_ns, tau_max_ns))
     sm.set_array([])
     cb = fig.colorbar(sm, cax=cax)
-    cb.set_label("τ_amp (ns)", fontsize=10, color='black')
+    cb.set_label('τ_amp (ns)', fontsize=10, color='black')
     plt.setp(cb.ax.yaxis.get_ticklabels(), color='black')
     plt.tight_layout(pad=0.3)
 
@@ -165,7 +139,7 @@ def make_lifetime_image(
                 bbox_inches='tight', facecolor='white')
     plt.close(fig)
     if verbose:
-        print(f"  ✓ preview PNG → {preview_path}")
+        print(f"  preview PNG → {preview_path}")
 
     if verbose and valid.any():
         tau_v = tau_map[valid]
@@ -185,36 +159,10 @@ def make_component_rgb_tiff(
     intensity_percentile_hi=99.0,
     verbose=True,
 ):
-    """
-    Save a per-component amplitude RGB TIFF.
-
-    Each colour channel encodes the spatial amplitude of one lifetime component,
-    scaled independently to the full uint16 range:
-
-        1-exp:  R = a1
-        2-exp:  R = a1,  G = a2
-        3-exp:  R = a1,  G = a2,  B = a3
-
-    Amplitudes are first normalised by local intensity (fraction of total signal
-    in each component) so the image shows composition rather than raw count.
-    Pixels with no fit are 0 in all channels (black).
-
-    Parameters
-    ----------
-    canvas   : output of assemble_tile_maps
-    output_dir, roi_name : where to save
-    n_exp    : number of exponential components (1–3)
-    intensity_percentile_hi : upper clip percentile per channel (default 99.0)
-    verbose  : print saved path
-
-    Returns
-    -------
-    Path to saved TIFF
-    """
     try:
         import tifffile as _tifffile
     except ImportError:
-        raise ImportError("tifffile is required — pip install tifffile")
+        raise ImportError('tifffile is required - pip install tifffile')
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -243,7 +191,7 @@ def make_component_rgb_tiff(
         with np.errstate(invalid='ignore', divide='ignore'):
             frac = np.where((fitted) & (total_amp > 0), amp / total_amp, np.nan)
 
-        # Scale to uint16 — clip outliers at hi percentile
+        # Scale to uint16 - clip outliers at hi percentile
         vals = frac[np.isfinite(frac)]
         if vals.size > 0:
             hi = float(np.percentile(vals, intensity_percentile_hi))
@@ -272,7 +220,7 @@ def make_component_rgb_tiff(
     _tifffile.imwrite(str(tiff_path), rgb_u16, photometric='rgb')
 
     if verbose:
-        print(f"  ✓ component RGB TIFF → {tiff_path}")
+        print(f"  component RGB TIFF → {tiff_path}")
         print(f"    {channel_info}  (amplitude fraction, uint16)")
 
     return tiff_path

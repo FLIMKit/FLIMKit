@@ -1,5 +1,5 @@
-__version__ = "0.9.12-latest" #Fixed tests
-fitter_version = "16"
+__version__ = '0.9.12-latest' #Fixed tests
+fitter_version = '16'
 
 roadmap = '''Flim program roadmap:
 Version history:

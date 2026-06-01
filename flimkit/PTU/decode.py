@@ -3,20 +3,6 @@ from pathlib import Path
 from .reader import normalise_flim, PTUFile
 
 def create_time_axis(n_bins, tcspc_resolution):
-    """
-    Create time axis in nanoseconds.
-    
-    Args:
-        n_bins: Number of time bins
-        tcspc_resolution: Time per bin in seconds
-    
-    Returns:
-        time_axis_ns: Array in nanoseconds
-    
-    Example:
-        >>> t = create_time_axis(256, 97e-12)
-        >>> print(f"Range: 0 - {t[-1]:.2f} ns")
-    """
     return np.arange(n_bins) * tcspc_resolution * 1e9
 
 def get_flim_histogram_from_ptufile(
@@ -25,10 +11,6 @@ def get_flim_histogram_from_ptufile(
     binning=1,
     channel=None
 ):
-    """
-    Load raw FLIM histogram (uint32 counts) using custom PTUFile if it returns
-    valid data; otherwise fall back to ptufile loader.
-    """
     # Attempt with custom PTUFile
 
     from .reader import PTUFile
@@ -40,11 +22,11 @@ def get_flim_histogram_from_ptufile(
         stack = ptu.pixel_stack(channel=channel, binning=binning)
         # If pixel_stack returns normalized floats, treat as failure
         if stack.max() <= 1.0 and stack.sum() > 0:
-            raise ValueError("Custom class returned normalized data")
+            raise ValueError('Custom class returned normalized data')
 
     # Check if stack has any photons
     if stack.sum() == 0:
-        raise ValueError("Custom class returned zero photons")
+        raise ValueError('Custom class returned zero photons')
 
     # Success: rotate if needed and build metadata
     if rotate_cw:
@@ -73,10 +55,6 @@ def get_raw_flim_histogram(ptu_path, rotate_cw=True):
     return stack, metadata
 
 def get_raw_flim_histogram2(ptu_path, rotate_cw=True):
-    """
-    Load raw FLIM histogram using ptufile (reference implementation).
-    Returns uint32 array (Y, X, H) and metadata.
-    """
     import ptufile
     ptu = ptufile.PtuFile(str(ptu_path))
     data = ptu[:].squeeze()          # (Y, X, H) or (T, Y, X, C, H)

@@ -4,9 +4,8 @@ from flimkit.FLIM.fit_tools import estimate_bg, coates_pileup_correction
 
 
 class TorchBackend(_BackendMixin):
-    """GPU backend using PyTorch — works on CUDA (NVIDIA), MPS (Apple), and ROCm (AMD)."""
 
-    def __init__(self, device="cuda"):
+    def __init__(self, device='cuda'):
         import torch
         self._torch = torch
         self.device = torch.device(device)
@@ -24,15 +23,14 @@ class TorchBackend(_BackendMixin):
         n_sync_px,
         progress_callback=None,
     ):
-        """Fit all pixels at once using fixed lifetimes — GPU does one big matmul."""
         torch = self._torch
         ny, nx, n_bins = stack.shape
         n_exp = A.shape[1]
         taus_ns = taus_fixed * 1e9
 
-        # Compute pinv on CPU — linalg_svd (used internally by pinv) is not
+        # Compute pinv on CPU - linalg_svd (used internally by pinv) is not
         # supported on MPS and would silently fall back, triggering a UserWarning.
-        A_cpu   = torch.as_tensor(A, dtype=torch.float32, device="cpu")
+        A_cpu   = torch.as_tensor(A, dtype=torch.float32, device='cpu')
         A_pinv  = torch.linalg.pinv(A_cpu).to(self.device)  # (n_exp, n_bins)
 
         flat    = stack.reshape(ny * nx, n_bins).astype(np.float32)
@@ -88,7 +86,6 @@ class TorchBackend(_BackendMixin):
         n_sync_px,
         progress_callback=None,
     ):
-        """Fit all pixels by finding the best τ from a log-spaced grid — n_exp=1 only."""
         torch = self._torch
         ny, nx, n_bins = stack.shape
         N_GRID = len(tau_grid)
@@ -148,7 +145,6 @@ class TorchBackend(_BackendMixin):
 
     @staticmethod
     def _estimate_bg_batch(flat, valid_mask):
-        """Per-pixel background estimate using the same logic as estimate_bg()."""
         n_pix, n_bins = flat.shape
         bg = np.zeros(n_pix, dtype=np.float32)
         peak_bins = flat.argmax(axis=1)               # (N_pix,)
@@ -171,26 +167,6 @@ class TorchBackend(_BackendMixin):
         n_steps=50,
         lr=None,
     ):
-        """Batched Levenberg-Marquardt for free-τ fitting — all pixels in parallel.
-
-        Forward model (per pixel b, component k):
-            basis_k(τ_k) = IFFT( FFT(exp(-t/τ_k)) * FFT(irf) )
-            model_b      = Σ_k α_k · basis_k + bg_b
-        Weighted residual:
-            r_bt = (model_bt - raw_bt) / sqrt(max(raw_bt, 1))   (Neyman √wt)
-
-        Works in PHYSICAL [τ, α] space — same coordinate system as scipy TRF —
-        with simple bound-clipping on each step.  This gives the same convergence
-        path and local minimum as the CPU reference, unlike a log/softplus
-        reparametrisation (different curvature → different path → different basin).
-
-        Analytical Jacobian:
-            ∂r_i/∂τ_k = α_k · IFFT(FFT(t/τ_k² · exp(-t/τ_k)) · IRF_fft)_i / √wt_i
-            ∂r_i/∂α_k = basis_k_i / √wt_i
-
-        LM update: (J^T J + λ·diag(J^T J)) δ = -J^T r
-        per-pixel λ: ×0.1 on accept, ×10 on reject.
-        """
         torch = self._torch
         ny, nx, n_bins = stack.shape
         taus_ns_init   = taus_init * 1e9

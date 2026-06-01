@@ -35,13 +35,6 @@ class _DECost:
 
 
 class _DECostLogTau(_DECost):
-    """DE cost with tau parameterised in log10 space.
-
-    The first ``n_exp`` elements of *params* are ``log10(tau/s)``.
-    They are converted back to linear tau before calling the
-    reconvolution model.  This gives the DE sampler equal
-    exploration weight across all decades of lifetime.
-    """
 
     def __call__(self, params):
         params_lin = np.array(params, dtype=float)
@@ -52,12 +45,6 @@ class _DECostLogTau(_DECost):
 # Poisson MLE (deviance) cost functions
 
 class _DECostPoisson:
-    """Poisson deviance cost for DE: C = 2·Σ[m - n + n·ln(n/m)].
-
-    Works on raw (unnormalised) photon counts so the statistical model
-    is correct.  The resulting C-statistic is χ²-distributed, giving
-    reduced-χ² ≈ 1 for a good fit.
-    """
 
     def __init__(self, tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                  has_tail, fit_bg, fit_sigma,
@@ -89,7 +76,6 @@ class _DECostPoisson:
 
 
 class _DECostPoissonLogTau(_DECostPoisson):
-    """Poisson deviance DE cost with log₁₀(τ) parameterisation."""
 
     def __call__(self, params):
         params_lin = np.array(params, dtype=float)
@@ -98,23 +84,6 @@ class _DECostPoissonLogTau(_DECostPoisson):
     
 def reconvolution_model(params, tcspc_res, n_bins, irf_prompt,
                         n_exp, bg_fixed, has_tail, fit_bg, fit_sigma):
-    """
-    Circular (FFT) reconvolution.
-
-    Parameter vector layout (in order):
-        τ₁ … τₙ          always
-        α₁ … αₙ          always
-        shift             always
-        σ                 only if fit_sigma=True  (xlsx / estimated IRF paths)
-        bg                only if fit_bg=True     (all paths in v12)
-        tail_amp, tail_τ  only if has_tail=True   (xlsx / estimated IRF paths)
-
-    Gaussian / scatter paths: fit_sigma=False, has_tail=False
-        → [τ₁…τₙ, α₁…αₙ, shift, bg]
-
-    xlsx / estimated paths:   fit_sigma=True,  has_tail=True
-        → [τ₁…τₙ, α₁…αₙ, shift, σ, bg, tail_amp, tail_τ]
-    """
     taus  = np.clip(params[:n_exp], 1e-14, None)
     amps  = params[n_exp:2*n_exp]
 
