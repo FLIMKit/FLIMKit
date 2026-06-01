@@ -31,6 +31,9 @@
 - `assemble.py` streamlined for efficiency
 - Stitched FLIM image export pixel size bug fixed (was saving larger than actual pixel size)
 
+### Notes
+- Anthropic's Claude AI assisted with parts of the GUI implementation. All scientific design, fitting/phasor methods, validation, and overall architecture are the author's own work.
+
 ---
 
 ## [0.8.8] - 2026-04-06
@@ -93,4 +96,4 @@
 
 ## [Initial Commit] - 2026-02-27
 
-First commit — basic FLIM fitting, CLI, IRF estimation from XLSX, user prompts and defaults.
+First commit - basic FLIM fitting, CLI, IRF estimation from XLSX, user prompts and defaults.

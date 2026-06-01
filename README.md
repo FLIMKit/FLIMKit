@@ -19,7 +19,7 @@ Python ≥ 3.12 required.
 git clone https://github.com/alex1075/FLIMKit.git
 cd FLIMKit
 python install.py             # auto-detects GPU and installs the right backend
-python validate_installation.py   # 10 checks — all should pass
+python validate_installation.py   # 10 checks - all should pass
 ```
 
 For development work (PyInstaller + test dependencies):
@@ -44,14 +44,14 @@ docker run -d \
   alex1075/flimkit:latest
 ```
 
-Then open **http://localhost:14500** in your browser. PTU files and data should be placed in the folder you mount to `/data` — use the file dialog inside the app to navigate there.
+Then open **http://localhost:14500** in your browser. PTU files and data should be placed in the folder you mount to `/data` - use the file dialog inside the app to navigate there.
 
 **TrueNAS SCALE (Custom App):**
 
 1. Apps → Discover Apps → Custom App
 2. Paste the contents of `docker-compose.yaml` from this repo
 3. Edit the volume paths to match your pool (e.g. `/mnt/tank/microscopy:/data`)
-4. Deploy — TrueNAS will pull the image automatically
+4. Deploy - TrueNAS will pull the image automatically
 
 **Build from source** (required if you want to push your own changes):
 
@@ -97,7 +97,7 @@ state = launch_phasor('data.ptu', irf_path='irf.xlsx',
 
 ## Machine IRF (do this first)
 
-Before fitting, build a machine IRF for your system once and reuse it across sessions. You need matched `.ptu` + `.xlsx` pairs, 10–20 is a good number.
+Before fitting, build a machine IRF for your system once and reuse it across sessions. You need matched `.ptu` + `.xlsx` pairs, 10-20 is a good number.
 
 In the GUI, go to **Machine IRF Builder**, point it at your pairs folder, and save as `machine_irf_default`. From source this goes to `flimkit/machine_irf/`; compiled app saves to `~/.flimkit/machine_irf/`.
 
@@ -126,7 +126,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 
 `python install.py` detects your hardware and installs the right backend automatically. No extra flags needed at runtime.
 
-**Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU — it's fast enough not to matter.
+**Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU - it's fast enough not to matter.
 
 **Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
 
@@ -148,8 +148,8 @@ python run_tests.py integration  # integration tests only
 | Format | Description |
 |---|---|
 | PNG | Intensity and lifetime map images |
-| OME-TIFF | Lossless export with metadata — opens in Fiji/ImageJ |
-| GeoJSON | ROI geometries and stats — imports directly into QuPath |
+| OME-TIFF | Lossless export with metadata - opens in Fiji/ImageJ |
+| GeoJSON | ROI geometries and stats - imports directly into QuPath |
 | CSV | Fit summaries and per-ROI statistics |
 | NPZ | Session files for restoring analysis state |
 
@@ -160,6 +160,10 @@ Done: single FOV fitting, tile stitching, batch ROI processing, phasor analysis,
 Up next: config persistence, stat histograms, auto-region detection, batch n-exp in GUI. Chemical validation and publication pending.
 
 See [ROADMAP.md](ROADMAP.md) for details.
+
+## Acknowledgements
+
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ## Contact
 

@@ -92,15 +92,3 @@ chmod +x dist/FLIMKit
 rm -rf dist build
 python build_and_sign.py
 ```
-
----
-
-## GitHub Actions
-
-To enable automated builds on every push:
-
-1. Ensure `.github/workflows/build.yml` exists (already configured)
-2. Push to repository
-3. Binaries automatically build and upload to Releases
-
-No additional secrets needed for self-signed builds!

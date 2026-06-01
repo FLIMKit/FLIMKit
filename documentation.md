@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.9.9** — Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.9.12** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -54,7 +54,7 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 | Package | Purpose |
 |---|---|
 | `numpy` | Array computation |
-| `scipy` | Optimisers (Levenberg–Marquardt, Differential Evolution), signal processing |
+| `scipy` | Optimisers (Levenberg-Marquardt, Differential Evolution), signal processing |
 | `matplotlib` | Plotting (decay curves, lifetime maps, phasor plots) |
 | `xarray` | Labelled N-D arrays for FLIM signals |
 | `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
@@ -62,7 +62,8 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 | `ptufile` | Low-level PTU file reading |
 | `inquirer` | Interactive terminal prompts |
 | `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
-| `opencv-python` | Cell masking and image processing |
+| `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |
+| `opencv-python` | Image I/O, resizing, and general image processing |
 | `openpyxl` | Excel XLSX parsing for LAS X IRF extraction |
 | `pandas` | Excel/XLSX IRF file parsing |
 | `tifffile` | TIFF image I/O |
@@ -136,15 +137,15 @@ Open the GUI and select **Single FOV Fit**.
 Go to **Fit settings** and fill in:
 
 - **PTU path**: your `.ptu` file. To get this from Leica LAS X, open the lif/lof, go to the FLIM window, and export raw data.
-- **IRF method**: Machine IRF is recommended if you've built one. IRF XLSX works if you have a LAS X export for that specific PTU (right-click the summed/tail decay in the FLIM window → Export to Excel). Scatter PTU if you measured one directly. If none of those are available, use "Estimate from decay" and set FWHM to roughly 0.3–0.5 ns.
+- **IRF method**: Machine IRF is recommended if you've built one. IRF XLSX works if you have a LAS X export for that specific PTU (right-click the summed/tail decay in the FLIM window → Export to Excel). Scatter PTU if you measured one directly. If none of those are available, use "Estimate from decay" and set FWHM to roughly 0.3-0.5 ns.
 - **Number of exponentials**: 1, 2, or 3. Beyond 3 the math gets shaky and the biology harder to interpret, so that's the cap. 
-- **Lifetime bounds**: 0.145–45 ns by default. Adjust if you're working with unusually short or long lifetimes.
+- **Lifetime bounds**: 0.145-45 ns by default. Adjust if you're working with unusually short or long lifetimes.
 - **Fitting mode**: Full runs both summed and per-pixel fitting and is needed to generate the FLIM image in the UI. If you just want global lifetime values for the whole FOV, use FAST. Per-pixel fitting is slow, especially with more exponentials.
 - **Output prefix**: defaults to the PTU filename in the PTU directory. Change it to keep outputs organised.
 
 **Masking and thresholding:**
 
-- Cell mask uses Otsu thresholding to isolate cell regions from background. Whether it works well depends on how much contrast your sample has (success is hit-or-miss, try if you like gambling).
+- Cell mask uses the Cellpose-SAM deep-learning segmentation model to isolate cell regions from background. It runs on GPU when available and falls back to CPU otherwise. The intensity image is percentile-normalised and resized to 224×224 before segmentation, then the label map is scaled back to the original resolution.
 - Intensity threshold cuts out low-signal pixels from per-pixel fitting. Speeds things up and cleans up the map, but don't set it too high or you'll lose dim-but-real regions.
 
 Expert fit settings (optimiser type, cost function, DE parameters) are under the **Expert fit settings** tab and are shared between single FOV and tile stitching pipelines.
@@ -212,19 +213,19 @@ Click **Run Fit** to proceed or **Cancel** to abort.
 **Results window:** Opens automatically after fitting. Shows:
 - Decay data (log-scale), IRF overlay, and fitted model curve
 - Weighted residuals panel with χ²_r annotation
-- Summary table: τ₁…τₙ, amplitudes A₁…Aₙ, amplitude-weighted τ_mean, χ²_r (tail)
+- Summary table: τ₁...τₙ, amplitudes A₁...Aₙ, amplitude-weighted τ_mean, χ²_r (tail)
 
 **Reopening results without refitting:** Select the same region(s) and click **View Fit**. The last result for that selection is cached in memory and the plot window reopens instantly. The cache is lost when the app is closed.
 
-**Session persistence:** After fitting, the numeric stats (τ_mean_fit, τ₁…τₙ, A₁…Aₙ, χ²_r) are written back into each region's statistics and saved to the `.roi_session.npz` automatically. The plot data (decay array, model curve) is not stored, so after reloading a session you need to refit to regenerate the plot — but the τ values are already there.
+**Session persistence:** After fitting, the numeric stats (τ_mean_fit, τ₁...τₙ, A₁...Aₙ, χ²_r) are written back into each region's statistics and saved to the `.roi_session.npz` automatically. The plot data (decay array, model curve) is not stored, so after reloading a session you need to refit to regenerate the plot - but the τ values are already there.
 
-**CSV export** ("Export as CSV" button) includes all fit result columns: `Tau_mean_fit_ns`, `Chi2_r_fit`, and dynamic `Tau1_fit_ns / Amp1_fit`, `Tau2_fit_ns / Amp2_fit`, … columns sized to the maximum number of exponential components across all fitted regions. Regions that haven't been fitted yet show `N/A`.
+**CSV export** ("Export as CSV" button) includes all fit result columns: `Tau_mean_fit_ns`, `Chi2_r_fit`, and dynamic `Tau1_fit_ns / Amp1_fit`, `Tau2_fit_ns / Amp2_fit`, ... columns sized to the maximum number of exponential components across all fitted regions. Regions that haven't been fitted yet show `N/A`.
 
 #### Phasor analysis
 
 Load a PTU file plus an IRF calibration (XLSX, machine IRF, etc). The app computes the phasor histogram and shows it alongside the intensity image. Click on the phasor plot to place elliptical cursors, the corresponding pixels in the intensity image highlight immediately.
 
-Per-cursor stats (phase lifetime τ_φ, pixel count, 5th–95th percentile range) print to the progress log. With two or more cursors, a two-component decomposition line is drawn between them and the component lifetimes and mean fractions are reported.
+Per-cursor stats (phase lifetime τ_φ, pixel count, 5th-95th percentile range) print to the progress log. With two or more cursors, a two-component decomposition line is drawn between them and the component lifetimes and mean fractions are reported.
 
 Sessions save to `.npz` allowing you to come back later and pick up where you left off.
 
@@ -240,8 +241,8 @@ A filter row sits above the cursor controls. Select a method, set parameters, an
 
 | Method | Parameter | Description |
 |---|---|---|
-| `gaussian` | σ (0.5–10 px) | Gaussian smoothing via phasorpy's NaN-aware implementation |
-| `median` | size (3–15 px, odd) | Median filter; removes outlier pixels while preserving edges |
+| `gaussian` | σ (0.5-10 px) | Gaussian smoothing via phasorpy's NaN-aware implementation |
+| `median` | size (3-15 px, odd) | Median filter; removes outlier pixels while preserving edges |
 | `wavelet` | none | Wavelet soft-thresholding (Daubechies db4, MAD noise estimator) |
 
 Filtering is applied in phasor space (G and S coordinates) after calibration. The phasor plot and cursor stats update immediately after applying.
@@ -268,13 +269,13 @@ python main.py --cli
 
 The machine IRF is a calibrated instrument response built from your specific microscope configuration. Build it once per system/session setup and reuse it. This is the most reliable IRF method and the one I'd recommend over any of the XLSX-based alternatives. It stores the full shape instead of recreating one from a few datapoints. It isnt perfect and an actual recorded IRF will always be ideal, but it's a big step up from trying to estimate the IRF or relying on the sometimes spotty XLSX IRF exports.
 
-You need matched `.ptu` + `.xlsx` pairs. The more the better, but 10–20 is generally sufficient.
+You need matched `.ptu` + `.xlsx` pairs. The more the better, but 10-20 is generally sufficient.
 
 | Goal | Minimum pairs |
 |---|---|
-| Peak-placement only | 4–6 |
-| Stable IRF shape + placement | 10–12 |
-| Robust production use | 15–20 |
+| Peak-placement only | 4-6 |
+| Stable IRF shape + placement | 10-12 |
+| Robust production use | 15-20 |
 
 Don't go below 10 unless your data is very homogeneous.
 
@@ -444,7 +445,7 @@ from flimkit.PTU.tools import signal_from_PTUFile
 import numpy as np
 
 signal = signal_from_PTUFile('data.ptu', dtype=np.uint32, binning=4)
-# signal.attrs['frequency'] — modulation frequency in MHz
+# signal.attrs['frequency'] - modulation frequency in MHz
 ```
 
 #### Phasor Computation
@@ -535,7 +536,7 @@ All defaults live in `flimkit/configs.py` and can be overridden via CLI args or 
 
 | Parameter | Default | Description |
 |---|---|---|
-| `lm_restarts` | 8 | Levenberg–Marquardt multi-start restarts |
+| `lm_restarts` | 8 | Levenberg-Marquardt multi-start restarts |
 | `de_population` | 30 | DE population size |
 | `de_maxiter` | 5000 | DE maximum iterations |
 | `n_workers` | -1 (source) / 1 (compiled) | CPU cores for DE; capped at 1 in the compiled app to avoid multiprocessing issues |
@@ -575,34 +576,34 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 
 ## Module Reference
 
-### `flimkit.PTU` — PTU File I/O
+### `flimkit.PTU` - PTU File I/O
 
 #### `reader.py`
-- **`PTUFile(path, verbose=False)`** — parse a PicoQuant PTU file. Extracts TCSPC metadata and T3 photon records.
-  - `.summed_decay(channel=None)` — summed decay histogram
-  - `.pixel_stack(channel=None, binning=1)` — (Y, X, H) histogram stack
-  - `.raw_pixel_stack(channel=None, binning=1)` — overflow-corrected pixel stack using nsync timing
-  - `.n_bins`, `.tcspc_res`, `.time_ns` — TCSPC metadata
+- **`PTUFile(path, verbose=False)`** - parse a PicoQuant PTU file. Extracts TCSPC metadata and T3 photon records.
+  - `.summed_decay(channel=None)` - summed decay histogram
+  - `.pixel_stack(channel=None, binning=1)` - (Y, X, H) histogram stack
+  - `.raw_pixel_stack(channel=None, binning=1)` - overflow-corrected pixel stack using nsync timing
+  - `.n_bins`, `.tcspc_res`, `.time_ns` - TCSPC metadata
 
 #### `decode.py`
 - Low-level T3 record decoding (PicoHarp, HydraHarp formats)
-- `create_time_axis()` — build time axis from PTU metadata
+- `create_time_axis()` - build time axis from PTU metadata
 
 #### `tools.py`
-- **`signal_from_PTUFile(path, dtype, binning)`** — load PTU and return an `xarray.DataArray` with labelled dimensions (`Y`, `X`, `H`) and `frequency` attribute
+- **`signal_from_PTUFile(path, dtype, binning)`** - load PTU and return an `xarray.DataArray` with labelled dimensions (`Y`, `X`, `H`) and `frequency` attribute
 
 #### `stitch.py`
-- **`stitch_flim_tiles(xlif_path, ptu_dir, output_dir, ...)`** — stitch multi-tile PTU data into a mosaic using XLIF metadata. Three-pass phase-correlation registration (Preibisch et al. 2009): column Y drift, row Y residuals, row X backlash. Nearest-centre ownership for canvas assembly.
-- **`fit_flim_tiles(...)`** — full fitting pipeline on a stitched mosaic (two-pass: pooled DE fit → per-pixel NNLS)
-- **`load_flim_for_fitting(output_dir, load_to_memory)`** — load previously stitched data
+- **`stitch_flim_tiles(xlif_path, ptu_dir, output_dir, ...)`** - stitch multi-tile PTU data into a mosaic using XLIF metadata. Three-pass phase-correlation registration (Preibisch et al. 2009): column Y drift, row Y residuals, row X backlash. Nearest-centre ownership for canvas assembly.
+- **`fit_flim_tiles(...)`** - full fitting pipeline on a stitched mosaic (two-pass: pooled DE fit → per-pixel NNLS)
+- **`load_flim_for_fitting(output_dir, load_to_memory)`** - load previously stitched data
 
 ---
 
-### `flimkit.FLIM` — Reconvolution Fitting
+### `flimkit.FLIM` - Reconvolution Fitting
 
 #### `fitters.py`
-- **`fit_summed(decay, tcspc_res, n_bins, irf_prompt, ...)`** — fit a summed FLIM decay via reconvolution. Pass 1: Differential Evolution global search → Levenberg–Marquardt polish. Returns `(best_params, summary_dict)`.
-- **`fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt, global_popt, n_exp, ...)`** — per-pixel fitting with τ values fixed from the global fit. Uses NNLS — fast, convex, unique solution. Pass 2.
+- **`fit_summed(decay, tcspc_res, n_bins, irf_prompt, ...)`** - fit a summed FLIM decay via reconvolution. Pass 1: Differential Evolution global search → Levenberg-Marquardt polish. Returns `(best_params, summary_dict)`.
+- **`fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt, global_popt, n_exp, ...)`** - per-pixel fitting with τ values fixed from the global fit. Uses NNLS - fast, convex, unique solution. Pass 2.
 
 **Two-pass model:**
 
@@ -610,101 +611,101 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 y(t) = [IRF(t + Shift_IRF) + Bkgr_IRF] ⊗ [Σ αᵢ·exp(−t/τᵢ) + Bkgr]
 ```
 
-Pass 1 (summed): DE → LM polish → fixes τ₁…τₙ  
-Pass 2 (per-pixel): NNLS fits α₁…αₙ and background with fixed τ values
+Pass 1 (summed): DE → LM polish → fixes τ₁...τₙ  
+Pass 2 (per-pixel): NNLS fits α₁...αₙ and background with fixed τ values
 
-Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-weighted mean lifetime
+Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weighted mean lifetime
 
 #### `assemble.py`
-- **`assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp)`** — assemble per-tile results into a single canvas
-- **`derive_global_tau(canvas, n_exp)`** — ROI-level lifetime statistics from the assembled canvas
-- **`save_assembled_maps(canvas, global_summary, output_dir, roi_name, n_exp, ...)`** — save canvas as TIFFs and NPY
+- **`assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp)`** - assemble per-tile results into a single canvas
+- **`derive_global_tau(canvas, n_exp)`** - ROI-level lifetime statistics from the assembled canvas
+- **`save_assembled_maps(canvas, global_summary, output_dir, roi_name, n_exp, ...)`** - save canvas as TIFFs and NPY
 
 #### `irf_tools.py`
-- **`build_machine_irf_from_folder(folder, align_anchor, reducer, ...)`** — build machine IRF from paired PTU/XLSX files. Aligns to decay peak, aggregates by median, saves as `.npy` + `_meta.json`.
-- **`irf_from_xlsx_analytical(xlsx, ...)`** — fit the Leica analytical IRF model (Gaussian + exponential tail)
-- **`gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, peak_bin)`** — generate Gaussian IRF from FWHM
+- **`build_machine_irf_from_folder(folder, align_anchor, reducer, ...)`** - build machine IRF from paired PTU/XLSX files. Aligns to decay peak, aggregates by median, saves as `.npy` + `_meta.json`.
+- **`irf_from_xlsx_analytical(xlsx, ...)`** - fit the Leica analytical IRF model (Gaussian + exponential tail)
+- **`gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, peak_bin)`** - generate Gaussian IRF from FWHM
 
 ---
 
-### `flimkit.phasor` — Phasor Analysis
+### `flimkit.phasor` - Phasor Analysis
 
 #### `signal.py`
-- **`return_phasor_from_PTUFile(ptu_file)`** — compute phasor coordinates from a PTU file
-- **`get_phasor_irf(irf_xlsx)`** — read IRF from LAS X Excel export
-- **`calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequency)`** — phase/modulation correction via IRF phasor
-- **`calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy, frequency)`** — calibrate using a machine IRF `.npy`. Reads companion `_meta.json` for time resolution; interpolates onto the signal time axis.
+- **`return_phasor_from_PTUFile(ptu_file)`** - compute phasor coordinates from a PTU file
+- **`get_phasor_irf(irf_xlsx)`** - read IRF from LAS X Excel export
+- **`calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequency)`** - phase/modulation correction via IRF phasor
+- **`calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy, frequency)`** - calibrate using a machine IRF `.npy`. Reads companion `_meta.json` for time resolution; interpolates onto the signal time axis.
 
 #### `filters.py`
-- **`phasor_filter(real, imag, method, *, mean=None, sigma=1.0, size=3, wavelet='db4', level=1, threshold_mode='soft')`** — apply a spatial filter to calibrated phasor G/S arrays. When `mean` is supplied, the phasorpy 0.10 NaN-aware C implementation is used for Gaussian and median; otherwise falls back to scipy. Wavelet denoising uses PyWavelets with a MAD noise estimator. Returns `(real_f, imag_f)`.
+- **`phasor_filter(real, imag, method, *, mean=None, sigma=1.0, size=3, wavelet='db4', level=1, threshold_mode='soft')`** - apply a spatial filter to calibrated phasor G/S arrays. When `mean` is supplied, the phasorpy 0.10 NaN-aware C implementation is used for Gaussian and median; otherwise falls back to scipy. Wavelet denoising uses PyWavelets with a MAD noise estimator. Returns `(real_f, imag_f)`.
 
 #### `interactive.py`
-- **`phasor_cursor_tool(real_cal, imag_cal, mean, frequency, ...)`** — interactive phasor cursor widget. Works in Jupyter (ipywidgets) and standalone scripts (matplotlib.widgets). Click-to-place elliptic cursors, adjustable radius/angle, per-cursor τ_φ maps, two-component decomposition, Undo/Peaks/Export/Save.
+- **`phasor_cursor_tool(real_cal, imag_cal, mean, frequency, ...)`** - interactive phasor cursor widget. Works in Jupyter (ipywidgets) and standalone scripts (matplotlib.widgets). Click-to-place elliptic cursors, adjustable radius/angle, per-cursor τ_φ maps, two-component decomposition, Undo/Peaks/Export/Save.
 
 #### `peaks.py`
-- **`find_phasor_peaks(real_cal, imag_cal, mean, frequency, ...)`** — automatic peak detection on 2-D phasor histograms via Gaussian smoothing and local maxima detection
+- **`find_phasor_peaks(real_cal, imag_cal, mean, frequency, ...)`** - automatic peak detection on 2-D phasor histograms via Gaussian smoothing and local maxima detection
 
 ---
 
-### `flimkit.UI` — Desktop GUI
+### `flimkit.UI` - Desktop GUI
 
 #### `gui.py`
-- **`launch_gui()`** — entry point for the Tkinter GUI
-- **`FLIMKitApp`** — main application class. Tabs: Single FOV Fit, Tile Stitch/Fit, Batch ROI Fit, Machine IRF Builder, Phasor Analysis
-- **`FOVPreviewPanel`** — right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active. Caches the last fitted IRF prompt (`_irf_prompt`) so per-ROI fits can reuse it.
+- **`launch_gui()`** - entry point for the Tkinter GUI
+- **`FLIMKitApp`** - main application class. Tabs: Single FOV Fit, Tile Stitch/Fit, Batch ROI Fit, Machine IRF Builder, Phasor Analysis
+- **`FOVPreviewPanel`** - right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active. Caches the last fitted IRF prompt (`_irf_prompt`) so per-ROI fits can reuse it.
 
 #### `roi_tools.py`
-- **`RoiManager`** — stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence.
-  - `.add_region(name, tool, coords)` — register a new region, returns its integer ID
-  - `.compute_region_mask(region_id, image_shape)` — boolean (H×W) mask for a region
-  - `.to_json()` / `.from_json(json_str)` — serialise/deserialise for session files
-- **`RoiAnalysisPanel`** — tab panel for region drawing, statistics display, and per-ROI fitting.
+- **`RoiManager`** - stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence.
+  - `.add_region(name, tool, coords)` - register a new region, returns its integer ID
+  - `.compute_region_mask(region_id, image_shape)` - boolean (H×W) mask for a region
+  - `.to_json()` / `.from_json(json_str)` - serialise/deserialise for session files
+- **`RoiAnalysisPanel`** - tab panel for region drawing, statistics display, and per-ROI fitting.
   - Drawing modes: Select, Rectangle, Ellipse, Polygon, Freehand
   - Per-region stats: τ_mean, τ_median, τ_stdev, photon count (all from the loaded lifetime/intensity maps)
-  - **`_fit_roi_decay()`** — shows the Fit Options dialog, builds a union mask for all selected regions, extracts the summed decay, and runs `fit_summed` in a background thread. On completion writes τ stats back to each merged region and updates the session file.
-  - **`_show_roi_fit_result(result)`** / **`_view_last_fit_result()`** — open (or reopen from cache) the dark-themed fit result popup with decay plot, residuals, and summary table.
+  - **`_fit_roi_decay()`** - shows the Fit Options dialog, builds a union mask for all selected regions, extracts the summed decay, and runs `fit_summed` in a background thread. On completion writes τ stats back to each merged region and updates the session file.
+  - **`_show_roi_fit_result(result)`** / **`_view_last_fit_result()`** - open (or reopen from cache) the dark-themed fit result popup with decay plot, residuals, and summary table.
   - Export: CSV (including fit columns), GeoJSON (single or all regions), GeoJSON import
-- **`_ask_roi_fit_options(params)`** — modal dialog for overriding n_exp, τ bounds, and cost function before a per-ROI fit. Returns an updated params dict or None if cancelled.
+- **`_ask_roi_fit_options(params)`** - modal dialog for overriding n_exp, τ bounds, and cost function before a per-ROI fit. Returns an updated params dict or None if cancelled.
 
 #### `phasor_panel.py`
-- **`PhasorViewPanel(parent, max_cursors=6)`** — embedded Tkinter widget with `FigureCanvasTkAgg`. Top axes: FOV intensity image (colourised once cursors are placed); bottom axes: phasor histogram. Controls: Clear, Undo, Save session, Radius slider, Minor/major slider, spatial filter row (method selector, σ/size spinboxes, Apply, Reset).
-  - `.set_data(real_cal, imag_cal, mean, frequency, display_image, min_photons)` — load phasor data; call on main thread
-  - `.load_session(session, min_photons)` — restore a saved `.npz` session
-  - `.get_session_dict()` — export current state for saving
+- **`PhasorViewPanel(parent, max_cursors=6)`** - embedded Tkinter widget with `FigureCanvasTkAgg`. Top axes: FOV intensity image (colourised once cursors are placed); bottom axes: phasor histogram. Controls: Clear, Undo, Save session, Radius slider, Minor/major slider, spatial filter row (method selector, σ/size spinboxes, Apply, Reset).
+  - `.set_data(real_cal, imag_cal, mean, frequency, display_image, min_photons)` - load phasor data; call on main thread
+  - `.load_session(session, min_photons)` - restore a saved `.npz` session
+  - `.get_session_dict()` - export current state for saving
 
 ---
 
-### `flimkit.image` — Image Utilities
+### `flimkit.image` - Image Utilities
 
 #### `tools.py`
-- **`make_intensity_image(ptu_path, rotate_90_cw, save_image)`** — 2-D intensity image from PTU
-- **`make_cell_mask(intensity_image, ...)`** — binary cell mask via Otsu thresholding + morphological cleanup
-- **`apply_intensity_threshold(intensity_image, threshold)`** — boolean mask for photon-count gating
-- **`pick_intensity_threshold(intensity_image)`** — interactive slider for visual threshold selection
+- **`make_intensity_image(ptu_path, rotate_90_cw, save_image)`** - 2-D intensity image from PTU
+- **`make_cell_mask(intensity_image, flow_threshold, cellprob_threshold, resize_to, gpu, ...)`** - binary cell mask via Cellpose-SAM segmentation (GPU when available, CPU fallback)
+- **`apply_intensity_threshold(intensity_image, threshold)`** - boolean mask for photon-count gating
+- **`pick_intensity_threshold(intensity_image)`** - interactive slider for visual threshold selection
 
 ---
 
-### `flimkit.utils` — Shared Utilities
+### `flimkit.utils` - Shared Utilities
 
 #### `plotting.py`
-- **`plot_summed(...)`** — main summed-fit figure: log-scale decay + model overlay, weighted residuals, parameter table
-- **`plot_pixel_maps(...)`** — per-pixel lifetime and amplitude maps
-- **`plot_lifetime_histogram(...)`** — lifetime distribution histogram
+- **`plot_summed(...)`** - main summed-fit figure: log-scale decay + model overlay, weighted residuals, parameter table
+- **`plot_pixel_maps(...)`** - per-pixel lifetime and amplitude maps
+- **`plot_lifetime_histogram(...)`** - lifetime distribution histogram
 
 #### `enhanced_outputs.py`
-- **`save_fit_summary_txt(...)`** — human-readable fit results text file
-- **`save_weighted_tau_images(...)`** — intensity-weighted and amplitude-weighted τ TIFFs with optional display range clipping
+- **`save_fit_summary_txt(...)`** - human-readable fit results text file
+- **`save_weighted_tau_images(...)`** - intensity-weighted and amplitude-weighted τ TIFFs with optional display range clipping
 
 #### `lifetime_image.py`
-- **`make_lifetime_image(canvas, output_dir, roi_name, tau_min_ns, tau_max_ns, ...)`** — colourised lifetime image with NaN-aware smoothing and gamma correction
+- **`make_lifetime_image(canvas, output_dir, roi_name, tau_min_ns, tau_max_ns, ...)`** - colourised lifetime image with NaN-aware smoothing and gamma correction
 
 #### `xlsx_tools.py`
-- **`load_xlsx(path, debug=False)`** — parse a LAS X FLIM export XLSX. Auto-detects column layout; returns `decay_t/c`, `irf_t/c`, `fit_t/c`, `res_t/c`.
+- **`load_xlsx(path, debug=False)`** - parse a LAS X FLIM export XLSX. Auto-detects column layout; returns `decay_t/c`, `irf_t/c`, `fit_t/c`, `res_t/c`.
 
 #### `xml_utils.py`
-- **`parse_xlif_tile_positions(xlif_path, ptu_basename)`** — tile positions from XLIF (microns)
-- **`get_pixel_size_from_xlif(xlif_path)`** — pixel size (m) and pixel count
-- **`compute_tile_pixel_positions(tiles, pixel_size_m, tile_size)`** — convert physical positions to pixel coordinates and compute canvas size
+- **`parse_xlif_tile_positions(xlif_path, ptu_basename)`** - tile positions from XLIF (microns)
+- **`get_pixel_size_from_xlif(xlif_path)`** - pixel size (m) and pixel count
+- **`compute_tile_pixel_positions(tiles, pixel_size_m, tile_size)`** - convert physical positions to pixel coordinates and compute canvas size
 
 ---
 
@@ -716,14 +717,14 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 ├── phasor_cli.py                  # Phasor analysis CLI
 ├── build_and_sign.py              # PyInstaller build + codesign
 ├── validate_installation.py       # Installation sanity check (10 checks)
-├── hardware_limits.py             # Hardware stress test — throughput & RAM headroom
+├── hardware_limits.py             # Hardware stress test - throughput & RAM headroom
 ├── requirements.txt
 │
 ├── flimkit/
 │   ├── configs.py                 # Default fitting parameters
 │   ├── interactive.py             # Guided fitting launcher
 │   ├── phasor_launcher.py         # Guided phasor launcher
-│   ├── machine_irf/               # Machine IRF files — generated per system
+│   ├── machine_irf/               # Machine IRF files - generated per system
 │   │
 │   ├── UI/
 │   │   ├── gui.py                 # Tkinter desktop GUI
@@ -731,7 +732,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 │   │   └── phasor_panel.py        # Embedded phasor view panel
 │   │
 │   ├── PTU/
-│   │   ├── reader.py              # PTUFile — T3 record decoding
+│   │   ├── reader.py              # PTUFile - T3 record decoding
 │   │   ├── decode.py              # Low-level histogram extraction
 │   │   ├── tools.py               # signal_from_PTUFile (xarray)
 │   │   └── stitch.py              # Multi-tile stitching + registration
@@ -777,7 +778,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) — amplitude-we
 
 ## Compiled App (macOS / Windows / Linux)
 
-FLIMKit can be packaged as a standalone executable — no Python needed on the target machine.
+FLIMKit can be packaged as a standalone executable - no Python needed on the target machine.
 
 ### Build
 
@@ -866,7 +867,7 @@ pytest tests/test_integration.py -v
 Right-click → Open on first launch. After that it should run normally.
 
 **Machine IRF not found after saving**  
-Restart the app — the default IRF path is resolved at startup and won't update mid-session.
+Restart the app - the default IRF path is resolved at startup and won't update mid-session.
 
 **Per-pixel fitting is very slow**  
 That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` with n_exp ≥ 2 uses batched Adam on GPU; it only falls back to CPU when no backend is detected.
@@ -886,17 +887,23 @@ Make sure the IRF file is from the same acquisition session. XLSX-based IRFs fro
 
 If you use FLIMKit in published work, please also cite the relevant dependencies where appropriate:
 
-**PhasorPy** — phasor computation, calibration, and cursor analysis:
+**PhasorPy** - phasor computation, calibration, and cursor analysis:
 > Gohlke, C. et al. PhasorPy. Zenodo. https://doi.org/10.5281/zenodo.13862586
 
-**Tile stitching** — phase-correlation registration algorithm:
-> Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463–1465. https://doi.org/10.1093/bioinformatics/btp184
+**Tile stitching** - phase-correlation registration algorithm:
+> Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463-1465. https://doi.org/10.1093/bioinformatics/btp184
 
-**Cellpose-SAM** — cell segmentation model used for masking:
+**Cellpose-SAM** - cell segmentation model used for masking:
 > Pachitariu, M. and Stringer, C. (2025). Cellpose-SAM: segment anything in microscopy images. *bioRxiv*. https://doi.org/10.1101/2025.04.28.651001
+
+---
+
+## Acknowledgements
+
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ---
 
 ## Contact
 
-Alex Hunt — alexander.hunt@ed.ac.uk
+Alex Hunt - alexander.hunt@ed.ac.uk

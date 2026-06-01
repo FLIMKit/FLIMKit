@@ -44,6 +44,6 @@ Automatic boundary detection for regions of interest based on intensity or lifet
 
 ## Known issues
 
-- **Stitched FLIM image export** — FLIM images from stitched ROIs are currently saving with a larger pixel size than the original PTU. This is a known issue related to how the per pixel lifetime is calculated (binning). For now the workaround is to use batch ROI fit (under tools) to get true per pixel lifetime maps, which are exported correctly. This will be fixed in a future update. - NOW FIXED IN 0.9.4
-- **Stitched session restoration** — When loading a saved session from a stitched ROI, only the FOV preview and summed fit will restore correctly. ROIs and fit settings don't restore as they should. This will be fixed in a future update. - NOW FIXED IN 0.9.4
-- **Importing ROIs from GeoJSON** — When importing ROIs from GeoJSON, only the exterior geometry is imported. Any donught like shapes with holes will lose the hole geometry and be imported as the outer boundary only. 
+- **Stitched FLIM image export** - FLIM images from stitched ROIs are currently saving with a larger pixel size than the original PTU. This is a known issue related to how the per pixel lifetime is calculated (binning). For now the workaround is to use batch ROI fit (under tools) to get true per pixel lifetime maps, which are exported correctly. This will be fixed in a future update. - NOW FIXED IN 0.9.4
+- **Stitched session restoration** - When loading a saved session from a stitched ROI, only the FOV preview and summed fit will restore correctly. ROIs and fit settings don't restore as they should. This will be fixed in a future update. - NOW FIXED IN 0.9.4
+- **Importing ROIs from GeoJSON** - When importing ROIs from GeoJSON, only the exterior geometry is imported. Any donught like shapes with holes will lose the hole geometry and be imported as the outer boundary only. 
