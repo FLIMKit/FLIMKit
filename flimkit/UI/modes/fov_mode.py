@@ -1,0 +1,119 @@
+import tkinter as tk
+from tkinter import ttk
+
+from flimkit.UI.modes.base import BaseMode
+from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _tog
+from flimkit.UI.irf_widget import IRFWidget
+
+
+class FovMode(BaseMode):
+    def build(self):
+        outer, tab = self.b._form_inner_frames['fov']
+        tab.columnconfigure(0, weight=1)
+
+        ff = _section(tab, 'Input Files')
+        ff.grid(row=0, column=0, sticky='ew', pady=(0, 6))
+        ff.columnconfigure(1, weight=1)
+        self.b.state.sv_ptu  = tk.StringVar()
+        self.b.state.sv_xlsx = tk.StringVar()
+        
+        # Track PTU file changes to auto-load preview
+        self.b.sv_ptu.trace_add('write', self.b._on_fov_ptu_changed)
+        
+        _row(ff, 'PTU file *', self.b.sv_ptu, 0,
+             lambda: _browse_file(self.b.sv_ptu, 'PTU file',
+                                  [('PTU', '*.ptu'), ('All', '*.*')]))
+        _row(ff, 'XLSX file (optional)', self.b.sv_xlsx, 1,
+             lambda: _browse_file(self.b.sv_xlsx, 'XLSX file',
+                                  [('Excel', '*.xlsx'), ('All', '*.*')]))
+
+        self.b._irf_fov = IRFWidget(tab, default='irf_xlsx', xlsx_var=self.b.sv_xlsx,
+                                   machine_irf_default=str(_C()['MACHINE_IRF_DEFAULT_PATH']))
+        self.b._irf_fov.grid(row=1, column=0, sticky='ew', pady=(0, 6))
+
+        fp = _section(tab, 'Fitting Parameters')
+        fp.grid(row=2, column=0, sticky='ew', pady=(0, 6))
+
+        # Exponential components (row 0)
+        ttk.Label(fp, text='Exponential components:').grid(
+            row=0, column=0, sticky='w', **PAD)
+        self.b.state.iv_nexp_fov = tk.IntVar(value=2)
+        for n in (1, 2, 3):
+            ttk.Radiobutton(fp, text=str(n), variable=self.b.iv_nexp_fov,
+                            value=n).grid(row=0, column=n, sticky='w', padx=1)
+
+         #Fitting mode row (independent, no column-width interference) 
+        mode_row = ttk.Frame(fp)
+        mode_row.grid(row=1, column=0, columnspan=5, sticky='w', pady=(2, 0))
+
+        ttk.Label(mode_row, text='Fitting mode:').pack(side='left', padx=(0, 10))
+        self.b.state.sv_mode_fov = tk.StringVar(value='both')
+
+        # Pack radio buttons tightly together
+        radio_frame = ttk.Frame(mode_row)
+        radio_frame.pack(side='left')
+        ttk.Radiobutton(radio_frame, text='Full', variable=self.b.sv_mode_fov,
+                        value='both').pack(side='left', padx=2)
+        ttk.Radiobutton(radio_frame, text='Fast', variable=self.b.sv_mode_fov,
+                        value='summed').pack(side='left', padx=2)
+        # ttk.Radiobutton(radio_frame, text="Per-pixel", variable=self.b.sv_mode_fov,
+        #                 value="perPixel").pack(side="left", padx=2)
+
+        ttk.Label(mode_row, text='(fast = no FLIM image)',
+                  foreground='grey').pack(side='left', padx=(10, 0))
+
+        # Fit window (now row 2)
+        ttk.Label(fp, text='Fit window (ns):').grid(row=2, column=0, sticky='w', **PAD)
+        self.b.state.sv_tau_min_fov = tk.StringVar(value=str(_C()['Tau_min']))
+        self.b.state.sv_tau_max_fov = tk.StringVar(value=str(_C()['Tau_max']))
+        ttk.Entry(fp, textvariable=self.b.sv_tau_min_fov, width=7).grid(row=2, column=1, sticky='w', padx=4)
+        ttk.Label(fp, text='to').grid(row=2, column=2)
+        ttk.Entry(fp, textvariable=self.b.sv_tau_max_fov, width=7).grid(row=2, column=3, sticky='w', padx=4)
+        ttk.Label(fp, text='ns  (fitting range)', foreground='grey').grid(row=2, column=4, sticky='w')
+
+        # Output prefix (now row 3)
+        ttk.Label(fp, text='Output prefix:').grid(row=3, column=0, sticky='w', **PAD)
+        self.b.state.sv_out_fov = tk.StringVar(value='flim_out')
+        ttk.Entry(fp, textvariable=self.b.sv_out_fov, width=35).grid(
+            row=3, column=1, columnspan=3, sticky='ew', padx=4)
+
+        fm = _section(tab, 'Masking & Thresholding')
+        fm.grid(row=3, column=0, sticky='ew', pady=(0, 6))
+
+        self.b.state.bv_cell = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fm, text='Apply cell mask (Otsu on intensity image)',
+                        variable=self.b.bv_cell).grid(
+            row=0, column=0, columnspan=3, sticky='w', **PAD)
+
+        self.b.state.bv_thr_fov = tk.BooleanVar(value=False)
+        self.b.state.sv_thr_fov = tk.StringVar()
+        ttk.Checkbutton(fm, text='Intensity threshold (min photons/px):',
+                        variable=self.b.bv_thr_fov,
+                        command=lambda: _tog(self.b.bv_thr_fov, self.b._thr_fov_e)).grid(
+            row=1, column=0, sticky='w', **PAD)
+        self.b._thr_fov_e = ttk.Entry(fm, textvariable=self.b.sv_thr_fov,
+                                    width=8, state='disabled')
+        self.b._thr_fov_e.grid(row=1, column=1, sticky='w', padx=4)
+        ttk.Label(fm, text='(leave blank for no threshold)',
+                  foreground='grey').grid(row=1, column=2, sticky='w')
+
+        self.b.state.bv_correct_pileup = tk.BooleanVar(value=False)
+        ttk.Checkbutton(fm, text='Apply Coates pile-up correction (recommended if pile-up > 5%)',
+                        variable=self.b.bv_correct_pileup).grid(
+            row=2, column=0, columnspan=3, sticky='w', **PAD)
+
+        # Expert settings banner (hidden until expert settings are confirmed)
+        self.b._expert_banner_fov = ttk.Label(
+            tab, text='⚙  Custom expert settings active',
+            foreground='#e8a838', font=('TkDefaultFont', 9, 'bold'))
+        self.b._expert_banner_fov.grid(row=4, column=0, sticky='w', padx=8)
+        self.b._expert_banner_fov.grid_remove()
+
+        # Bottom row: Expert Settings + Run button
+        btn_row_fov = ttk.Frame(tab)
+        btn_row_fov.grid(row=5, column=0, pady=8)
+        ttk.Button(btn_row_fov, text='⚙  Expert Settings',
+                   command=self.b._open_expert_settings).pack(side='left', padx=4)
+        self.b._btn_fov = ttk.Button(btn_row_fov, text='▶  Run Single-FOV Fit',
+                                   command=self.b._run_fov)
+        self.b._btn_fov.pack(side='left', padx=4, ipadx=20, ipady=4)

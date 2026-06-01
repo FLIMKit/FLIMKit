@@ -104,16 +104,10 @@ def _safe_array_from_json(value) -> np.ndarray:
 
 
 def _parse_summary(captured_log: str) -> list:
-    """
-    Parse the captured stdout/stderr for a summary table.
-    This is a placeholder – replace with actual parsing if needed.
-    Returns a list of (parameter, value, unit) rows.
-    """
     rows = []
-    # Example: find lines like "tau1 = 2.45 ns"
     for line in captured_log.splitlines():
-        if "tau" in line.lower() and "=" in line:
-            parts = line.split("=", 1)
+        if 'tau' in line.lower() and '=' in line:
+            parts = line.split('=', 1)
             if len(parts) == 2:
                 param = parts[0].strip()
                 rest = parts[1].strip()
@@ -121,12 +115,11 @@ def _parse_summary(captured_log: str) -> list:
                 if len(val_unit) >= 2:
                     rows.append((param, val_unit[0], val_unit[1]))
                 else:
-                    rows.append((param, rest, ""))
+                    rows.append((param, rest, ''))
     return rows
 
 
 class _Redirect:
-    """Redirect stdout/stderr to ScrolledText; batches updates for performance (thread-safe)."""
 
     def __init__(self, widget: scrolledtext.ScrolledText, buf: list, root=None, is_stderr=False):
         self.widget = widget
@@ -148,13 +141,13 @@ class _Redirect:
         if self._is_stderr:
             try:
                 from flimkit.utils.crash_handler import log_event
-                log_event(f"STDERR: {text.rstrip()}", level="warning")
+                log_event(f"STDERR: {text.rstrip()}", level='warning')
             except Exception:
                 pass
         
         # Flush if batch is large or timeout elapsed
         should_flush = False
-        if len("".join(self._batch)) >= self._batch_size:
+        if len(''.join(self._batch)) >= self._batch_size:
             should_flush = True
         elif time.time() - self._last_flush >= self._flush_interval:
             should_flush = True
@@ -165,7 +158,7 @@ class _Redirect:
     def _flush_batch(self):
         if not self._batch:
             return
-        text = "".join(self._batch)
+        text = ''.join(self._batch)
         self._batch.clear()
         
         # Use root.after() for thread-safe GUI updates if root is available
@@ -176,12 +169,11 @@ class _Redirect:
             self._update_widget(text)
     
     def _update_widget(self, text):
-        """Update widget from main thread."""
         try:
-            self.widget.configure(state="normal")
+            self.widget.configure(state='normal')
             self.widget.insert(tk.END, text)
             self.widget.see(tk.END)
-            self.widget.configure(state="disabled")
+            self.widget.configure(state='disabled')
             self.widget.update_idletasks()
         except Exception:
             pass  # Widget may have been destroyed
@@ -192,7 +184,6 @@ class _Redirect:
 
 
 class _FileRedirect:
-    """Redirect stdout/stderr to a file for performance (no widget updates)."""
 
     def __init__(self, filepath: str, buf: list):
         self.filepath = filepath
@@ -230,7 +221,6 @@ class _FileRedirect:
 
 
 class _FileTailer:
-    """Stream log file content to a Text widget in real-time."""
 
     def __init__(self, filepath: str, widget: scrolledtext.ScrolledText, update_interval_ms: int = 200):
         self.filepath = filepath
@@ -241,12 +231,10 @@ class _FileTailer:
         self._running = False
 
     def start(self, root):
-        """Start tailing the file and updating the widget."""
         self._running = True
         self._poll_file(root)
 
     def _poll_file(self, root):
-        """Poll the file for new content and update widget."""
         if not self._running:
             return
         
@@ -263,10 +251,10 @@ class _FileTailer:
             
             # Update widget if there's new content
             if new_content:
-                self.widget.configure(state="normal")
+                self.widget.configure(state='normal')
                 self.widget.insert(tk.END, new_content)
                 self.widget.see(tk.END)
-                self.widget.configure(state="disabled")
+                self.widget.configure(state='disabled')
                 self.widget.update_idletasks()
         except Exception:
             pass
@@ -275,31 +263,30 @@ class _FileTailer:
         root.after(self.update_interval_ms, lambda: self._poll_file(root))
 
     def stop(self):
-        """Stop tailing the file."""
         self._running = False
 
 
 PAD = dict(padx=8, pady=4)
 
 
-def _browse_file(var, title="Select file", filetypes=(("All", "*.*"),)):
+def _browse_file(var, title='Select file', filetypes=(('All', '*.*'),)):
     p = filedialog.askopenfilename(title=title, filetypes=filetypes)
     if p:
         var.set(p)
 
 
-def _browse_dir(var, title="Select directory"):
+def _browse_dir(var, title='Select directory'):
     p = filedialog.askdirectory(title=title)
     if p:
         var.set(p)
 
 
-def _row(parent, label, var, row, browse_fn, width=45, state="normal"):
+def _row(parent, label, var, row, browse_fn, width=45, state='normal'):
     ttk.Label(parent, text=label).grid(
-        row=row, column=0, sticky="e", padx=6, pady=3)
+        row=row, column=0, sticky='e', padx=6, pady=3)
     e = ttk.Entry(parent, textvariable=var, width=width, state=state)
-    e.grid(row=row, column=1, sticky="ew", padx=4, pady=3)
-    ttk.Button(parent, text="Browse...", command=browse_fn).grid(
+    e.grid(row=row, column=1, sticky='ew', padx=4, pady=3)
+    ttk.Button(parent, text='Browse...', command=browse_fn).grid(
         row=row, column=2, padx=4, pady=3)
     
     # Add drag-and-drop support if available
@@ -307,12 +294,12 @@ def _row(parent, label, var, row, browse_fn, width=45, state="normal"):
         try:
             def _drop_handler(event):
                 data = event.data.strip()
-                if data.startswith("{") and data.endswith("}"):
+                if data.startswith('{') and data.endswith('}'):
                     data = data[1:-1]
                 var.set(data)
             
             e.drop_target_register(DND_FILES, DND_TEXT)
-            e.dnd_bind("<<Drop>>", _drop_handler)
+            e.dnd_bind('<<Drop>>', _drop_handler)
         except Exception:
             pass
     
@@ -324,16 +311,15 @@ def _section(parent, text: str) -> ttk.LabelFrame:
 
 
 def _tog(bvar: tk.BooleanVar, entry: ttk.Entry):
-    entry.configure(state="normal" if bvar.get() else "disabled")
+    entry.configure(state='normal' if bvar.get() else 'disabled')
 
 
 def _flt(sv: tk.StringVar) -> Optional[float]:
     v = sv.get().strip()
-    return float(v) if v and v.lower() != "none" else None
+    return float(v) if v and v.lower() != 'none' else None
 
 
 def _thresh(bvar: tk.BooleanVar, sv: tk.StringVar):
-    """Return threshold value, or None."""
     if not bvar.get():
         return None
     v = sv.get().strip()

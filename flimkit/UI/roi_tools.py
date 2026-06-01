@@ -28,7 +28,6 @@ class RoiManager:
     """
     
     def __init__(self):
-        """Initialize empty region list."""
         self.regions: List[Dict] = []
         self._next_id = 0
         self._selected_id: Optional[int] = None
@@ -54,7 +53,7 @@ class RoiManager:
             raise ValueError(f"Invalid tool_type: {tool_type}")
         
         if not coords or len(coords) == 0:
-            raise ValueError("coords cannot be empty")
+            raise ValueError('coords cannot be empty')
         
         if color_idx is None:
             color_idx = len(self.regions) % len(_COLORS)
@@ -90,7 +89,6 @@ class RoiManager:
         return False
     
     def get_region(self, region_id: int) -> Optional[Dict]:
-        """Get region dict by ID."""
         for r in self.regions:
             if r['id'] == region_id:
                 return r
@@ -121,25 +119,20 @@ class RoiManager:
         return False
     
     def select_region(self, region_id: Optional[int]) -> None:
-        """Select a region for highlighting/editing."""
         self._selected_id = region_id
     
     def get_selected_id(self) -> Optional[int]:
-        """Get currently selected region ID."""
         return self._selected_id
     
     def get_all_regions(self) -> List[Dict]:
-        """Get all regions as list of dicts."""
         return self.regions
     
     def clear_all(self) -> None:
-        """Remove all regions."""
         self.regions = []
         self._selected_id = None
         self._next_id = 0
     
     def to_json(self) -> str:
-        """Serialize regions to JSON string (for NPZ storage)."""
         data = {
             'regions': self.regions,
             'next_id': self._next_id,
@@ -148,7 +141,6 @@ class RoiManager:
     
     @classmethod
     def from_json(cls, json_str: str) -> 'RoiManager':
-        """Deserialize regions from JSON string."""
         manager = cls()
         try:
             data = json.loads(json_str)
@@ -208,7 +200,6 @@ class RoiManager:
         return mask
     
     def get_color(self, region_id: int) -> str:
-        """Get hex color for a region."""
         region = self.get_region(region_id)
         if region is None:
             return '#999999'
@@ -217,12 +208,10 @@ class RoiManager:
     
     @staticmethod
     def get_color_palette() -> List[str]:
-        """Get the full color palette."""
         return _COLORS.copy()
 
 
 def get_rectangle_patch(coords, edgecolor, facecolor='none', linewidth=2):
-    """Create matplotlib Rectangle patch from [top-left, bottom-right] coords."""
     from matplotlib.patches import Rectangle
     x0, y0 = coords[0]
     x1, y1 = coords[1]
@@ -233,7 +222,6 @@ def get_rectangle_patch(coords, edgecolor, facecolor='none', linewidth=2):
 
 
 def get_ellipse_patch(coords, edgecolor, facecolor='none', linewidth=2):
-    """Create matplotlib Ellipse patch from bounding box coords."""
     from matplotlib.patches import Ellipse
     x0, y0 = coords[0]
     x1, y1 = coords[1]
@@ -244,7 +232,6 @@ def get_ellipse_patch(coords, edgecolor, facecolor='none', linewidth=2):
 
 
 def get_polygon_patch(coords, edgecolor, facecolor='none', linewidth=2):
-    """Create matplotlib Polygon patch from coords."""
     from matplotlib.patches import Polygon
     return Polygon(coords, edgecolor=edgecolor, facecolor=facecolor, linewidth=linewidth, closed=True)
 
@@ -254,7 +241,6 @@ def _show_roi_fit_result_standalone(result: dict):
 
 
 def _show_fit_result_window(result: dict):
-    """Pop up a window showing decay, IRF, fitted model, residuals and table."""
     import tkinter as tk
     from tkinter import ttk
     import numpy as np
@@ -271,8 +257,8 @@ def _show_fit_result_window(result: dict):
     chi2       = summary.get('reduced_chi2_tail')
 
     win = tk.Toplevel()
-    win.title(f"ROI Fit — {result['region_name']}")
-    win.geometry("660x560")
+    win.title(f"ROI Fit - {result['region_name']}")
+    win.geometry('660x560')
     win.resizable(True, True)
 
     fig, (ax_d, ax_r) = plt.subplots(
@@ -293,7 +279,7 @@ def _show_fit_result_window(result: dict):
         irf_sc = (irf_prompt / irf_prompt.max()) * decay.max() * 0.15
         ax_d.semilogy(time_ns[:len(irf_prompt)], np.maximum(irf_sc, 1e-2),
                       color='orange', linewidth=1.5,
-                      label=f'IRF ({result["irf_source"]})', alpha=0.7)
+                      label=f'IRF ({result['irf_source']})', alpha=0.7)
     if model is not None and len(model) == len(decay):
         ax_d.semilogy(time_ns, model, color='red', linewidth=2.0,
                       label='Fit', alpha=0.9)
@@ -375,65 +361,65 @@ def _ask_roi_fit_options(params: dict):
     result = {}  # filled on OK
 
     dlg = tk.Toplevel()
-    dlg.title("ROI Fit Options")
+    dlg.title('ROI Fit Options')
     dlg.resizable(False, False)
     dlg.grab_set()           # modal
 
     pad = dict(padx=8, pady=4)
 
-    ttk.Label(dlg, text="Fit parameters for this ROI",
-              font=("TkDefaultFont", 10, "bold")).grid(
-        row=0, column=0, columnspan=2, sticky="w", **pad)
+    ttk.Label(dlg, text='Fit parameters for this ROI',
+              font=('TkDefaultFont', 10, 'bold')).grid(
+        row=0, column=0, columnspan=2, sticky='w', **pad)
 
     # n_exp
-    ttk.Label(dlg, text="Components (n_exp):").grid(row=1, column=0, sticky="w", **pad)
+    ttk.Label(dlg, text='Components (n_exp):').grid(row=1, column=0, sticky='w', **pad)
     sv_nexp = tk.IntVar(value=int(params.get('n_exp', 1)))
     nexp_frame = ttk.Frame(dlg)
-    nexp_frame.grid(row=1, column=1, sticky="w", pady=4)
-    for n, lbl in [(1, "1-exp"), (2, "2-exp"), (3, "3-exp")]:
+    nexp_frame.grid(row=1, column=1, sticky='w', pady=4)
+    for n, lbl in [(1, '1-exp'), (2, '2-exp'), (3, '3-exp')]:
         ttk.Radiobutton(nexp_frame, text=lbl, variable=sv_nexp, value=n).pack(
-            side="left", padx=(0, 6))
+            side='left', padx=(0, 6))
 
     # tau_min
-    ttk.Label(dlg, text="τ_min (ns):").grid(row=2, column=0, sticky="w", **pad)
+    ttk.Label(dlg, text='τ_min (ns):').grid(row=2, column=0, sticky='w', **pad)
     sv_tau_min = tk.StringVar(value=str(params.get('tau_min', 0.1)))
     ttk.Entry(dlg, textvariable=sv_tau_min, width=10).grid(
-        row=2, column=1, sticky="w", **pad)
+        row=2, column=1, sticky='w', **pad)
 
     # tau_max
-    ttk.Label(dlg, text="τ_max (ns):").grid(row=3, column=0, sticky="w", **pad)
+    ttk.Label(dlg, text='τ_max (ns):').grid(row=3, column=0, sticky='w', **pad)
     sv_tau_max = tk.StringVar(value=str(params.get('tau_max', 25.0)))
     ttk.Entry(dlg, textvariable=sv_tau_max, width=10).grid(
-        row=3, column=1, sticky="w", **pad)
+        row=3, column=1, sticky='w', **pad)
 
     # cost function
-    ttk.Label(dlg, text="Cost function:").grid(row=4, column=0, sticky="w", **pad)
+    ttk.Label(dlg, text='Cost function:').grid(row=4, column=0, sticky='w', **pad)
     sv_cost = tk.StringVar(value=params.get('cost_function', 'poisson'))
     cost_frame = ttk.Frame(dlg)
-    cost_frame.grid(row=4, column=1, sticky="w", pady=4)
-    ttk.Radiobutton(cost_frame, text="Poisson deviance",
-                    variable=sv_cost, value="poisson").pack(side="left", padx=(0, 6))
-    ttk.Radiobutton(cost_frame, text="Pearson χ²",
-                    variable=sv_cost, value="chi2").pack(side="left")
+    cost_frame.grid(row=4, column=1, sticky='w', pady=4)
+    ttk.Radiobutton(cost_frame, text='Poisson deviance',
+                    variable=sv_cost, value='poisson').pack(side='left', padx=(0, 6))
+    ttk.Radiobutton(cost_frame, text='Pearson χ²',
+                    variable=sv_cost, value='chi2').pack(side='left')
 
-    ttk.Separator(dlg, orient="horizontal").grid(
-        row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=6)
+    ttk.Separator(dlg, orient='horizontal').grid(
+        row=5, column=0, columnspan=2, sticky='ew', padx=8, pady=6)
 
     # OK / Cancel
     btn_frame = ttk.Frame(dlg)
-    btn_frame.grid(row=6, column=0, columnspan=2, sticky="e", padx=8, pady=(0, 8))
+    btn_frame.grid(row=6, column=0, columnspan=2, sticky='e', padx=8, pady=(0, 8))
 
     def _ok():
         try:
             tau_min = float(sv_tau_min.get())
             tau_max = float(sv_tau_max.get())
         except ValueError:
-            tk.messagebox.showerror("Invalid Input",
-                                    "τ_min and τ_max must be numbers.", parent=dlg)
+            tk.messagebox.showerror('Invalid Input',
+                                    'τ_min and τ_max must be numbers.', parent=dlg)
             return
         if tau_min <= 0 or tau_max <= tau_min:
-            tk.messagebox.showerror("Invalid Input",
-                                    "Need 0 < τ_min < τ_max.", parent=dlg)
+            tk.messagebox.showerror('Invalid Input',
+                                    'Need 0 < τ_min < τ_max.', parent=dlg)
             return
         result['ok'] = True
         result['n_exp']          = sv_nexp.get()
@@ -445,8 +431,8 @@ def _ask_roi_fit_options(params: dict):
     def _cancel():
         dlg.destroy()
 
-    ttk.Button(btn_frame, text="Cancel", command=_cancel).pack(side="left", padx=(0, 4))
-    ttk.Button(btn_frame, text="Run Fit", command=_ok, style="Accent.TButton").pack(side="left")
+    ttk.Button(btn_frame, text='Cancel', command=_cancel).pack(side='left', padx=(0, 4))
+    ttk.Button(btn_frame, text='Run Fit', command=_ok, style='Accent.TButton').pack(side='left')
 
     # Centre on screen
     dlg.update_idletasks()
@@ -460,7 +446,7 @@ def _ask_roi_fit_options(params: dict):
     if not result.get('ok'):
         return None
 
-    merged = dict(params)          # shallow copy — preserve all other keys
+    merged = dict(params)          # shallow copy - preserve all other keys
     merged['n_exp']         = result['n_exp']
     merged['tau_min']       = result['tau_min']
     merged['tau_max']       = result['tau_max']
@@ -488,142 +474,137 @@ class RoiAnalysisPanel:
         self.frame.rowconfigure(2, weight=1)
         
         self.fov_preview = fov_preview  # Set by caller
-        self._current_mode = tk.StringVar(value="select")
+        self._current_mode = tk.StringVar(value='select')
         self._region_counter = 0
         # Maps tuple(sorted(region_ids)) → last fit result dict for that selection
         self._last_fit_results: dict = {}
         
         #  Drawing Mode Toolbar 
-        toolbar = ttk.LabelFrame(self.frame, text="Drawing Mode", padding=4)
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        toolbar = ttk.LabelFrame(self.frame, text='Drawing Mode', padding=4)
+        toolbar.grid(row=0, column=0, sticky='ew', pady=(0, 4))
         
         # Configure columns for 3 buttons per row
         for i in range(3):
             toolbar.columnconfigure(i, weight=1)
         
-        self._btn_select = ttk.Button(toolbar, text="◯ Select", width=12,
-                                      command=lambda: self._set_mode("select"))
-        self._btn_select.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
+        self._btn_select = ttk.Button(toolbar, text='◯ Select', width=12,
+                                      command=lambda: self._set_mode('select'))
+        self._btn_select.grid(row=0, column=0, sticky='ew', padx=2, pady=2)
         
-        self._btn_rect = ttk.Button(toolbar, text="▭ Rectangle", width=12,
-                                    command=lambda: self._set_mode("rect"))
-        self._btn_rect.grid(row=0, column=1, sticky="ew", padx=2, pady=2)
+        self._btn_rect = ttk.Button(toolbar, text='▭ Rectangle', width=12,
+                                    command=lambda: self._set_mode('rect'))
+        self._btn_rect.grid(row=0, column=1, sticky='ew', padx=2, pady=2)
         
-        self._btn_ellipse = ttk.Button(toolbar, text="○ Ellipse", width=12,
-                                       command=lambda: self._set_mode("ellipse"))
-        self._btn_ellipse.grid(row=0, column=2, sticky="ew", padx=2, pady=2)
+        self._btn_ellipse = ttk.Button(toolbar, text='○ Ellipse', width=12,
+                                       command=lambda: self._set_mode('ellipse'))
+        self._btn_ellipse.grid(row=0, column=2, sticky='ew', padx=2, pady=2)
         
-        self._btn_polygon = ttk.Button(toolbar, text="◇ Polygon", width=12,
-                                       command=lambda: self._set_mode("polygon"))
-        self._btn_polygon.grid(row=1, column=0, sticky="ew", padx=2, pady=2)
+        self._btn_polygon = ttk.Button(toolbar, text='◇ Polygon', width=12,
+                                       command=lambda: self._set_mode('polygon'))
+        self._btn_polygon.grid(row=1, column=0, sticky='ew', padx=2, pady=2)
         
-        self._btn_freehand = ttk.Button(toolbar, text="✏ Freehand", width=12,
-                                        command=lambda: self._set_mode("freehand"))
-        self._btn_freehand.grid(row=1, column=1, sticky="ew", padx=2, pady=2)
+        self._btn_freehand = ttk.Button(toolbar, text='✏ Freehand', width=12,
+                                        command=lambda: self._set_mode('freehand'))
+        self._btn_freehand.grid(row=1, column=1, sticky='ew', padx=2, pady=2)
         
-        ttk.Button(toolbar, text="Clear All", width=12,
-                   command=self._clear_all_regions).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
+        ttk.Button(toolbar, text='Clear All', width=12,
+                   command=self._clear_all_regions).grid(row=1, column=2, sticky='ew', padx=2, pady=2)
         
         #  Region List 
-        list_frame = ttk.LabelFrame(self.frame, text="Regions", padding=4)
-        list_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
+        list_frame = ttk.LabelFrame(self.frame, text='Regions', padding=4)
+        list_frame.grid(row=1, column=0, sticky='nsew', pady=(0, 4))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
         
         # Treeview for regions
-        cols = ("Name", "Type", "τ_mean (ns)", "τ_med (ns)", "τ_sd (ns)", "Photons", "σ_photons")
-        self._tree = ttk.Treeview(list_frame, columns=cols, height=6, show="tree headings")
-        self._tree.grid(row=0, column=0, sticky="nsew")
+        cols = ('Name', 'Type', 'τ_mean (ns)', 'τ_med (ns)', 'τ_sd (ns)', 'Photons', 'σ_photons')
+        self._tree = ttk.Treeview(list_frame, columns=cols, height=6, show='tree headings')
+        self._tree.grid(row=0, column=0, sticky='nsew')
         
-        self._tree.column("#0", width=0, stretch=False)
-        self._tree.column("Name", anchor="w", width=100)
-        self._tree.column("Type", anchor="center", width=55)
-        self._tree.column("τ_mean (ns)", anchor="center", width=72)
-        self._tree.column("τ_med (ns)", anchor="center", width=72)
-        self._tree.column("τ_sd (ns)", anchor="center", width=70)
-        self._tree.column("Photons", anchor="center", width=65)
-        self._tree.column("σ_photons", anchor="center", width=72)
+        self._tree.column('#0', width=0, stretch=False)
+        self._tree.column('Name', anchor='w', width=100)
+        self._tree.column('Type', anchor='center', width=55)
+        self._tree.column('τ_mean (ns)', anchor='center', width=72)
+        self._tree.column('τ_med (ns)', anchor='center', width=72)
+        self._tree.column('τ_sd (ns)', anchor='center', width=70)
+        self._tree.column('Photons', anchor='center', width=65)
+        self._tree.column('σ_photons', anchor='center', width=72)
         
-        self._tree.heading("#0", text="", anchor="w")
-        self._tree.heading("Name", text="Name", anchor="w")
-        self._tree.heading("Type", text="Type", anchor="center")
-        self._tree.heading("τ_mean (ns)", text="τ_mean (ns)", anchor="center")
-        self._tree.heading("τ_med (ns)", text="τ_med (ns)", anchor="center")
-        self._tree.heading("τ_sd (ns)", text="τ_sd (ns)", anchor="center")
-        self._tree.heading("Photons", text="Photons", anchor="center")
-        self._tree.heading("σ_photons", text="σ_photons", anchor="center")
+        self._tree.heading('#0', text='', anchor='w')
+        self._tree.heading('Name', text='Name', anchor='w')
+        self._tree.heading('Type', text='Type', anchor='center')
+        self._tree.heading('τ_mean (ns)', text='τ_mean (ns)', anchor='center')
+        self._tree.heading('τ_med (ns)', text='τ_med (ns)', anchor='center')
+        self._tree.heading('τ_sd (ns)', text='τ_sd (ns)', anchor='center')
+        self._tree.heading('Photons', text='Photons', anchor='center')
+        self._tree.heading('σ_photons', text='σ_photons', anchor='center')
         
-        self._tree.bind("<Double-1>", self._on_region_double_click)
-        self._tree.bind("<Delete>", self._on_delete_key)
-        self._tree.bind("<<TreeviewSelect>>", self._on_region_selection_change)
+        self._tree.bind('<Double-1>', self._on_region_double_click)
+        self._tree.bind('<Delete>', self._on_delete_key)
+        self._tree.bind('<<TreeviewSelect>>', self._on_region_selection_change)
         
         # Scrollbar
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self._tree.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=self._tree.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
         self._tree.configure(yscroll=scrollbar.set)
         
         #  Region Actions 
         actions_frame = ttk.Frame(self.frame)
-        actions_frame.grid(row=2, column=0, sticky="ew", pady=4)
+        actions_frame.grid(row=2, column=0, sticky='ew', pady=4)
         
         # Configure columns for 3 buttons per row
         for i in range(3):
             actions_frame.columnconfigure(i, weight=1)
         
-        ttk.Button(actions_frame, text="Delete Selected", width=16,
-                   command=self._delete_selected_region).grid(row=0, column=0, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="Rename...", width=16,
-                   command=self._rename_selected_region).grid(row=0, column=1, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="Import from GeoJSON", width=18,
-                   command=self._import_rois_geojson).grid(row=0, column=2, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="Export as CSV", width=16,
-                   command=self._export_all_rois_csv).grid(row=1, column=0, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="Export as GeoJSON", width=18,
-                   command=self._export_selected_region).grid(row=1, column=1, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="Export All as GeoJSON", width=20,
-                   command=self._export_all_rois_geojson).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
-        ttk.Button(actions_frame, text="⚗ Fit ROI Decay", width=16,
+        ttk.Button(actions_frame, text='Delete Selected', width=16,
+                   command=self._delete_selected_region).grid(row=0, column=0, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='Rename...', width=16,
+                   command=self._rename_selected_region).grid(row=0, column=1, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='Import from GeoJSON', width=18,
+                   command=self._import_rois_geojson).grid(row=0, column=2, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='Export as CSV', width=16,
+                   command=self._export_all_rois_csv).grid(row=1, column=0, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='Export as GeoJSON', width=18,
+                   command=self._export_selected_region).grid(row=1, column=1, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='Export All as GeoJSON', width=20,
+                   command=self._export_all_rois_geojson).grid(row=1, column=2, sticky='ew', padx=2, pady=2)
+        ttk.Button(actions_frame, text='⚗ Fit ROI Decay', width=16,
                    command=self._fit_roi_decay).grid(row=2, column=0, columnspan=2,
-                   sticky="ew", padx=2, pady=(6, 2))
-        ttk.Button(actions_frame, text="View Fit", width=12,
+                   sticky='ew', padx=2, pady=(6, 2))
+        ttk.Button(actions_frame, text='View Fit', width=12,
                    command=self._view_last_fit_result).grid(row=2, column=2,
-                   sticky="ew", padx=2, pady=(6, 2))
+                   sticky='ew', padx=2, pady=(6, 2))
 
         # Status label
-        self._status = tk.StringVar(value="Ready — Select drawing mode or click regions to add")
-        ttk.Label(self.frame, textvariable=self._status, foreground="grey", 
-                  font=("Courier", 8)).grid(row=3, column=0, sticky="w", padx=2, pady=2)
+        self._status = tk.StringVar(value='Ready - Select drawing mode or click regions to add')
+        ttk.Label(self.frame, textvariable=self._status, foreground='grey', 
+                  font=('Courier', 8)).grid(row=3, column=0, sticky='w', padx=2, pady=2)
     
     def _set_mode(self, mode: str):
-        """Set drawing mode and sync with FOVPreviewPanel (Phase 3.3)."""
         self._current_mode.set(mode)
         # Sync with FOVPreviewPanel's drawing mode for event handlers
         if self.fov_preview:
             self.fov_preview._drawing_mode.set(mode)
-        self._status.set(f"Mode: {mode.upper()} — Draw on FLIM image")
+        self._status.set(f"Mode: {mode.upper()} - Draw on FLIM image")
         print(f"[ROI] Drawing mode: {mode}")
     
     def _clear_all_regions(self):
-        """Clear all regions."""
         if self.fov_preview:
             self.fov_preview._roi_manager.clear_all()
             self.fov_preview._redraw_region_overlays()
             self.fov_preview._save_regions_update()
         self._refresh_region_list()
-        self._status.set("All regions cleared")
+        self._status.set('All regions cleared')
     
     def _on_region_double_click(self, event):
-        """Double-click to rename region."""
         selected = self._tree.selection()
         if selected:
             self._rename_selected_region()
     
     def _on_delete_key(self, event):
-        """Delete key to remove selected region."""
         self._delete_selected_region()
     
     def _on_region_selection_change(self, event):
-        """Handle region selection change — highlight on FLIM image."""
         if getattr(self, '_refreshing', False):
             return
         selected = self._tree.selection()
@@ -639,7 +620,6 @@ class RoiAnalysisPanel:
                 self.fov_preview._redraw_region_overlays()
     
     def _delete_selected_region(self):
-        """Delete selected region from tree."""
         selected = self._tree.selection()
         if not selected:
             return
@@ -656,7 +636,6 @@ class RoiAnalysisPanel:
         self._status.set(f"Deleted region {region_id}")
     
     def _rename_selected_region(self):
-        """Rename selected region."""
         import tkinter as tk
         from tkinter import simpledialog
         
@@ -666,9 +645,9 @@ class RoiAnalysisPanel:
         
         item = selected[0]
         region_id = int(item)  # Item ID is the region_id
-        old_name = self._tree.item(item, "values")[0]  # First value is now name
+        old_name = self._tree.item(item, 'values')[0]  # First value is now name
         
-        new_name = simpledialog.askstring("Rename Region", 
+        new_name = simpledialog.askstring('Rename Region', 
                                          f"Enter new name for region:",
                                          initialvalue=old_name)
         if new_name:
@@ -679,23 +658,21 @@ class RoiAnalysisPanel:
             self._status.set(f"Renamed to '{new_name}'")
     
     def _get_fov_stem(self) -> str:
-        """Return the stem of the currently loaded PTU file, or empty string."""
         if self.fov_preview and hasattr(self.fov_preview, '_ptu_path'):
             p = self.fov_preview._ptu_path
             if p:
                 from pathlib import Path
                 return Path(p).stem
-        return ""
+        return ''
 
     def _export_selected_region(self):
-        """Export selected region as GeoJSON."""
         import json
         from pathlib import Path
         from tkinter import filedialog, messagebox
         
         selected = self._tree.selection()
         if not selected:
-            messagebox.showwarning("No Selection", "Select a region first")
+            messagebox.showwarning('No Selection', 'Select a region first')
             return
         
         item = selected[0]
@@ -706,111 +683,110 @@ class RoiAnalysisPanel:
             return
         
         regions = self.fov_preview._roi_manager.get_all_regions()
-        region = next((r for r in regions if r.get("id") == region_id), None)
+        region = next((r for r in regions if r.get('id') == region_id), None)
         if not region:
-            messagebox.showerror("Error", "Region not found")
+            messagebox.showerror('Error', 'Region not found')
             return
         
-        name = region.get("name", "")
+        name = region.get('name', '')
         init_name = f"{name}.geojson" if name else None
         geojson_file = filedialog.asksaveasfilename(
-            title="Export Region as GeoJSON",
+            title='Export Region as GeoJSON',
             initialfile=init_name,
-            defaultextension=".geojson",
-            filetypes=[("GeoJSON files", "*.geojson"), ("JSON files", "*.json"), ("All files", "*.*")])
+            defaultextension='.geojson',
+            filetypes=[('GeoJSON files', '*.geojson'), ('JSON files', '*.json'), ('All files', '*.*')])
         if not geojson_file:
             return
         
         try:
-            name = region.get("name", "")
-            tool = region.get("tool", "")
-            coords = region.get("coords", [])
-            stats = region.get("statistics", {})
+            name = region.get('name', '')
+            tool = region.get('tool', '')
+            coords = region.get('coords', [])
+            stats = region.get('statistics', {})
             
             # Convert coordinates to GeoJSON geometry based on tool type
-            if tool == "ellipse" and len(coords) >= 2:
+            if tool == 'ellipse' and len(coords) >= 2:
                 # For ellipse, create a polygon from the two corner points
                 x1, y1 = coords[0]
                 x2, y2 = coords[1]
                 # Approximate ellipse as polygon
                 geometry = {
-                    "type": "Polygon",
-                    "coordinates": [[
+                    'type': 'Polygon',
+                    'coordinates': [[
                         [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
                     ]]
                 }
-            elif tool == "rect" and len(coords) >= 2:
+            elif tool == 'rect' and len(coords) >= 2:
                 # Rectangle from corner points
                 x1, y1 = coords[0]
                 x2, y2 = coords[1]
                 geometry = {
-                    "type": "Polygon",
-                    "coordinates": [[
+                    'type': 'Polygon',
+                    'coordinates': [[
                         [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
                     ]]
                 }
-            elif tool == "freehand" and len(coords) > 0:
+            elif tool == 'freehand' and len(coords) > 0:
                 # Freehand as LineString or Polygon
                 coords_2d = [[c[0], c[1]] for c in coords]
                 if len(coords) > 2:
                     # Close the polygon if it's a closed shape
                     if coords[0] == coords[-1]:
-                        geometry = {"type": "Polygon", "coordinates": [coords_2d]}
+                        geometry = {'type': 'Polygon', 'coordinates': [coords_2d]}
                     else:
-                        geometry = {"type": "LineString", "coordinates": coords_2d}
+                        geometry = {'type': 'LineString', 'coordinates': coords_2d}
                 else:
-                    geometry = {"type": "LineString", "coordinates": coords_2d}
-            elif tool == "point" and len(coords) == 1:
-                geometry = {"type": "Point", "coordinates": coords[0]}
+                    geometry = {'type': 'LineString', 'coordinates': coords_2d}
+            elif tool == 'point' and len(coords) == 1:
+                geometry = {'type': 'Point', 'coordinates': coords[0]}
             else:
                 # Fallback: if many points, make LineString
                 coords_2d = [[c[0], c[1]] for c in coords]
-                geometry = {"type": "LineString", "coordinates": coords_2d}
+                geometry = {'type': 'LineString', 'coordinates': coords_2d}
             
             # Build GeoJSON Feature
             feature = {
-                "type": "Feature",
-                "properties": {
-                    "id": region.get("id"),
-                    "name": name,
-                    "tool_type": tool,
-                    "tau_median": stats.get("tau_median", None),
-                    "tau_stdev": stats.get("tau_stdev", None),
-                    "photon_count": stats.get("photon_count", None),
-                    "photon_stdev": stats.get("photon_stdev", None)
+                'type': 'Feature',
+                'properties': {
+                    'id': region.get('id'),
+                    'name': name,
+                    'tool_type': tool,
+                    'tau_median': stats.get('tau_median', None),
+                    'tau_stdev': stats.get('tau_stdev', None),
+                    'photon_count': stats.get('photon_count', None),
+                    'photon_stdev': stats.get('photon_stdev', None)
                 },
-                "geometry": geometry
+                'geometry': geometry
             }
             
             # Write GeoJSON
             with open(geojson_file, 'w', encoding='utf-8') as f:
                 json.dump(feature, f, indent=2)
             
-            messagebox.showinfo("Export Success", f"Region exported to:\n{Path(geojson_file).name}")
+            messagebox.showinfo('Export Success', f"Region exported to:\n{Path(geojson_file).name}")
             print(f"[Export] Region GeoJSON: {geojson_file}")
         
         except Exception as e:
             import traceback
-            messagebox.showerror("Export Error", f"Failed to export: {e}")
+            messagebox.showerror('Export Error', f"Failed to export: {e}")
             traceback.print_exc()
     
     def _export_all_rois_csv(self):
-        """Export all regions to CSV with per-region statistics."""
         import csv
         from pathlib import Path
         from tkinter import filedialog, messagebox
         
         if not self.fov_preview or not self.fov_preview._roi_manager.regions:
-            messagebox.showwarning("No Data", "No regions to export.")
+            messagebox.showwarning('No Data', 'No regions to export.')
             return
         
         fov_stem = self._get_fov_stem()
-        init_name = f"{fov_stem}_roi_data.csv" if fov_stem else "roi_data.csv"
+        init_name = f"{fov_stem}_roi_data.csv" if fov_stem else 'roi_data.csv'
         csv_file = filedialog.asksaveasfilename(
-            title="Export ROI Data",
+            title='Export ROI Data',
             initialfile=init_name,
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
+            defaultextension='.csv',
+            filetypes=[('CSV files', '*.csv'), ('All files', '*.*')])
         if not csv_file:
             return
         
@@ -822,46 +798,46 @@ class RoiAnalysisPanel:
             # so we can emit tau1/amp1, tau2/amp2, ... columns dynamically
             max_exp = 0
             for region in regions:
-                taus_fit = region.get("statistics", {}).get("taus_ns_fit", [])
+                taus_fit = region.get('statistics', {}).get('taus_ns_fit', [])
                 if taus_fit:
                     max_exp = max(max_exp, len(taus_fit))
 
             for region in regions:
-                region_id = region.get("id", "")
-                name = region.get("name", "")
-                tool = region.get("tool", "")
+                region_id = region.get('id', '')
+                name = region.get('name', '')
+                tool = region.get('tool', '')
 
                 # Pixel-level lifetime statistics
-                stats = region.get("statistics", {})
-                tau_mean    = stats.get("tau_mean",    "N/A")
-                tau_median  = stats.get("tau_median",  "N/A")
-                tau_stdev   = stats.get("tau_stdev",   "N/A")
-                photon_count = stats.get("photon_count", "N/A")
-                photon_stdev = stats.get("photon_stdev", "N/A")
+                stats = region.get('statistics', {})
+                tau_mean    = stats.get('tau_mean',    'N/A')
+                tau_median  = stats.get('tau_median',  'N/A')
+                tau_stdev   = stats.get('tau_stdev',   'N/A')
+                photon_count = stats.get('photon_count', 'N/A')
+                photon_stdev = stats.get('photon_stdev', 'N/A')
 
                 # Decay-fit statistics (written by _fit_roi_decay)
-                tau_mean_fit = stats.get("tau_mean_fit", "N/A")
-                taus_fit     = stats.get("taus_ns_fit",  [])
-                amps_fit     = stats.get("amps_fit",     [])
-                chi2_r_fit   = stats.get("chi2_r_fit",   "N/A")
+                tau_mean_fit = stats.get('tau_mean_fit', 'N/A')
+                taus_fit     = stats.get('taus_ns_fit',  [])
+                amps_fit     = stats.get('amps_fit',     [])
+                chi2_r_fit   = stats.get('chi2_r_fit',   'N/A')
 
                 row = [region_id, name, tool,
                        tau_mean, tau_median, tau_stdev, photon_count, photon_stdev,
                        tau_mean_fit, chi2_r_fit]
                 for k in range(max_exp):
-                    row.append(taus_fit[k] if k < len(taus_fit) else "N/A")
-                    row.append(amps_fit[k] if k < len(amps_fit) else "N/A")
+                    row.append(taus_fit[k] if k < len(taus_fit) else 'N/A')
+                    row.append(amps_fit[k] if k < len(amps_fit) else 'N/A')
                 rows.append(row)
 
             if not rows:
-                messagebox.showwarning("No Data", "No regions to export.")
+                messagebox.showwarning('No Data', 'No regions to export.')
                 return
 
             # Build header: fixed columns + dynamic tau_k/amp_k pairs
-            header = ["ID", "Name", "Type",
-                      "Tau_mean_ns", "Tau_median_ns", "Tau_stdev_ns",
-                      "Photon_count", "Photon_stdev",
-                      "Tau_mean_fit_ns", "Chi2_r_fit"]
+            header = ['ID', 'Name', 'Type',
+                      'Tau_mean_ns', 'Tau_median_ns', 'Tau_stdev_ns',
+                      'Photon_count', 'Photon_stdev',
+                      'Tau_mean_fit_ns', 'Chi2_r_fit']
             for k in range(1, max_exp + 1):
                 header += [f"Tau{k}_fit_ns", f"Amp{k}_fit"]
 
@@ -871,31 +847,30 @@ class RoiAnalysisPanel:
                 writer.writerow(header)
                 writer.writerows(rows)
             
-            messagebox.showinfo("Export Success", f"ROI data exported to:\n{Path(csv_file).name}")
+            messagebox.showinfo('Export Success', f"ROI data exported to:\n{Path(csv_file).name}")
             print(f"[Export] ROI CSV: {csv_file}")
         
         except Exception as e:
             import traceback
-            messagebox.showerror("Export Error", f"Failed to export: {e}")
+            messagebox.showerror('Export Error', f"Failed to export: {e}")
             traceback.print_exc()
     
     def _export_all_rois_geojson(self):
-        """Export all regions to GeoJSON FeatureCollection."""
         import json
         from pathlib import Path
         from tkinter import filedialog, messagebox
         
         if not self.fov_preview or not self.fov_preview._roi_manager.regions:
-            messagebox.showwarning("No Data", "No regions to export.")
+            messagebox.showwarning('No Data', 'No regions to export.')
             return
         
         fov_stem = self._get_fov_stem()
-        init_name = f"{fov_stem}_all_rois.geojson" if fov_stem else "all_rois.geojson"
+        init_name = f"{fov_stem}_all_rois.geojson" if fov_stem else 'all_rois.geojson'
         geojson_file = filedialog.asksaveasfilename(
-            title="Export ROI Data as GeoJSON",
+            title='Export ROI Data as GeoJSON',
             initialfile=init_name,
-            defaultextension=".geojson",
-            filetypes=[("GeoJSON files", "*.geojson"), ("JSON files", "*.json"), ("All files", "*.*")])
+            defaultextension='.geojson',
+            filetypes=[('GeoJSON files', '*.geojson'), ('JSON files', '*.json'), ('All files', '*.*')])
         if not geojson_file:
             return
         
@@ -904,96 +879,95 @@ class RoiAnalysisPanel:
             features = []
             
             for region in regions:
-                region_id = region.get("id", "")
-                name = region.get("name", "")
-                tool = region.get("tool", "")
-                coords = region.get("coords", [])
-                stats = region.get("statistics", {})
+                region_id = region.get('id', '')
+                name = region.get('name', '')
+                tool = region.get('tool', '')
+                coords = region.get('coords', [])
+                stats = region.get('statistics', {})
                 
                 # Convert coordinates to GeoJSON geometry based on tool type
-                if tool == "ellipse" and len(coords) >= 2:
+                if tool == 'ellipse' and len(coords) >= 2:
                     x1, y1 = coords[0]
                     x2, y2 = coords[1]
                     geometry = {
-                        "type": "Polygon",
-                        "coordinates": [[
+                        'type': 'Polygon',
+                        'coordinates': [[
                             [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
                         ]]
                     }
-                elif tool == "rect" and len(coords) >= 2:
+                elif tool == 'rect' and len(coords) >= 2:
                     x1, y1 = coords[0]
                     x2, y2 = coords[1]
                     geometry = {
-                        "type": "Polygon",
-                        "coordinates": [[
+                        'type': 'Polygon',
+                        'coordinates': [[
                             [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
                         ]]
                     }
-                elif tool == "freehand" and len(coords) > 0:
+                elif tool == 'freehand' and len(coords) > 0:
                     coords_2d = [[c[0], c[1]] for c in coords]
                     if len(coords) > 2:
                         if coords[0] == coords[-1]:
-                            geometry = {"type": "Polygon", "coordinates": [coords_2d]}
+                            geometry = {'type': 'Polygon', 'coordinates': [coords_2d]}
                         else:
-                            geometry = {"type": "LineString", "coordinates": coords_2d}
+                            geometry = {'type': 'LineString', 'coordinates': coords_2d}
                     else:
-                        geometry = {"type": "LineString", "coordinates": coords_2d}
-                elif tool == "point" and len(coords) == 1:
-                    geometry = {"type": "Point", "coordinates": coords[0]}
+                        geometry = {'type': 'LineString', 'coordinates': coords_2d}
+                elif tool == 'point' and len(coords) == 1:
+                    geometry = {'type': 'Point', 'coordinates': coords[0]}
                 else:
                     coords_2d = [[c[0], c[1]] for c in coords]
-                    geometry = {"type": "LineString", "coordinates": coords_2d}
+                    geometry = {'type': 'LineString', 'coordinates': coords_2d}
                 
                 # Build feature
                 feature = {
-                    "type": "Feature",
-                    "properties": {
-                        "id": region_id,
-                        "name": name,
-                        "tool_type": tool,
-                        "tau_median": stats.get("tau_median"),
-                        "tau_stdev": stats.get("tau_stdev"),
-                        "photon_count": stats.get("photon_count"),
-                        "photon_stdev": stats.get("photon_stdev")
+                    'type': 'Feature',
+                    'properties': {
+                        'id': region_id,
+                        'name': name,
+                        'tool_type': tool,
+                        'tau_median': stats.get('tau_median'),
+                        'tau_stdev': stats.get('tau_stdev'),
+                        'photon_count': stats.get('photon_count'),
+                        'photon_stdev': stats.get('photon_stdev')
                     },
-                    "geometry": geometry
+                    'geometry': geometry
                 }
                 features.append(feature)
             
             if not features:
-                messagebox.showwarning("No Data", "No regions to export.")
+                messagebox.showwarning('No Data', 'No regions to export.')
                 return
             
             # Build FeatureCollection
             feature_collection = {
-                "type": "FeatureCollection",
-                "features": features
+                'type': 'FeatureCollection',
+                'features': features
             }
             
             # Write GeoJSON
             with open(geojson_file, 'w', encoding='utf-8') as f:
                 json.dump(feature_collection, f, indent=2)
             
-            messagebox.showinfo("Export Success", f"ROI data exported to:\n{Path(geojson_file).name}\n({len(features)} regions)")
+            messagebox.showinfo('Export Success', f"ROI data exported to:\n{Path(geojson_file).name}\n({len(features)} regions)")
             print(f"[Export] ROI GeoJSON: {geojson_file}")
         
         except Exception as e:
             import traceback
-            messagebox.showerror("Export Error", f"Failed to export: {e}")
+            messagebox.showerror('Export Error', f"Failed to export: {e}")
             traceback.print_exc()
     
     def _import_rois_geojson(self):
-        """Import regions from GeoJSON file."""
         import json
         from tkinter import filedialog, messagebox
         
         if not self.fov_preview or not self.fov_preview._roi_manager:
-            messagebox.showwarning("Not Ready", "FOV preview not initialized")
+            messagebox.showwarning('Not Ready', 'FOV preview not initialized')
             return
         
         geojson_file = filedialog.askopenfilename(
-            title="Import ROI Data from GeoJSON",
-            filetypes=[("GeoJSON files", "*.geojson"), ("JSON files", "*.json"), ("All files", "*.*")])
+            title='Import ROI Data from GeoJSON',
+            filetypes=[('GeoJSON files', '*.geojson'), ('JSON files', '*.json'), ('All files', '*.*')])
         if not geojson_file:
             return
         
@@ -1003,46 +977,46 @@ class RoiAnalysisPanel:
             
             # Handle both single Feature and FeatureCollection
             features = []
-            if data.get("type") == "FeatureCollection":
-                features = data.get("features", [])
-            elif data.get("type") == "Feature":
+            if data.get('type') == 'FeatureCollection':
+                features = data.get('features', [])
+            elif data.get('type') == 'Feature':
                 features = [data]
             else:
-                messagebox.showerror("Invalid GeoJSON", "File must contain Feature or FeatureCollection")
+                messagebox.showerror('Invalid GeoJSON', 'File must contain Feature or FeatureCollection')
                 return
             
             if not features:
-                messagebox.showwarning("No Data", "No features found in GeoJSON file")
+                messagebox.showwarning('No Data', 'No features found in GeoJSON file')
                 return
             
             imported_count = 0
             for feature in features:
                 try:
-                    props = feature.get("properties", {})
-                    geom = feature.get("geometry", {})
+                    props = feature.get('properties', {})
+                    geom = feature.get('geometry', {})
                     
-                    name = props.get("name", "imported-region")
-                    tool_type = props.get("tool_type", "freehand")  # Default to freehand
-                    geom_type = geom.get("type", "")
-                    coords_raw = geom.get("coordinates", [])
+                    name = props.get('name', 'imported-region')
+                    tool_type = props.get('tool_type', 'freehand')  # Default to freehand
+                    geom_type = geom.get('type', '')
+                    coords_raw = geom.get('coordinates', [])
                     
                     # Fallback: guess tool_type from geometry if not in properties
-                    if tool_type == "freehand" and geom_type in ["Polygon", "LineString"]:
-                        tool_type = "freehand" if geom_type == "LineString" else "freehand"
-                    elif geom_type == "Point":
-                        tool_type = "point"
+                    if tool_type == 'freehand' and geom_type in ['Polygon', 'LineString']:
+                        tool_type = 'freehand' if geom_type == 'LineString' else 'freehand'
+                    elif geom_type == 'Point':
+                        tool_type = 'point'
                     
                     # Convert geometry coordinates to region coordinates
                     coords = []
-                    if geom_type == "Point":
+                    if geom_type == 'Point':
                         coords = [coords_raw]
-                    elif geom_type == "LineString":
+                    elif geom_type == 'LineString':
                         coords = coords_raw
-                    elif geom_type == "Polygon":
+                    elif geom_type == 'Polygon':
                         # For polygons, use first ring (outer boundary)
                         if coords_raw and len(coords_raw[0]) > 0:
                             coords = coords_raw[0][:-1]  # Remove closing duplicate
-                    elif geom_type == "MultiPoint":
+                    elif geom_type == 'MultiPoint':
                         coords = coords_raw
                     else:
                         print(f"[Import] Unsupported geometry type: {geom_type}")
@@ -1057,19 +1031,19 @@ class RoiAnalysisPanel:
                     
                     # Restore statistics if available
                     regions = self.fov_preview._roi_manager.get_all_regions()
-                    region = next((r for r in regions if r.get("id") == region_id), None)
+                    region = next((r for r in regions if r.get('id') == region_id), None)
                     if region:
-                        tau_med = props.get("tau_median")
-                        tau_std = props.get("tau_stdev")
-                        photon_cnt = props.get("photon_count")
-                        photon_std = props.get("photon_stdev")
+                        tau_med = props.get('tau_median')
+                        tau_std = props.get('tau_stdev')
+                        photon_cnt = props.get('photon_count')
+                        photon_std = props.get('photon_stdev')
                         
                         if tau_med is not None or tau_std is not None or photon_cnt is not None or photon_std is not None:
-                            region["statistics"] = {
-                                "tau_median": tau_med,
-                                "tau_stdev": tau_std,
-                                "photon_count": photon_cnt,
-                                "photon_stdev": photon_std
+                            region['statistics'] = {
+                                'tau_median': tau_med,
+                                'tau_stdev': tau_std,
+                                'photon_count': photon_cnt,
+                                'photon_stdev': photon_std
                             }
                     
                     imported_count += 1
@@ -1085,19 +1059,18 @@ class RoiAnalysisPanel:
                 self.fov_preview._redraw_region_overlays()
                 self.fov_preview._save_regions_update()
                 self._refresh_region_list()
-                messagebox.showinfo("Import Success", f"Imported {imported_count} region(s) from {json.loads(open(geojson_file).read()).get('type', 'GeoJSON file')}")
+                messagebox.showinfo('Import Success', f"Imported {imported_count} region(s) from {json.loads(open(geojson_file).read()).get('type', 'GeoJSON file')}")
             else:
-                messagebox.showwarning("Import Failed", "No regions could be imported")
+                messagebox.showwarning('Import Failed', 'No regions could be imported')
         
         except json.JSONDecodeError as e:
-            messagebox.showerror("JSON Error", f"Invalid JSON file: {e}")
+            messagebox.showerror('JSON Error', f"Invalid JSON file: {e}")
         except Exception as e:
             import traceback
-            messagebox.showerror("Import Error", f"Failed to import: {e}")
+            messagebox.showerror('Import Error', f"Failed to import: {e}")
             traceback.print_exc()
     
     def _refresh_region_list(self):
-        """Update region list display from RoiManager."""
         import tkinter as tk
         
         self._refreshing = True
@@ -1123,11 +1096,11 @@ class RoiAnalysisPanel:
                 color = self.fov_preview._roi_manager.get_color(region_id)
                 
                 # Compute statistics if lifetime map available
-                tau_mean = "—"
-                tau_med = "—"
-                tau_stdev = "—"
-                photon_count = "—"
-                photon_stdev = "—"
+                tau_mean = '-'
+                tau_med = '-'
+                tau_stdev = '-'
+                photon_count = '-'
+                photon_stdev = '-'
                 
                 if self.fov_preview._lifetime_map is not None:
                     try:
@@ -1160,19 +1133,19 @@ class RoiAnalysisPanel:
                                 photon_stdev = f"{photon_stdev_val:.1f}"
                                 
                                 # Store statistics back in region data
-                                region["statistics"] = {
-                                    "tau_mean": tau_mean_val,
-                                    "tau_median": tau_med_val,
-                                    "tau_stdev": tau_stdev_val,
-                                    "photon_count": photon_count_val,
-                                    "photon_stdev": photon_stdev_val,
+                                region['statistics'] = {
+                                    'tau_mean': tau_mean_val,
+                                    'tau_median': tau_med_val,
+                                    'tau_stdev': tau_stdev_val,
+                                    'photon_count': photon_count_val,
+                                    'photon_stdev': photon_stdev_val,
                                 }
                     except Exception as e:
                         print(f"[ROI] Could not compute stats: {e}")
                 
                 # Add row with region_id as item ID (iid), not in values
                 values = (name, tool_type, tau_mean, tau_med, tau_stdev, photon_count, photon_stdev)
-                self._tree.insert("", "end", iid=str(region_id), values=values, tags=(f"color_{region_id}",))
+                self._tree.insert('', 'end', iid=str(region_id), values=values, tags=(f"color_{region_id}",))
                 
                 # Color the row by region
                 self._tree.tag_configure(f"color_{region_id}", foreground=color)
@@ -1185,7 +1158,6 @@ class RoiAnalysisPanel:
         finally:
             self._refreshing = False
     def add_region_from_drawing(self, tool_type: str, coords: List[List[float]]):
-        """Call this when a user finishes drawing a region"""
         if not self.fov_preview:
             return
         
@@ -1201,7 +1173,6 @@ class RoiAnalysisPanel:
 
     #  Per-ROI decay fitting
     def _fit_roi_decay(self):
-        """Extract the summed decay inside the selected ROI and refit it."""
         import tkinter as tk
         from tkinter import messagebox
         from pathlib import Path
@@ -1212,10 +1183,10 @@ class RoiAnalysisPanel:
         try:
             selected = self._tree.selection()
             if not selected:
-                messagebox.showwarning("No Region", "Select a region in the list first.")
+                messagebox.showwarning('No Region', 'Select a region in the list first.')
                 return
 
-            # Collect all selected region IDs — multiple selections are merged
+            # Collect all selected region IDs - multiple selections are merged
             selected_ids = []
             for iid in selected:
                 try:
@@ -1226,9 +1197,9 @@ class RoiAnalysisPanel:
             all_regions = self.fov_preview._roi_manager.get_all_regions()
             regions = [r for r in all_regions if r['id'] in selected_ids]
             if not regions:
-                messagebox.showwarning("Region Not Found",
-                                       "The selected region could not be found. "
-                                       "Try refreshing the region list.")
+                messagebox.showwarning('Region Not Found',
+                                       'The selected region could not be found. '
+                                       'Try refreshing the region list.')
                 return
 
             region_id   = regions[0]['id']   # primary id for writeback
@@ -1238,21 +1209,21 @@ class RoiAnalysisPanel:
             # Need callbacks wired by FLIMKitApp (step 1)
             if not callable(getattr(self, 'get_fit_params', None)) or \
                not callable(getattr(self, 'run_with_progress', None)):
-                messagebox.showwarning("Not Ready",
-                                       "Run a whole-FOV fit first — fit parameters "
-                                       "are needed to re-fit the ROI decay.")
+                messagebox.showwarning('Not Ready',
+                                       'Run a whole-FOV fit first - fit parameters '
+                                       'are needed to re-fit the ROI decay.')
                 return
 
             params = self.get_fit_params()
             ptu_path = params.get('ptu_path') or getattr(self.fov_preview, '_ptu_path', None)
             if not ptu_path or not Path(ptu_path).exists():
-                messagebox.showwarning("No PTU",
-                                       "No PTU file loaded — select a PTU file and run "
-                                       "a fit before using ROI decay fitting.")
+                messagebox.showwarning('No PTU',
+                                       'No PTU file loaded - select a PTU file and run '
+                                       'a fit before using ROI decay fitting.')
                 return
 
         except Exception as _setup_exc:
-            messagebox.showerror("Fit ROI Decay — Setup Error",
+            messagebox.showerror('Fit ROI Decay - Setup Error',
                                  f"Could not prepare parameters:\n{_setup_exc}")
             import traceback as _tb
             _tb.print_exc()
@@ -1289,11 +1260,11 @@ class RoiAnalysisPanel:
                 if m is not None:
                     union_mask |= m
             if not union_mask.any():
-                raise ValueError("ROI mask is empty — region(s) may be outside the image bounds.")
+                raise ValueError('ROI mask is empty - region(s) may be outside the image bounds.')
 
             roi_decay = stack[union_mask].sum(axis=0).astype(float)
             if roi_decay.max() == 0:
-                raise ValueError("ROI contains no photons.")
+                raise ValueError('ROI contains no photons.')
 
             if progress_callback:
                 progress_callback(2, 4)
@@ -1305,9 +1276,9 @@ class RoiAnalysisPanel:
                 decay_peak = int(np.argmax(roi_decay))
                 fwhm_bins  = max(1.0, 0.2e-9 / tcspc_res)   # ~200 ps FWHM
                 irf_prompt = gaussian_irf(n_bins, decay_peak, fwhm_bins)
-                irf_source = "gaussian (no IRF cached)"
+                irf_source = 'gaussian (no IRF cached)'
             else:
-                irf_source = "from main fit"
+                irf_source = 'from main fit'
 
             if progress_callback:
                 progress_callback(3, 4)
@@ -1364,18 +1335,17 @@ class RoiAnalysisPanel:
 
         self.run_with_progress(
             task,
-            task_name=f"ROI Decay Fit — {region_name}",
+            task_name=f"ROI Decay Fit - {region_name}",
             on_done=on_done,
         )
 
     def _view_last_fit_result(self):
-        """Reopen the fit result window for the currently selected region(s), if cached."""
         from tkinter import messagebox
         if not self.fov_preview:
             return
         selected = self._tree.selection()
         if not selected:
-            messagebox.showwarning("No Region", "Select a region in the list first.")
+            messagebox.showwarning('No Region', 'Select a region in the list first.')
             return
         selected_ids = []
         for iid in selected:
@@ -1387,17 +1357,15 @@ class RoiAnalysisPanel:
         result = self._last_fit_results.get(key)
         if result is None:
             messagebox.showinfo(
-                "No Fit Cached",
-                "No fit result cached for this selection.\n"
-                "Run \u22cf Fit ROI Decay first, or reload the session and refit "
-                "to regenerate the plot (numeric stats are saved in the .npz).")
+                'No Fit Cached',
+                'No fit result cached for this selection.\n'
+                'Run \u22cf Fit ROI Decay first, or reload the session and refit '
+                'to regenerate the plot (numeric stats are saved in the .npz).')
             return
         self._show_roi_fit_result(result)
 
     def _show_roi_fit_result(self, result: dict):
-        """Pop up a window showing the ROI decay, IRF, fitted model and residuals."""
         _show_fit_result_window(result)
     
     def grid(self, **kw):
-        """Grid the frame."""
         self.frame.grid(**kw)

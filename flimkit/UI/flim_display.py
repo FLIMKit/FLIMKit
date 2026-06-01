@@ -18,8 +18,6 @@ def compute_intensity_weighted_lifetime(
     intensity,
     n_exp=2,
 ) -> np.ndarray:
-    """τ_int = Σ(τᵢ × aᵢ) / total_intensity. Returns (Y,X) float32; unfitted=NaN."""
-    # Pre-computed shortcuts (fastest paths)
     if 'tau_mean_int' in pixel_maps:
         return np.asarray(pixel_maps['tau_mean_int'], dtype=np.float32)
     if 'tau_mean_amp' in pixel_maps:
@@ -33,7 +31,7 @@ def compute_intensity_weighted_lifetime(
     amp_sum = np.zeros(shape, dtype=np.float64)
     tau_weighted = np.zeros(shape, dtype=np.float64)
 
-    # Sum amplitude-weighted lifetimes — key format is 'tau1', 'tau2', ... (no underscore)
+    # Sum amplitude-weighted lifetimes - key format is 'tau1', 'tau2', ... (no underscore)
     for i in range(1, n_exp + 1):
         tau_key = f'tau{i}'   # was incorrectly f'tau_{i}'
         amp_key = f'a{i}'
@@ -100,8 +98,6 @@ def compute_region_stats(
     region_mask,
     full_stats=False,
 ):
-    """Extract region mask, compute median_tau, mean_amplitude, photon_count, n_pixels. Excludes NaN."""
-    # Extract pixels in region
     region_lifetime = lifetime_map[region_mask]
     region_intensity = intensity_map[region_mask]
 

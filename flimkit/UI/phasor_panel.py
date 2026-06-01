@@ -5,13 +5,13 @@ from pathlib import Path
 import numpy as np
 
 import matplotlib
-matplotlib.use("TkAgg")
+matplotlib.use('TkAgg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 from matplotlib.patches import Ellipse, Polygon as MplPolygon
 from matplotlib.path import Path as MplPath
 
-# phasorpy v0.10 — all signatures verified
+# phasorpy v0.10 - all signatures verified
 from phasorpy.cursor import mask_from_elliptic_cursor, pseudo_color
 from phasorpy.lifetime import phasor_to_apparent_lifetime, phasor_semicircle_intersect
 from phasorpy.component import phasor_component_fraction
@@ -32,14 +32,13 @@ def _tau_phi_scalar(g, s, freq_mhz):
     """Return τ_φ (ns) for a single (G, S) point.
 
     phasorpy.phasor_to_apparent_lifetime returns a scalar (not array) when
-    the inputs are Python floats — avoids the float(1-element-array) TypeError.
+    the inputs are Python floats - avoids the float(1-element-array) TypeError.
     """
     tau_phi, _ = phasor_to_apparent_lifetime(float(g), float(s), freq_mhz)
     return float(tau_phi)
 
 
 class PhasorViewPanel:
-    """Embedded image-top / phasor-bottom interactive panel."""
 
     def __init__(self, parent, max_cursors=6):
         self.max_cursors = max_cursors
@@ -94,104 +93,104 @@ class PhasorViewPanel:
         self._build_figure()
 
         self._status_var = tk.StringVar(
-            value="Load a PTU file to begin phasor analysis.")
+            value='Load a PTU file to begin phasor analysis.')
         ttk.Label(self.frame, textvariable=self._status_var,
-                  foreground="grey", font=("Courier", 8)).grid(
-            row=2, column=0, sticky="w", padx=4, pady=(0, 2))
+                  foreground='grey', font=('Courier', 8)).grid(
+            row=2, column=0, sticky='w', padx=4, pady=(0, 2))
 
 
     def _build_controls(self):
         ctrl = ttk.Frame(self.frame)
-        ctrl.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        ctrl.grid(row=0, column=0, sticky='ew', padx=4, pady=(4, 2))
 
         #Row 0: cursor management + mode + sliders 
         row0 = ttk.Frame(ctrl)
-        row0.pack(side="top", fill="x")
+        row0.pack(side='top', fill='x')
 
-        ttk.Button(row0, text="✕  Clear all",
-                   command=self._on_clear).pack(side="left", padx=(0, 4))
-        ttk.Button(row0, text="↩  Undo",
-                   command=self._on_undo).pack(side="left", padx=(0, 8))
-        ttk.Button(row0, text="Save session",
-                   command=self._on_save).pack(side="left", padx=(0, 12))
+        ttk.Button(row0, text='✕  Clear all',
+                   command=self._on_clear).pack(side='left', padx=(0, 4))
+        ttk.Button(row0, text='↩  Undo',
+                   command=self._on_undo).pack(side='left', padx=(0, 8))
+        ttk.Button(row0, text='Save session',
+                   command=self._on_save).pack(side='left', padx=(0, 12))
 
         # Drawing mode toggle
-        ttk.Separator(row0, orient="vertical").pack(
-            side="left", fill="y", padx=(0, 8))
-        ttk.Label(row0, text="Mode:").pack(side="left")
-        ttk.Radiobutton(row0, text="Ellipse", variable=self._mode_var,
+        ttk.Separator(row0, orient='vertical').pack(
+            side='left', fill='y', padx=(0, 8))
+        ttk.Label(row0, text='Mode:').pack(side='left')
+        ttk.Radiobutton(row0, text='Ellipse', variable=self._mode_var,
                         value='ellipse',
                         command=self._on_mode_change).pack(
-            side="left", padx=(2, 2))
-        ttk.Radiobutton(row0, text="Polygon", variable=self._mode_var,
+            side='left', padx=(2, 2))
+        ttk.Radiobutton(row0, text='Polygon', variable=self._mode_var,
                         value='poly',
                         command=self._on_mode_change).pack(
-            side="left", padx=(0, 8))
+            side='left', padx=(0, 8))
 
         # Ellipse-specific controls on their own row so labels/sliders are not
         # clipped by the top-row buttons on narrower window widths.
         row_params = ttk.Frame(ctrl)
-        row_params.pack(side="top", fill="x", pady=(2, 0))
+        row_params.pack(side='top', fill='x', pady=(2, 0))
         self._ellipse_ctrl_frame = ttk.Frame(row_params)
-        self._ellipse_ctrl_frame.pack(side="left")
-        ttk.Label(self._ellipse_ctrl_frame, text="Radius:").pack(side="left")
+        self._ellipse_ctrl_frame.pack(side='left')
+        ttk.Label(self._ellipse_ctrl_frame, text='Radius:').pack(side='left')
         ttk.Scale(self._ellipse_ctrl_frame, variable=self._radius,
-                  from_=0.01, to=0.15, orient="horizontal", length=90,
+                  from_=0.01, to=0.15, orient='horizontal', length=90,
                   command=lambda _: self._on_param_change()).pack(
-            side="left", padx=(2, 4))
+            side='left', padx=(2, 4))
         self._radius_lbl = ttk.Label(self._ellipse_ctrl_frame,
-                                     text="0.050", width=5)
-        self._radius_lbl.pack(side="left", padx=(0, 14))
+                                     text='0.050', width=5)
+        self._radius_lbl.pack(side='left', padx=(0, 14))
 
-        ttk.Label(self._ellipse_ctrl_frame, text="Minor/major:").pack(
-            side="left")
+        ttk.Label(self._ellipse_ctrl_frame, text='Minor/major:').pack(
+            side='left')
         ttk.Scale(self._ellipse_ctrl_frame, variable=self._ratio,
-                  from_=0.10, to=1.00, orient="horizontal", length=70,
+                  from_=0.10, to=1.00, orient='horizontal', length=70,
                   command=lambda _: self._on_param_change()).pack(
-            side="left", padx=(2, 4))
+            side='left', padx=(2, 4))
         self._ratio_lbl = ttk.Label(self._ellipse_ctrl_frame,
-                                    text="0.60", width=4)
-        self._ratio_lbl.pack(side="left")
+                                    text='0.60', width=4)
+        self._ratio_lbl.pack(side='left')
 
-        self._radius.trace_add("write", lambda *_: self._update_param_labels())
-        self._ratio.trace_add("write",  lambda *_: self._update_param_labels())
+        self._radius.trace_add('write', lambda *_: self._update_param_labels())
+        self._ratio.trace_add('write',  lambda *_: self._update_param_labels())
 
         # Row 1: decay fitting buttons 
         row1 = ttk.Frame(ctrl)
-        row1.pack(side="top", fill="x", pady=(2, 0))
-        ttk.Button(row1, text="⚗ Fit Cursor Decay",
-                   command=self._fit_cursor_decay).pack(side="left", padx=(0, 4))
-        ttk.Button(row1, text="View Fit",
-                   command=self._view_last_fit_result).pack(side="left")
+        row1.pack(side='top', fill='x', pady=(2, 0))
+        ttk.Button(row1, text='⚗ Fit Cursor Decay',
+                   command=self._fit_cursor_decay).pack(side='left', padx=(0, 4))
+        ttk.Button(row1, text='View Fit',
+                   command=self._view_last_fit_result).pack(side='left')
 
         # Row 2: phasor filter controls
         row_filt = ttk.Frame(ctrl)
-        row_filt.pack(side="top", fill="x", pady=(2, 0))
-        ttk.Label(row_filt, text="Phasor filter:").pack(side="left")
+        row_filt.pack(side='top', fill='x', pady=(2, 0))
+        ttk.Label(row_filt, text='Phasor filter:').pack(side='left')
         ttk.Combobox(
             row_filt, textvariable=self._filter_method,
             values=['none', 'gaussian', 'median', 'wavelet'],
             state='readonly', width=9,
-        ).pack(side="left", padx=(2, 6))
-        self._filter_method.trace_add("write", lambda *_: self._on_filter_method_change())
+        ).pack(side='left', padx=(2, 6))
+        self._filter_method.trace_add('write', lambda *_: self._on_filter_method_change())
 
         self._filt_sigma_frame = ttk.Frame(row_filt)
-        self._filt_sigma_frame.pack(side="left")
-        ttk.Label(self._filt_sigma_frame, text="σ:").pack(side="left")
+        self._filt_sigma_frame.pack(side='left')
+        ttk.Label(self._filt_sigma_frame, text='σ:').pack(side='left')
         ttk.Spinbox(self._filt_sigma_frame, textvariable=self._filter_sigma,
-                    from_=0.5, to=10.0, increment=0.5, width=5).pack(side="left", padx=(2, 6))
+                    from_=0.5, to=10.0, increment=0.5, width=5).pack(side='left', padx=(2, 6))
 
         self._filt_size_frame = ttk.Frame(row_filt)
-        self._filt_size_frame.pack(side="left")
-        ttk.Label(self._filt_size_frame, text="size:").pack(side="left")
+        self._filt_size_frame.pack(side='left')
+        ttk.Label(self._filt_size_frame, text='size:').pack(side='left')
         ttk.Spinbox(self._filt_size_frame, textvariable=self._filter_size,
-                    from_=3, to=15, increment=2, width=4).pack(side="left", padx=(2, 6))
+                    from_=3, to=15, increment=2, width=4).pack(side='left', padx=(2, 6))
         self._filt_size_frame.pack_forget()   # hidden until median/wavelet selected
 
-        ttk.Button(row_filt, text="Apply",
-                   command=self._on_filter_apply).pack(side="left", padx=(0, 4))
-        ttk.Button(row_filt, text="Reset",
-                   command=self._on_filter_reset).pack(side="left")
+        ttk.Button(row_filt, text='Apply',
+                   command=self._on_filter_apply).pack(side='left', padx=(0, 4))
+        ttk.Button(row_filt, text='Reset',
+                   command=self._on_filter_reset).pack(side='left')
 
     def _update_param_labels(self):
         self._radius_lbl.configure(text=f"{self._radius.get():.3f}")
@@ -226,7 +225,7 @@ class PhasorViewPanel:
                 self._real_raw.copy(), self._imag_raw.copy(), method,
                 mean=self._mean, **kwargs)
         except Exception as exc:
-            messagebox.showerror("Filter error", str(exc))
+            messagebox.showerror('Filter error', str(exc))
             return
         self._redraw_phasor()
         self._redraw_cursors()
@@ -245,15 +244,15 @@ class PhasorViewPanel:
         self._redraw_phasor()
         self._redraw_cursors()
         self._canvas.draw_idle()
-        self._status_var.set("Phasor filter reset.")
+        self._status_var.set('Phasor filter reset.')
 
     def _build_figure(self):
         fig_frame = ttk.Frame(self.frame)
-        fig_frame.grid(row=1, column=0, sticky="nsew")
+        fig_frame.grid(row=1, column=0, sticky='nsew')
         fig_frame.columnconfigure(0, weight=1)
         fig_frame.rowconfigure(0, weight=1)
 
-        self._fig = Figure(figsize=(5, 7), dpi=100, facecolor="black")
+        self._fig = Figure(figsize=(5, 7), dpi=100, facecolor='black')
         gs = self._fig.add_gridspec(
             2, 1, height_ratios=[1, 1.8],
             hspace=0.38, left=0.10, right=0.95, top=0.95, bottom=0.07)
@@ -263,31 +262,31 @@ class PhasorViewPanel:
         self._draw_placeholder()
 
         self._canvas = FigureCanvasTkAgg(self._fig, master=fig_frame)
-        self._canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+        self._canvas.get_tk_widget().grid(row=0, column=0, sticky='nsew')
 
         tb_frame = ttk.Frame(fig_frame)
-        tb_frame.grid(row=1, column=0, sticky="ew")
+        tb_frame.grid(row=1, column=0, sticky='ew')
         self._toolbar = NavigationToolbar2Tk(self._canvas, tb_frame,
                                               pack_toolbar=True)
         self._toolbar.update()
 
-        self._cid = self._canvas.mpl_connect("button_press_event",
+        self._cid = self._canvas.mpl_connect('button_press_event',
                                                self._on_click)
-        self._canvas.mpl_connect("motion_notify_event",   self._on_motion)
-        self._canvas.mpl_connect("button_release_event",  self._on_release)
-        self._canvas.mpl_connect("key_press_event",       self._on_key)
+        self._canvas.mpl_connect('motion_notify_event',   self._on_motion)
+        self._canvas.mpl_connect('button_release_event',  self._on_release)
+        self._canvas.mpl_connect('key_press_event',       self._on_key)
 
     def _draw_placeholder(self):
         for ax in (self._ax_img, self._ax_ph):
-            ax.set_facecolor("black")
+            ax.set_facecolor('black')
             ax.tick_params(left=False, bottom=False,
                            labelleft=False, labelbottom=False)
         self._ax_img.set_title(
-            "FOV image  (pseudo-colour overlay once cursors are placed)",
-            fontsize=9, color="#999999")
+            'FOV image  (pseudo-colour overlay once cursors are placed)',
+            fontsize=9, color='#999999')
         self._ax_ph.set_title(
-            "Phasor plot  —  load a file to begin",
-            fontsize=9, color="#999999")
+            'Phasor plot  -  load a file to begin',
+            fontsize=9, color='#999999')
 
     def set_data(self,
                  real_cal,
@@ -322,7 +321,6 @@ class PhasorViewPanel:
             f"|  click phasor to place cursor")
 
     def load_session(self, session, min_photons=0.01):
-        """Restore a previously saved session dict (from phasor_launcher)."""
         self.set_data(
             session['real_cal'], session['imag_cal'],
             session['mean'], session['frequency'],
@@ -352,7 +350,6 @@ class PhasorViewPanel:
             self._analyse()
 
     def get_session_dict(self):
-        """Return a dict compatible with phasor_launcher.save_session."""
         r  = self._radius.get()
         rm = r * self._ratio.get()
         cursors = []
@@ -377,7 +374,6 @@ class PhasorViewPanel:
         )
 
     def _redraw_phasor(self):
-        """Re-draw the phasor histogram background (no cursors)."""
         self._ax_ph.cla()
         if self._real is None:
             return
@@ -388,13 +384,12 @@ class PhasorViewPanel:
         pp.hist2d(g, s, cmap='inferno', bins=256)
         self._ax_ph.set_facecolor('black')
         self._ax_ph.set_title(
-            f"Phasor  ({self._freq:.1f} MHz)  —  click to place cursor",
+            f"Phasor  ({self._freq:.1f} MHz)  -  click to place cursor",
             fontsize=9)
         self._redraw_fret_overlay()
         self._redraw_peaks_overlay()
 
     def _redraw_cursors(self):
-        """Remove old cursor artists and re-draw all current cursors."""
         for art in self._cursor_artists:
             try:
                 art.remove()
@@ -472,7 +467,6 @@ class PhasorViewPanel:
             self._update_poly_artist()
 
     def _redraw_image(self, masks):
-        """Update the intensity/overlay image panel."""
         self._ax_img.cla()
         self._ax_img.set_facecolor('black')
         if self._disp is None:
@@ -493,24 +487,22 @@ class PhasorViewPanel:
         else:
             self._ax_img.imshow(self._disp, cmap='inferno',
                                 origin='upper', interpolation='nearest')
-            title = "FOV image  (place cursors on phasor to colourize)"
+            title = 'FOV image  (place cursors on phasor to colourize)'
 
         self._ax_img.set_title(title, fontsize=9)
-        self._ax_img.set_xlabel("X (px)", fontsize=8)
-        self._ax_img.set_ylabel("Y (px)", fontsize=8)
+        self._ax_img.set_xlabel('X (px)', fontsize=8)
+        self._ax_img.set_ylabel('Y (px)', fontsize=8)
         self._ax_img.tick_params(labelsize=7)
 
     #  FRET trajectory overlay
 
     def overlay_fret_trajectory(self, traj):
-        """Overlay a FRET trajectory dict (from predict_fret_trajectory) on the phasor."""
         self._fret_trajectory = traj
         self._redraw_phasor()
         self._redraw_cursors()
         self._canvas.draw_idle()
 
     def clear_fret_overlay(self):
-        """Remove any FRET trajectory and peaks overlay from the phasor."""
         self._fret_trajectory = None
         self._peak_results = None
         self._redraw_phasor()
@@ -536,7 +528,6 @@ class PhasorViewPanel:
     #  Peaks overlay
 
     def overlay_peaks(self, peaks):
-        """Overlay detected phasor peaks on the phasor plot."""
         self._peak_results = peaks
         self._redraw_phasor()
         self._redraw_cursors()
@@ -557,7 +548,6 @@ class PhasorViewPanel:
                              fontweight='bold', zorder=16)
 
     def _analyse(self):
-        """Compute per-cursor masks, update image overlay, print stats."""
         if self._real is None or not self._cursors:
             self._redraw_image(None)
             self._canvas.draw_idle()
@@ -599,10 +589,10 @@ class PhasorViewPanel:
             lo  = float(np.nanpercentile(tau_phi, 5))
             hi  = float(np.nanpercentile(tau_phi, 95))
             print(f"  C{ci+1} ({self._cursors[ci]['color']}):  "
-                  f"{n_px} px  |  τ_φ = {lo:.2f}–{hi:.2f} ns  "
+                  f"{n_px} px  |  τ_φ = {lo:.2f}-{hi:.2f} ns  "
                   f"(median {med:.2f} ns)")
 
-        # Two-component decomposition — only for the first two ellipse cursors
+        # Two-component decomposition - only for the first two ellipse cursors
         ellipse_curs = [c for c in self._cursors
                         if c.get('type', 'ellipse') == 'ellipse']
         if len(ellipse_curs) >= 2:
@@ -628,8 +618,7 @@ class PhasorViewPanel:
         self._canvas.draw_idle()
 
     def _mask_from_polygon(self, vertices):
-        """Boolean mask: True where (G, S) lies inside the polygon."""
-        verts = np.asarray(vertices, dtype=float)  # (N, 2) — columns: G, S
+        verts = np.asarray(vertices, dtype=float)  # (N, 2) - columns: G, S
         pts   = np.column_stack([self._real.ravel(), self._imag.ravel()])
         inside = MplPath(verts).contains_points(pts)
         return inside.reshape(self._real.shape)
@@ -640,7 +629,7 @@ class PhasorViewPanel:
         if self._toolbar.mode != '':
             return
 
-        # Right-click in poly mode: close/cancel — handle before anything else
+        # Right-click in poly mode: close/cancel - handle before anything else
         if event.button == 3 and self._mode_var.get() == 'poly':
             self._on_click_poly(event)
             return
@@ -658,7 +647,7 @@ class PhasorViewPanel:
             if hit is not None:
                 self._drag_idx  = hit
                 self._drag_last = (event.xdata, event.ydata)
-                self._status_var.set(f"Dragging C{hit + 1} — release to drop.")
+                self._status_var.set(f"Dragging C{hit + 1} - release to drop.")
                 return
 
         # No hit → create new cursor
@@ -670,7 +659,7 @@ class PhasorViewPanel:
     def _on_click_ellipse(self, event):
         if len(self._cursors) >= self.max_cursors:
             self._status_var.set(
-                f"Max {self.max_cursors} cursors — clear or undo first.")
+                f"Max {self.max_cursors} cursors - clear or undo first.")
             return
         idx = len(self._cursors) % len(_COLORS)
         self._cursors.append(dict(
@@ -700,17 +689,17 @@ class PhasorViewPanel:
             return
         if not self._poly_pts and len(self._cursors) >= self.max_cursors:
             self._status_var.set(
-                f"Max {self.max_cursors} cursors — clear or undo first.")
+                f"Max {self.max_cursors} cursors - clear or undo first.")
             return
         self._poly_pts.append((event.xdata, event.ydata))
         self._update_poly_artist()
         n = len(self._poly_pts)
         self._status_var.set(
             f"Polygon: {n} vert{'ex' if n == 1 else 'ices'}  "
-            f"— right-click or Enter to close (need ≥ 3)")
+            f"- right-click or Enter to close (need ≥ 3)")
 
     def _on_motion(self, event):
-        # Drag in progress — handle even if cursor drifts outside axes
+        # Drag in progress - handle even if cursor drifts outside axes
         if self._drag_idx is not None:
             if event.inaxes is self._ax_ph and event.xdata is not None:
                 self._do_drag(event.xdata, event.ydata)
@@ -734,7 +723,6 @@ class PhasorViewPanel:
         self._canvas.draw_idle()
 
     def _on_release(self, event):
-        """Mouse-button release: commit drag and recompute masks."""
         if self._drag_idx is None:
             return
         idx = self._drag_idx
@@ -751,7 +739,6 @@ class PhasorViewPanel:
             f"C{idx + 1} moved.  {len(self._cursors)} cursor(s) active.")
 
     def _do_drag(self, g: float, s: float):
-        """Translate the cursor under drag by the delta from last event."""
         dx = g - self._drag_last[0]
         dy = s - self._drag_last[1]
         cur = self._cursors[self._drag_idx]
@@ -766,7 +753,6 @@ class PhasorViewPanel:
         self._canvas.draw_idle()
 
     def _hit_test(self, g, s):
-        """Return index of the cursor that contains or is near (g, s), else None."""
         r = self._radius.get()
         for i, cur in enumerate(self._cursors):
             if cur.get('type', 'ellipse') == 'poly':
@@ -790,15 +776,14 @@ class PhasorViewPanel:
         if self._mode_var.get() == 'poly':
             self._ellipse_ctrl_frame.pack_forget()
             self._status_var.set(
-                "Polygon mode: left-click to add vertices, "
-                "right-click or Enter to close (need ≥ 3), Esc to cancel.")
+                'Polygon mode: left-click to add vertices, '
+                'right-click or Enter to close (need ≥ 3), Esc to cancel.')
         else:
             self._cancel_polygon()
             self._ellipse_ctrl_frame.pack(side='left')
-            self._status_var.set("Ellipse mode: click phasor to place cursor.")
+            self._status_var.set('Ellipse mode: click phasor to place cursor.')
 
     def _update_poly_artist(self, live_pt=None):
-        """Redraw the in-progress polygon rubber-band on the phasor axes."""
         if self._poly_line is not None:
             for art in self._poly_line:
                 try:
@@ -831,7 +816,6 @@ class PhasorViewPanel:
         self._poly_line = artists
 
     def _commit_polygon(self):
-        """Close the in-progress polygon and register it as a cursor."""
         if len(self._poly_pts) < 3:
             return
         if self._poly_line is not None:
@@ -856,7 +840,6 @@ class PhasorViewPanel:
             f"Left-click to start another.")
 
     def _cancel_polygon(self):
-        """Discard the in-progress polygon without committing."""
         if self._poly_line is not None:
             for art in self._poly_line:
                 try:
@@ -867,7 +850,7 @@ class PhasorViewPanel:
         self._poly_pts.clear()
         self._canvas.draw_idle()
         self._status_var.set(
-            "Polygon cancelled. Left-click to start a new one.")
+            'Polygon cancelled. Left-click to start a new one.')
 
     #  Per-cursor decay fitting
     def _build_cursor_union_mask(self):
@@ -895,30 +878,29 @@ class PhasorViewPanel:
         return union
 
     def _fit_cursor_decay(self):
-        """Fit the summed decay from all phasor-cursor gated pixels."""
         from tkinter import messagebox
         from pathlib import Path
         from flimkit.UI.roi_tools import _ask_roi_fit_options
 
         # Guards
         if self._real is None:
-            messagebox.showwarning("No Phasor Data",
-                                   "Load a PTU file and compute phasors first.")
+            messagebox.showwarning('No Phasor Data',
+                                   'Load a PTU file and compute phasors first.')
             return
         if not self._cursors:
-            messagebox.showwarning("No Cursors",
-                                   "Place at least one cursor on the phasor plot first.")
+            messagebox.showwarning('No Cursors',
+                                   'Place at least one cursor on the phasor plot first.')
             return
         if not self._ptu_path or not Path(self._ptu_path).exists():
-            messagebox.showwarning("No PTU",
-                                   "PTU file path not found.\n"
-                                   "Re-load the phasor data and try again.")
+            messagebox.showwarning('No PTU',
+                                   'PTU file path not found.\n'
+                                   'Re-load the phasor data and try again.')
             return
         if not callable(getattr(self, 'run_with_progress', None)) or \
            not callable(getattr(self, 'get_fit_params', None)):
-            messagebox.showwarning("Not Ready",
-                                   "Fitting callbacks are not wired.\n"
-                                   "Run a whole-FOV fit first to initialise parameters.")
+            messagebox.showwarning('Not Ready',
+                                   'Fitting callbacks are not wired.\n'
+                                   'Run a whole-FOV fit first to initialise parameters.')
             return
 
         params = self.get_fit_params()
@@ -940,8 +922,8 @@ class PhasorViewPanel:
         # Snapshot the mask now (cursors might move before the thread runs)
         union_mask_snapshot = self._build_cursor_union_mask()
         if union_mask_snapshot is None or not union_mask_snapshot.any():
-            messagebox.showwarning("Empty Selection",
-                                   "The current cursor(s) select no valid pixels.")
+            messagebox.showwarning('Empty Selection',
+                                   'The current cursor(s) select no valid pixels.')
             return
 
         def task(progress_callback=None, cancel_event=None):
@@ -967,12 +949,12 @@ class PhasorViewPanel:
             stack = ptu.pixel_stack(channel=channel, binning=inferred_binning)
             gated_decay = stack[union_mask_snapshot].sum(axis=0).astype(float)
             if gated_decay.max() == 0:
-                raise ValueError("Cursor gate contains no photons.")
+                raise ValueError('Cursor gate contains no photons.')
 
             if progress_callback:
                 progress_callback(2, 4)
 
-            # IRF resolution — same fallback chain as ROI fitting
+            # IRF resolution - same fallback chain as ROI fitting
             irf_prompt = irf_cached
             if (irf_prompt is None
                     or not hasattr(irf_prompt, '__len__')
@@ -981,9 +963,9 @@ class PhasorViewPanel:
                 peak_bin  = int(_np.argmax(gated_decay))
                 fwhm_bins = max(1.0, 0.2e-9 / tcspc_res)
                 irf_prompt = gaussian_irf(n_bins, peak_bin, fwhm_bins)
-                irf_source = "gaussian (no IRF cached)"
+                irf_source = 'gaussian (no IRF cached)'
             else:
-                irf_source = "from main fit"
+                irf_source = 'from main fit'
 
             if progress_callback:
                 progress_callback(3, 4)
@@ -1027,18 +1009,17 @@ class PhasorViewPanel:
 
         self.run_with_progress(
             task_fn   = task,
-            task_name = f"Fitting cursor-gated decay ({label})…",
+            task_name = f"Fitting cursor-gated decay ({label})...",
             on_done   = on_done,
         )
 
     def _view_last_fit_result(self):
-        """Reopen the last cursor fit result window without refitting."""
         from tkinter import messagebox
         if self._last_fit_result is None:
             messagebox.showinfo(
-                "No Fit Cached",
-                "No fit result cached yet.\n"
-                "Run ⚗ Fit Cursor Decay first.")
+                'No Fit Cached',
+                'No fit result cached yet.\n'
+                'Run ⚗ Fit Cursor Decay first.')
             return
         from flimkit.UI.roi_tools import _show_roi_fit_result_standalone
         _show_roi_fit_result_standalone(self._last_fit_result)
@@ -1061,7 +1042,7 @@ class PhasorViewPanel:
         self._redraw_image(masks=None)
         self._canvas.draw_idle()
         self._notify_change()
-        self._status_var.set("Cleared.  Click phasor to place cursors.")
+        self._status_var.set('Cleared.  Click phasor to place cursors.')
 
     def _on_undo(self):
         if self._real is None:
@@ -1096,7 +1077,6 @@ class PhasorViewPanel:
             f"{len(self._cursors)} cursor(s)  |  last cursor removed.")
 
     def _notify_change(self):
-        """Fire the optional on_change callback after cursor/param edits."""
         if self.on_change is not None:
             try:
                 self.on_change(self)
@@ -1104,7 +1084,6 @@ class PhasorViewPanel:
                 print(f"[PhasorViewPanel] on_change callback error: {e}")
 
     def _on_param_change(self):
-        """Radius / ratio slider changed — recompute immediately if cursors exist."""
         if self._cursors and self._real is not None:
             self._redraw_phasor()
             self._redraw_cursors()
@@ -1113,13 +1092,13 @@ class PhasorViewPanel:
 
     def _on_save(self):
         if self._real is None:
-            messagebox.showwarning("No data", "No phasor data loaded yet.")
+            messagebox.showwarning('No data', 'No phasor data loaded yet.')
             return
         path = filedialog.asksaveasfilename(
-            title="Save phasor session",
-            defaultextension=".npz",
-            initialfile="phasor_session.npz",
-            filetypes=[("NumPy archive", "*.npz"), ("All files", "*")])
+            title='Save phasor session',
+            defaultextension='.npz',
+            initialfile='phasor_session.npz',
+            filetypes=[('NumPy archive', '*.npz'), ('All files', '*')])
         if not path:
             return
         try:
@@ -1137,4 +1116,4 @@ class PhasorViewPanel:
             )
             self._status_var.set(f"Session saved → {Path(path).name}")
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc))
+            messagebox.showerror('Save failed', str(exc))
