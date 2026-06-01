@@ -50,3 +50,76 @@ class ProgressWindow:
 
     def was_cancelled(self):
         return self.cancelled.is_set()
+
+
+class ProgressWindowManager:
+    """Manages nested progress windows for sub-operations, callable from worker threads."""
+    
+    def __init__(self, root):
+        self.root = root
+        self.windows = {}  # task_id -> ProgressWindow
+        self.counter = 0
+        self.lock = threading.Lock()
+    
+    def create_progress_window(self, task_name="Processing..."):
+        """Create a progress window and return its ID. Thread-safe."""
+        with self.lock:
+            window_id = self.counter
+            self.counter += 1
+        
+        # Create window on main thread
+        window_ref = [None]
+        event = threading.Event()
+        
+        def create_window():
+            window_ref[0] = ProgressWindow(self.root, task_name=task_name)
+            with self.lock:
+                self.windows[window_id] = window_ref[0]
+            event.set()
+        
+        self.root.after(0, create_window)
+        event.wait(timeout=5)  # Wait up to 5 seconds for window to be created
+        return window_id
+    
+    def update_progress(self, window_id, current, total):
+        """Update progress for a window. Thread-safe."""
+        def update():
+            if window_id in self.windows:
+                try:
+                    self.windows[window_id].set_progress(current, maximum=total)
+                except Exception:
+                    pass  # Window may have been closed
+        
+        self.root.after(0, update)
+    
+    def set_status(self, window_id, msg):
+        """Set status message for a window. Thread-safe."""
+        def update():
+            if window_id in self.windows:
+                try:
+                    self.windows[window_id].set_status(msg)
+                except Exception:
+                    pass
+        
+        self.root.after(0, update)
+    
+    def close_window(self, window_id):
+        """Close a progress window. Thread-safe."""
+        def close():
+            if window_id in self.windows:
+                try:
+                    self.windows[window_id].close()
+                except Exception:
+                    pass
+                finally:
+                    with self.lock:
+                        self.windows.pop(window_id, None)
+        
+        self.root.after(0, close)
+    
+    def close_all(self):
+        """Close all progress windows."""
+        with self.lock:
+            ids = list(self.windows.keys())
+        for wid in ids:
+            self.close_window(wid)
