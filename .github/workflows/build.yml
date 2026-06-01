@@ -12,7 +12,7 @@ on:
         default: "true"
 
 jobs:
-  # ── Read version from flimkit/_version.py ──────────────────────────────────
+  # Read version from flimkit/_version.py 
   # This is the single source of truth. The release tag is derived from it
   # automatically so build_and_sign.py, _version.py, and the GitHub Release
   # are always in sync without any manual tag or input required.
@@ -66,6 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
       # tkinter is not bundled with the GitHub Actions Python on Ubuntu or macOS
@@ -102,7 +103,7 @@ jobs:
           # Linux GPG signing (optional — build succeeds without this)
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
 
-      # ── Packaging ────────────────────────────────────────────────────────────
+      #  Packaging 
       # macOS: PyInstaller produces a .app bundle (--onedir); zip it for upload
       - name: Package macOS app bundle
         if: runner.os == 'macOS'
@@ -118,7 +119,7 @@ jobs:
         run: Compress-Archive -Path dist\FLIMKit.exe -DestinationPath dist\FLIMKit-windows.zip
         shell: pwsh
 
-      # ── Artifact upload ──────────────────────────────────────────────────────
+      # Artifact upload 
       - name: Upload artifact (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
@@ -143,7 +144,7 @@ jobs:
           path: dist/FLIMKit-windows.zip
           retention-days: 30
 
-  # ── Create GitHub Release ───────────────────────────────────────────────────
+  # Create GitHub Release 
   release:
     needs: [get-version, build]
     runs-on: ubuntu-latest

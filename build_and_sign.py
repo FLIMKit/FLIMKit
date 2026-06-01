@@ -218,19 +218,20 @@ def build_app():
     except ImportError:
         print("  MLX not found — skipping MLX GPU backend")
 
-    # PyTorch — optional; collect-all bundles the native .so files
+    # torch is a hard cellpose dependency — bundle CPU-only for releases.
+    # GPU builds (CUDA / ROCm / MPS) are done per-machine via install.py.
     try:
         import torch  # noqa: F401
         cmd += [
-            "--collect-all", "torch",
+            "--collect-binaries", "torch",
             "--hidden-import", "torch",
+            "--hidden-import", "torch.nn",
+            "--hidden-import", "torch.nn.functional",
             "--hidden-import", "torch.linalg",
-            "--hidden-import", "torch.backends.mps",
-            "--hidden-import", "torch.backends.cuda",
         ]
-        print("  PyTorch detected — bundling Torch GPU backend")
+        print("  torch detected — bundling CPU torch for cellpose")
     except ImportError:
-        print("  PyTorch not found — skipping Torch GPU backend")
+        print("  torch not found — cellpose will not work in frozen app")
 
     cmd += [
         "--add-data", "mpl-cache:mpl-cache",   # pre-warmed font cache

@@ -31,3 +31,5 @@ build/
 *.spec
 R_2/
 PTU.sptw/
+*-out/
+*s.md
