@@ -1,4 +1,4 @@
-"""Tests for flimkit/phasor/fret.py — all six stages."""
+"""Tests for flimkit/phasor/fret.py - all six stages."""
 
 import numpy as np
 import pytest
@@ -78,7 +78,7 @@ class TestFRETMockData:
         g_low, _  = fret_donor_phasor_truth(0.1)
         g_high, _ = fret_donor_phasor_truth(0.9)
         assert g_high > g_low, (
-            "Donor FRET trajectory is not monotone in G — "
+            "Donor FRET trajectory is not monotone in G - "
             "ground-truth function may be broken."
         )
 
@@ -88,7 +88,7 @@ class TestFRETMockData:
         ag, as_ = fret_acceptor_phasor_truth(0.5)
         dist = np.hypot(dg - ag, ds - as_)
         assert dist > 0.05, (
-            "Donor and acceptor phasors are suspiciously close — "
+            "Donor and acceptor phasors are suspiciously close - "
             "acceptor generator may be calling the wrong phasorpy function."
         )
 

@@ -55,7 +55,7 @@ class MockPTUFile:
         """Generate synthetic FLIM histogram with realistic decay."""
         t = np.arange(self.n_bins, dtype=float) * self.tcspc_res
 
-        # Bi‑exponential decay (uses module-level ground-truth constants)
+        # Bi-exponential decay (uses module-level ground-truth constants)
         tau1 = MOCK_TAU1_NS * 1e-9
         tau2 = MOCK_TAU2_NS * 1e-9
         a1 = MOCK_AMP1
@@ -68,7 +68,7 @@ class MockPTUFile:
         irf = np.exp(-0.5 * ((bins - MOCK_IRF_CENTER) / irf_sigma) ** 2)
         irf = irf / irf.sum()
 
-        # Circular FFT convolution — matches reconvolution_model exactly
+        # Circular FFT convolution - matches reconvolution_model exactly
         decay_profile = np.real(np.fft.ifft(
             np.fft.fft(decay_kernel) * np.fft.fft(irf)))
         decay_profile = decay_profile / decay_profile.max()
@@ -335,7 +335,7 @@ def generate_synthetic_decay(
     irf = np.exp(-0.5 * ((bins - irf_center_bin) / sigma) ** 2)
     irf /= irf.sum()
 
-    # Circular FFT convolution — matches reconvolution_model exactly
+    # Circular FFT convolution - matches reconvolution_model exactly
     model = np.real(np.fft.ifft(np.fft.fft(kernel) * np.fft.fft(irf)))
 
     # Scale to desired peak counts and add flat background
@@ -385,7 +385,7 @@ def generate_synthetic_biexp_decay(
     irf = np.exp(-0.5 * ((bins - irf_center_bin) / sigma) ** 2)
     irf /= irf.sum()
 
-    # Circular FFT convolution — matches reconvolution_model exactly
+    # Circular FFT convolution - matches reconvolution_model exactly
     model = np.real(np.fft.ifft(np.fft.fft(kernel) * np.fft.fft(irf)))
 
     # Scale to desired peak counts and add flat background
@@ -413,9 +413,9 @@ def load_mock_ptu_file(ptu_path: Path):
 # FRET phasor mock data
 
 # Ground-truth FRET parameters used throughout the FRET test suite.
-MOCK_FRET_FREQ   = 80.0   # MHz  — laser repetition rate
-MOCK_FRET_TAU_D  = 4.0    # ns   — unquenched donor lifetime
-MOCK_FRET_TAU_A  = 3.0    # ns   — acceptor lifetime
+MOCK_FRET_FREQ   = 80.0   # MHz  - laser repetition rate
+MOCK_FRET_TAU_D  = 4.0    # ns   - unquenched donor lifetime
+MOCK_FRET_TAU_A  = 3.0    # ns   - acceptor lifetime
 
 
 def fret_donor_phasor_truth(efficiency):

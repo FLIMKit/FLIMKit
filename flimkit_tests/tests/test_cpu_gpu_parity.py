@@ -111,7 +111,7 @@ def gpu_backend():
     except Exception:
         b = None
     if b is None:
-        pytest.skip("No GPU backend available — CPU/GPU parity tests skipped")
+        pytest.skip("No GPU backend available - CPU/GPU parity tests skipped")
     return b
 
 
@@ -167,7 +167,7 @@ class TestCPUGPUParity1Exp:
         cpu_valid = (~np.isnan(self.cpu["tau_1"])).sum()
         gpu_valid = (~np.isnan(self.gpu["tau_1"])).sum()
         assert cpu_valid == gpu_valid, (
-            f"1-exp: valid pixel count differs — CPU {cpu_valid}, GPU {gpu_valid}")
+            f"1-exp: valid pixel count differs - CPU {cpu_valid}, GPU {gpu_valid}")
 
     def test_no_gpu_pixels_outside_cpu_valid_mask(self):
         cpu_valid = ~np.isnan(self.cpu["tau_1"])
@@ -233,7 +233,7 @@ class TestCPUGPUParity2Exp:
         cpu_valid = (~np.isnan(self.cpu["tau_mean_amp"])).sum()
         gpu_valid = (~np.isnan(self.gpu["tau_mean_amp"])).sum()
         assert cpu_valid == gpu_valid, (
-            f"2-exp: valid pixel count differs — CPU {cpu_valid}, GPU {gpu_valid}")
+            f"2-exp: valid pixel count differs - CPU {cpu_valid}, GPU {gpu_valid}")
 
 
 class TestCPUGPUParity3Exp:
@@ -308,7 +308,7 @@ class TestCPUGPUParity3Exp:
         cpu_valid = (~np.isnan(self.cpu["tau_mean_amp"])).sum()
         gpu_valid = (~np.isnan(self.gpu["tau_mean_amp"])).sum()
         assert cpu_valid == gpu_valid, (
-            f"3-exp: valid pixel count differs — CPU {cpu_valid}, GPU {gpu_valid}")
+            f"3-exp: valid pixel count differs - CPU {cpu_valid}, GPU {gpu_valid}")
 
 
 class TestCPUGPUParityDivergenceReport:
@@ -394,7 +394,7 @@ def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
 class TestCPUGPUParityFreeTau:
     """
     Free-τ per-pixel: GPU Adam vs CPU Levenberg-Marquardt.
-    Different optimisers reaching the same basin — tested with looser
+    Different optimisers reaching the same basin - tested with looser
     tolerances than the fixed-τ NNLS paths.
     """
 

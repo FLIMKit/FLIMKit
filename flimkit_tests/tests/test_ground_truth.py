@@ -186,15 +186,15 @@ class TestBiExpRecovery:
         # Leica convention: Pearson χ² (weights = √model)
         rchi2_p = summary['reduced_chi2_pearson']
         assert 0.5 < rchi2_p < 3.0, (
-            f"Pearson reduced χ² (Leica) = {rchi2_p:.3f} — "
-            f"expected 0.5–3.0 for correct model"
+            f"Pearson reduced χ² (Leica) = {rchi2_p:.3f} - "
+            f"expected 0.5-3.0 for correct model"
         )
 
         # Tail-only Pearson should be close to 1
         rchi2_tail = summary['reduced_chi2_tail_pearson']
         assert 0.3 < rchi2_tail < 3.0, (
-            f"Pearson tail χ² (Leica) = {rchi2_tail:.3f} — "
-            f"expected 0.3–3.0 for correct model"
+            f"Pearson tail χ² (Leica) = {rchi2_tail:.3f} - "
+            f"expected 0.3-3.0 for correct model"
         )
 
 

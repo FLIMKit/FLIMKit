@@ -176,7 +176,7 @@ class TestBatchFixedTauCPUParity:
         return stack, A, np.array(taus_s), n_bins
 
     def _cpu_reference(self, stack, A, taus_s):
-        """Run scipy.nnls per pixel — ground-truth reference."""
+        """Run scipy.nnls per pixel - ground-truth reference."""
         ny, nx, n_bins = stack.shape
         amps_ref  = np.full((ny, nx, len(taus_s)), np.nan)
         for yi in range(ny):
@@ -322,7 +322,7 @@ class TestGPUFitPerPixelIntegration:
         )
 
     def test_graceful_fallback_when_no_gpu(self, fit_inputs):
-        """use_gpu=True must not raise when there is no GPU — CPU fallback."""
+        """use_gpu=True must not raise when there is no GPU - CPU fallback."""
         from flimkit.FLIM.fitters import fit_per_pixel
         # Force no GPU by passing a backend that is None explicitly
         maps = fit_per_pixel(
@@ -358,7 +358,7 @@ class TestGPUFitPerPixelIntegration:
         except Exception:
             backend = None
         if backend is None:
-            pytest.skip("No GPU backend available — skipping parity test")
+            pytest.skip("No GPU backend available - skipping parity test")
 
         from flimkit.FLIM.fitters import fit_per_pixel
         maps_gpu = fit_per_pixel(**fit_inputs, use_gpu=True,  gpu_backend=backend)

@@ -42,7 +42,7 @@ class TestPatchHelpers:
         assert len(xy) >= 4
 
 
-#  RoiManager — multi-patch storage ─
+#  RoiManager - multi-patch storage ─
 
 class TestRoiManagerPatches:
     """Test that the roi_patches dict now stores lists of patches."""

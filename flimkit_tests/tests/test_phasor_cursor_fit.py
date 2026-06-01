@@ -35,7 +35,7 @@ def _fake_phasor(n_y, n_x, rng=None):
 
 
 def _ellipse_mask(real, imag, center_g, center_s, radius=0.1, ratio=0.6):
-    """Pure-numpy ellipse cursor mask — mirrors phasorpy.cursor.mask_from_elliptic_cursor."""
+    """Pure-numpy ellipse cursor mask - mirrors phasorpy.cursor.mask_from_elliptic_cursor."""
     from phasorpy.cursor import mask_from_elliptic_cursor
     cg = np.array([center_g])
     cs = np.array([center_s])
@@ -56,7 +56,7 @@ def _build_union_mask(real, imag, cursors, radius=0.1, ratio=0.6):
                               cur['center_g'], cur['center_s'],
                               radius=radius, ratio=ratio)
         else:
-            # polygon — simplified: bounding box for tests
+            # polygon - simplified: bounding box for tests
             verts = np.array(cur['vertices'])
             g_lo, g_hi = verts[:, 0].min(), verts[:, 0].max()
             s_lo, s_hi = verts[:, 1].min(), verts[:, 1].max()
@@ -241,7 +241,7 @@ class TestCursorFitIRFFallback:
         assert 'taus_ns' in summary
 
     def test_mismatched_irf_length_triggers_fallback(self):
-        """An IRF with wrong length should not be used — a new one should be generated."""
+        """An IRF with wrong length should not be used - a new one should be generated."""
         ptu   = _make_ptu()
         irf_ok   = _make_irf(ptu.n_bins)
         irf_bad  = irf_ok[:ptu.n_bins // 2]   # wrong length

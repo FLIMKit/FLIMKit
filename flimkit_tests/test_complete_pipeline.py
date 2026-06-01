@@ -617,7 +617,7 @@ class TestPerTileFitPipeline:
 
     The tests are structured in three layers:
       1. Component tests: call assemble_tile_maps / derive_global_tau /
-         save_assembled_maps directly with synthetic data — no PTU I/O needed.
+         save_assembled_maps directly with synthetic data - no PTU I/O needed.
       2. Integration test: patch fit_flim_tiles to return synthetic tile_results
          and verify _run_tile_fit completes end-to-end and saves the right files.
       3. Machine-IRF variant: same integration test with estimate_irf='machine_irf'.

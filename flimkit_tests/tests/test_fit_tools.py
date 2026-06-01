@@ -32,7 +32,7 @@ class TestFindIrfPeakBin:
         assert abs(peak - MOCK_IRF_CENTER) <= 5
 
     def test_flat_decay_returns_zero(self):
-        """Flat array has no rising edge — peak should be 0."""
+        """Flat array has no rising edge - peak should be 0."""
         decay = np.ones(128) * 100
         peak = find_irf_peak_bin(decay)
         assert peak == 0 or peak < 64  # Somewhere in first half
