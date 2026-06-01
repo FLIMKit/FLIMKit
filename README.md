@@ -161,9 +161,13 @@ Up next: config persistence, stat histograms, auto-region detection, batch n-exp
 
 See [ROADMAP.md](ROADMAP.md) for details.
 
+## Notes on LAS X comparison
+
+Fitted lifetimes from FLIMKit will typically read slightly higher than LAS X for the same data. This is a consequence of IRF placement: FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how LAS X places the IRF. The difference is systematic and reproducible across acquisitions.
+
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ## Contact
 

@@ -881,6 +881,9 @@ Known limitation... Only the outer boundary is imported. Donut-shaped ROIs with 
 **Phasor calibration looks off**  
 Make sure the IRF file is from the same acquisition session. XLSX-based IRFs from LAS X can vary between sessions, which is why the machine IRF exists.
 
+**Lifetimes are slightly higher than LAS X for the same data**  
+This is expected and systematic. FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how LAS X places the IRF. The offset is consistent across acquisitions and does not indicate a fitting problem.
+
 ---
 
 ## References
@@ -900,7 +903,7 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ---
 
