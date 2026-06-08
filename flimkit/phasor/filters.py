@@ -49,8 +49,6 @@ def phasor_filter(
 
 
 def _gaussian(real, imag, *, mean, sigma):
-    # phasorpy >= 0.10 ships a NaN-aware C implementation prefer it
-    # (requires mean as the first positional argument)
     if mean is not None:
         try:
             from phasorpy.filter import phasor_filter_gaussian
@@ -60,7 +58,6 @@ def _gaussian(real, imag, *, mean, sigma):
         except ImportError:
             pass
 
-    # Fallback: scipy with NaN-aware normalisation
     def _fn(x):
         return gaussian_filter(x, sigma=sigma)
 
@@ -69,7 +66,6 @@ def _gaussian(real, imag, *, mean, sigma):
 
 
 def _median(real, imag, *, mean, size):
-    # phasorpy >= 0.10 NaN-aware median - prefer it
     if mean is not None:
         try:
             from phasorpy.filter import phasor_filter_median
