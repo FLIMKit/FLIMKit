@@ -17,7 +17,7 @@ from .PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
 from .utils.xml_utils import parse_xlif_tile_positions 
 from .FLIM.fit_tools import find_irf_peak_bin
 from .FLIM.irf_tools import irf_from_scatter_ptu, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical
-from .FLIM.fitters import fit_summed, fit_per_pixel
+from .FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_dist, fit_per_pixel_dist
 from .utils.xlsx_tools import load_xlsx
 from .utils.misc import print_summary
 from .utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
@@ -592,23 +592,42 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     
     print(f"  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}")
     
-    print(f"\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...")
-    
-    global_popt, global_summary = fit_summed(
-        decay, tcspc_res, n_bins,
-        irf_prompt, has_tail, fit_bg, fit_sigma,
-        args.nexp, args.tau_min, args.tau_max,
-        optimizer=args.optimizer,
-        n_restarts=args.restarts,
-        de_popsize=args.de_population,
-        de_maxiter=args.de_maxiter,
-        workers=args.workers,
-        polish=not args.no_polish,
-        cost_function=getattr(args, 'cost_function', 'poisson'),
-        sigma_max=sigma_max,
-        irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
-    )
-    
+    _dist_type = getattr(args, 'dist_type', 'discrete')
+    _dist_nc   = getattr(args, 'dist_n_components', 1)
+
+    if _dist_type != 'discrete':
+        print(f"\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...")
+        global_popt, global_summary = fit_summed_dist(
+            decay, tcspc_res, n_bins, irf_prompt,
+            _dist_nc, _dist_type, fit_bg, fit_sigma,
+            args.tau_min, args.tau_max,
+            optimizer=args.optimizer,
+            n_restarts=args.restarts,
+            de_popsize=args.de_population,
+            de_maxiter=args.de_maxiter,
+            workers=args.workers,
+            polish=not args.no_polish,
+            cost_function=getattr(args, 'cost_function', 'poisson'),
+            sigma_max=sigma_max,
+            irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+        )
+    else:
+        print(f"\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...")
+        global_popt, global_summary = fit_summed(
+            decay, tcspc_res, n_bins,
+            irf_prompt, has_tail, fit_bg, fit_sigma,
+            args.nexp, args.tau_min, args.tau_max,
+            optimizer=args.optimizer,
+            n_restarts=args.restarts,
+            de_popsize=args.de_population,
+            de_maxiter=args.de_maxiter,
+            workers=args.workers,
+            polish=not args.no_polish,
+            cost_function=getattr(args, 'cost_function', 'poisson'),
+            sigma_max=sigma_max,
+            irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+        )
+
     print_summary(global_summary, strategy, args.nexp)
     
     metadata = {
@@ -643,22 +662,32 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             print(f"  Background pixels will be skipped via min_photons threshold")
         
         print(f"Per-pixel fitting (min_photons={args.min_photons})...")
-        # Create progress window for per-pixel fitting
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
-        
-        pixel_maps = fit_per_pixel(
-            pixel_stack, tcspc_res, n_bins,
-            irf_prompt, has_tail, fit_bg, fit_sigma,
-            global_popt, args.nexp,
-            min_photons=args.min_photons,
-            tau_min_ns=args.tau_min,
-            tau_max_ns=args.tau_max,
-            correct_pileup=getattr(args, 'correct_pileup', False),
-            n_sync=getattr(ptu, 'n_records', 0),
-            progress_callback=perpixel_progress_cb,
-            free_tau=getattr(args, 'free_tau_perpixel', False),
-        )
+
+        if _dist_type != 'discrete':
+            pixel_maps = fit_per_pixel_dist(
+                pixel_stack, tcspc_res, n_bins, irf_prompt,
+                global_popt, _dist_nc, _dist_type,
+                fit_bg=fit_bg, fit_sigma=fit_sigma,
+                min_photons=args.min_photons,
+                tau_min_ns=args.tau_min,
+                tau_max_ns=args.tau_max,
+                progress_callback=perpixel_progress_cb,
+            )
+        else:
+            pixel_maps = fit_per_pixel(
+                pixel_stack, tcspc_res, n_bins,
+                irf_prompt, has_tail, fit_bg, fit_sigma,
+                global_popt, args.nexp,
+                min_photons=args.min_photons,
+                tau_min_ns=args.tau_min,
+                tau_max_ns=args.tau_max,
+                correct_pileup=getattr(args, 'correct_pileup', False),
+                n_sync=getattr(ptu, 'n_records', 0),
+                progress_callback=perpixel_progress_cb,
+                free_tau=getattr(args, 'free_tau_perpixel', False),
+            )
         
         if getattr(args, 'save_weighted', True):
             save_weighted_tau_images(
@@ -1015,7 +1044,25 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     global_summary = None
     pixel_maps     = None
 
+    _dist_type = getattr(args, 'dist_type', 'discrete')
+    _dist_nc   = getattr(args, 'dist_n_components', 1)
+
     def _run_summed():
+        if _dist_type != 'discrete':
+            return fit_summed_dist(
+                decay, ptu.tcspc_res, ptu.n_bins, irf_prompt,
+                _dist_nc, _dist_type, fit_bg, fit_sigma,
+                args.tau_min, args.tau_max,
+                optimizer=args.optimizer,
+                n_restarts=args.restarts,
+                de_popsize=args.de_population,
+                de_maxiter=args.de_maxiter,
+                workers=args.workers,
+                polish=not args.no_polish,
+                cost_function=getattr(args, 'cost_function', 'poisson'),
+                sigma_max=sigma_max,
+                irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            )
         return fit_summed(
             decay, ptu.tcspc_res, ptu.n_bins,
             irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -1068,18 +1115,29 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
         
-        pixel_maps = fit_per_pixel(
-            stack, ptu.tcspc_res, ptu.n_bins,
-            irf_prompt, has_tail, fit_bg, fit_sigma,
-            global_popt, args.nexp,
-            min_photons=args.min_photons,
-            tau_min_ns=args.tau_min,
-            tau_max_ns=args.tau_max,
-            correct_pileup=getattr(args, 'correct_pileup', False),
-            n_sync=ptu.n_records,
-            progress_callback=perpixel_progress_cb,
-            free_tau=getattr(args, 'free_tau_perpixel', False),
-        )
+        if _dist_type != 'discrete':
+            pixel_maps = fit_per_pixel_dist(
+                stack, ptu.tcspc_res, ptu.n_bins, irf_prompt,
+                global_popt, _dist_nc, _dist_type,
+                fit_bg=fit_bg, fit_sigma=fit_sigma,
+                min_photons=args.min_photons,
+                tau_min_ns=args.tau_min,
+                tau_max_ns=args.tau_max,
+                progress_callback=perpixel_progress_cb,
+            )
+        else:
+            pixel_maps = fit_per_pixel(
+                stack, ptu.tcspc_res, ptu.n_bins,
+                irf_prompt, has_tail, fit_bg, fit_sigma,
+                global_popt, args.nexp,
+                min_photons=args.min_photons,
+                tau_min_ns=args.tau_min,
+                tau_max_ns=args.tau_max,
+                correct_pileup=getattr(args, 'correct_pileup', False),
+                n_sync=ptu.n_records,
+                progress_callback=perpixel_progress_cb,
+                free_tau=getattr(args, 'free_tau_perpixel', False),
+            )
 
         if not args.no_plots:
             matplotlib.use('Agg')
@@ -1236,7 +1294,6 @@ def stitch_and_fit(interactive=False):
         _run_stitch_and_fit(args)
 
 
-#  Per-tile fitting pipeline
 
 def tile_fit_inquire():
     print('\n Per-Tile FLIM Fitting')

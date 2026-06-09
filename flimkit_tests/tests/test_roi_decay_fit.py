@@ -29,7 +29,6 @@ from mock_data import (
 
 
 
-# Helpers
 def _build_ptu(n_y=32, n_x=32, n_bins=256):
     """Small MockPTUFile for fast test execution."""
     return MockPTUFile(n_y=n_y, n_x=n_x, n_bins=n_bins,
@@ -59,7 +58,6 @@ def _run_fit(roi_decay, irf_prompt, tcspc_res, n_bins, n_exp=2):
 
 
 
-# ROI masking + decay extraction
 class TestRoiDecayExtraction:
     """Verify that masking + summation produce sensible arrays."""
 
@@ -135,8 +133,6 @@ class TestRoiDecayExtraction:
             assert not mask.any()
 
 
-# ROI + fit pipeline
-
 class TestRoiDecayFitPipeline:
     """End-to-end: extract ROI decay → fit → check summary structure."""
 
@@ -199,7 +195,6 @@ class TestRoiDecayFitPipeline:
         assert tau_mean > 0
 
 
-# IRF fallback logic
 class TestIRFFallback:
     """Gaussian IRF fallback should not break the fit."""
 
@@ -253,8 +248,6 @@ class TestIRFFallback:
 
         assert len(irf_to_use) == ptu.n_bins
 
-
-# Statistics written back to region
 
 class TestRoiStatisticsWriteback:
     """Verify the on_done statistics are written correctly."""
@@ -313,8 +306,6 @@ class TestRoiStatisticsWriteback:
         assert len(stats['taus_ns_fit']) == 1
         assert len(stats['amps_fit']) == 1
 
-
-# Edge cases
 
 class TestRoiDecayEdgeCases:
     """Guards against edge inputs that should be caught before calling fit."""

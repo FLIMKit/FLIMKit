@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Build FLIMKit with PyInstaller and sign for the current platform.
-Supports macOS (Developer ID + notarization), Linux (GPG), and Windows (Signtool).
-"""
-
 import os
 import sys
 import subprocess
@@ -28,7 +23,6 @@ LINUX_GPG_KEY = os.getenv("GPG_KEY_ID")
 
 
 def run_command(cmd, shell=False):
-    """Run a shell command and return success status."""
     print(f"\n▶ {' '.join(cmd) if isinstance(cmd, list) else cmd}")
     try:
         subprocess.run(cmd, shell=shell, check=True, text=True)
@@ -39,12 +33,6 @@ def run_command(cmd, shell=False):
 
 
 def prepare_icon(source_png):
-    """
-    Convert source PNG to platform-specific icon format.
-
-    Returns the path to the icon file that should be passed to PyInstaller,
-    or None if no conversion is needed.
-    """
     if not source_png or not Path(source_png).exists():
         return None
 
@@ -94,14 +82,6 @@ def prepare_icon(source_png):
 
 
 def generate_mpl_cache():
-    """
-    Pre-warm the matplotlib font cache into mpl-cache/ so PyInstaller can
-    bundle it.  This eliminates the 10-30 s font-scan delay on first launch
-    of the frozen app.
-
-    The cache only needs rebuilding when matplotlib or system fonts change,
-    but regenerating it on every build is cheap (~2 s) and keeps it fresh.
-    """
     cache_dir = Path("mpl-cache")
 
     print(f"\n{'='*60}")
@@ -109,9 +89,6 @@ def generate_mpl_cache():
     print(f"{'='*60}")
 
     cache_dir.mkdir(exist_ok=True)
-
-    # Run font manager rebuild in a subprocess so MPLCONFIGDIR is isolated
-    # to mpl-cache/ and doesn't touch the developer's own ~/.config/matplotlib.
     script = (
         "import os; "
         "os.environ['MPLCONFIGDIR'] = 'mpl-cache'; "
@@ -210,18 +187,15 @@ def build_app():
         "--hidden-import", "flimkit.GPU.rocm",
     ]
 
-    # MLX — Apple Silicon only; skip hidden-import if not installed
     try:
-        import mlx  # noqa: F401
+        import mlx
         cmd += ["--hidden-import", "mlx", "--hidden-import", "mlx.core"]
         print("  MLX detected — bundling MLX GPU backend")
     except ImportError:
         print("  MLX not found — skipping MLX GPU backend")
 
-    # torch is a hard cellpose dependency — bundle CPU-only for releases.
-    # GPU builds (CUDA / ROCm / MPS) are done per-machine via install.py.
     try:
-        import torch  # noqa: F401
+        import torch
         cmd += [
             "--collect-binaries", "torch",
             "--hidden-import", "torch",
@@ -229,21 +203,28 @@ def build_app():
             "--hidden-import", "torch.nn.functional",
             "--hidden-import", "torch.linalg",
         ]
-        print("  torch detected — bundling CPU torch for cellpose")
+        if system == "Linux" and torch.cuda.is_available():
+            try:
+                import nvidia
+                cmd += ["--collect-binaries", "nvidia"]
+            except ImportError:
+                pass
+            print(f"  CUDA detected ({torch.cuda.get_device_name(0)}) — bundling CUDA torch")
+        else:
+            print("  torch detected — bundling CPU torch for cellpose")
     except ImportError:
         print("  torch not found — cellpose will not work in frozen app")
 
     cmd += [
-        "--add-data", "mpl-cache:mpl-cache",   # pre-warmed font cache
-        "--collect-all", "flimkit",             # bundle all submodules as importable bytecode
+        "--add-data", "mpl-cache:mpl-cache", 
+        "--collect-all", "flimkit", 
         "--add-data", "flimkit/UI/icon.png:flimkit",
     ]
 
-    # Platform-specific packaging mode
     if system == "Darwin":
-        cmd.append("--onedir")   # single process, proper .app bundle
+        cmd.append("--onedir")
     else:
-        cmd.append("--onefile")  # single portable binary on Windows/Linux
+        cmd.append("--onefile")
 
     if icon_path:
         cmd.extend(["--icon", str(icon_path)])
@@ -253,7 +234,6 @@ def build_app():
 
 
 def sign_macos():
-    """Sign the macOS app bundle."""
     print(f"\n{'='*60}")
     print(f"Signing macOS app (self-signed)")
     print(f"{'='*60}")
@@ -275,7 +255,6 @@ def sign_macos():
 
 
 def sign_windows():
-    """Sign the Windows executable."""
     print(f"\n{'='*60}")
     print(f"Signing Windows executable")
     print(f"{'='*60}")
@@ -313,7 +292,6 @@ def sign_windows():
 
 
 def sign_linux():
-    """Sign the Linux executable with GPG."""
     print(f"\n{'='*60}")
     print(f"Signing Linux executable")
     print(f"{'='*60}")

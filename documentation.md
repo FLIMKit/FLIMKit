@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.9.12** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.9.13** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -36,6 +36,7 @@ FLIMKit handles FLIM data from Leica SP8/FALCON systems (or any PTU-based setup)
 | Workflow | Description |
 |---|---|
 | **Reconvolution fitting** | Mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, and batch processing |
+| **Lifetime distribution fitting** | Gaussian and Lorentzian continuous lifetime distributions (α(τ) models), per-ROI and per-pixel maps with GPU acceleration |
 | **Phasor analysis** | Calibrated phasor plots with interactive elliptical cursors, automatic peak detection, two-component decomposition, and session save/load |
 
 Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or the Python API.
@@ -889,6 +890,9 @@ This is expected and systematic. FLIMKit anchors the IRF at the steepest-rise po
 ## References
 
 If you use FLIMKit in published work, please also cite the relevant dependencies where appropriate:
+
+**Lifetime distribution fitting** - theoretical basis for Gaussian and Lorentzian α(τ) models:
+> Lakowicz, J.R. (2006). *Principles of Fluorescence Spectroscopy* (3rd ed.). Springer. §4.11.2 (Lifetime Distributions), pp. 141-144.
 
 **PhasorPy** - phasor computation, calibration, and cursor analysis:
 > Gohlke, C. et al. PhasorPy. Zenodo. https://doi.org/10.5281/zenodo.13862586

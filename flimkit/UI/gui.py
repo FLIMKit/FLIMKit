@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Optional
 import matplotlib
 matplotlib.use('TkAgg')
-# Dark-theme text defaults for all figures
 matplotlib.rcParams.update({
     'text.color': 'white',
     'axes.labelcolor': 'white',
@@ -35,7 +34,6 @@ from flimkit.UI import flim_display
 from flimkit.UI.roi_tools import RoiManager, RoiAnalysisPanel
 from flimkit.UI.project_panel import ProjectBrowserPanel
 
-# Modern theme support
 try:
     import TKinterModernThemes as TKMT
     HAS_TKMT = True
@@ -235,7 +233,6 @@ class _UIBuilder:
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
-        # FILE MENU 
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='File', menu=file_menu)
         
@@ -269,7 +266,6 @@ class _UIBuilder:
         file_menu.add_separator()
         file_menu.add_command(label='Exit', command=self.root.quit)
         
-        # EDIT MENU 
         edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Edit', menu=edit_menu)
         
@@ -282,7 +278,6 @@ class _UIBuilder:
         self.root.bind('<Control-z>', lambda e: self._menu_undo())
         self.root.bind('<Control-Shift-Z>', lambda e: self._menu_redo())
         
-        # TOOLS MENU 
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Tools', menu=tools_menu)
         
@@ -294,7 +289,6 @@ class _UIBuilder:
         batch_menu.add_command(label='Single FOV Fit',
                                command=lambda: self._menu_batch_processing('fov'))
         
-        # HELP MENU
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Help', menu=help_menu)
         
@@ -529,7 +523,6 @@ class _UIBuilder:
         ttk.Button(btn_frame, text='Save', command=save_prefs).pack(side='right', padx=5)
         ttk.Button(btn_frame, text='Cancel', command=pref_win.destroy).pack(side='right', padx=5)
     
-    # EDIT MENU CALLBACKS
     def _menu_undo(self):
         print('[Menu] Undo')
         # TODO: Implement when undo/redo system is built
@@ -557,7 +550,6 @@ class _UIBuilder:
             messagebox.showinfo('Reset Complete', 'Analysis cleared.')
             print('[Menu] Reset complete.')
     
-    # TOOLS MENU CALLBACKS
     def _menu_irf_builder(self):
         print('[Menu] Machine IRF Builder')
         # Switch to IRF form view
@@ -571,7 +563,6 @@ class _UIBuilder:
         if hasattr(self, '_switch_form'):
             self._switch_form('batch')
     
-    # HELP MENU CALLBACKS
     def _menu_about(self):
         from flimkit._version import __version__
         about_text = f"""FLIMKit Analysis GUI
@@ -865,7 +856,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self.root.rowconfigure(2, weight=1)  # main content - expands
 
         
-        # LEFT PANEL: Project Browser + Content area (both resizable)
+
         
         self._left_paned = ttk.PanedWindow(self._main_paned, orient='horizontal')
         self._main_paned.add(self._left_paned, weight=3)  # 60% of total width (for Project 20% + Settings 40%)
@@ -1001,8 +992,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._build_machine_irf_tab()
         # Batch and Machine IRF are accessible via the Tools menu
 
-        
-        # RIGHT PANEL: FOV Preview
         
         preview_frame = ttk.LabelFrame(self._main_paned, text='  FOV Preview  ', padding=4)
         self._main_paned.add(preview_frame, weight=2)  # 40% of total
@@ -2717,6 +2706,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.irf_shift_bins = ex['irf_shift_bins']
         if 'free_tau_perpixel' in ex:
             a.free_tau_perpixel = ex['free_tau_perpixel']
+        if 'dist_type' in ex:
+            a.dist_type = ex['dist_type']
+        if 'dist_n_components' in ex:
+            a.dist_n_components = ex['dist_n_components']
 
     def _open_expert_settings(self):
         from flimkit.utils.config_manager import cfg
@@ -3874,10 +3867,31 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         rows = []
 
-        # Schema A: fit_summed / fit_per_pixel (single-FOV fit)
-        taus  = global_summary.get('taus_ns', [])
-        amps  = global_summary.get('amps',    [])
-        fracs = global_summary.get('fractions', [])
+        tau_centers = global_summary.get('tau_centers_ns')
+        if tau_centers is not None:
+            import numpy as _np
+            tau_centers = list(_np.atleast_1d(tau_centers))
+            widths_ns   = list(_np.atleast_1d(global_summary.get('widths_ns', [])))
+            fwhms_ns    = list(_np.atleast_1d(global_summary.get('fwhms_ns',  [])))
+            amps_d      = list(_np.atleast_1d(global_summary.get('amps',      [])))
+            fracs_d     = list(_np.atleast_1d(global_summary.get('fractions', [])))
+            dist_type   = global_summary.get('dist_type', 'gaussian')
+            dist_label  = dist_type.capitalize()
+            width_label = 'σ' if dist_type == 'gaussian' else 'Γ (FWHM)'
+            for i in range(len(tau_centers)):
+                rows.append((f"τ̄{i+1} ({dist_label} center)", f"{tau_centers[i]:.4f}", 'ns'))
+                if i < len(widths_ns):
+                    rows.append((f"{width_label}{i+1}", f"{widths_ns[i]:.4f}", 'ns'))
+                if i < len(fwhms_ns):
+                    rows.append((f"FWHM{i+1}", f"{fwhms_ns[i]:.4f}", 'ns'))
+                if i < len(amps_d):
+                    rows.append((f"g{i+1} (amplitude)", f"{amps_d[i]:.3e}", ''))
+                if i < len(fracs_d):
+                    rows.append((f"f{i+1} (int. frac.)", f"{fracs_d[i]:.4f}", ''))
+
+        taus  = global_summary.get('taus_ns', []) if tau_centers is None else None
+        amps  = global_summary.get('amps',    []) if tau_centers is None else None
+        fracs = global_summary.get('fractions', []) if tau_centers is None else None
 
         if taus is not None and len(taus) > 0:
             import numpy as np
@@ -3891,7 +3905,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if i < len(fracs):
                     rows.append((f"f{i+1} (amp frac)", f"{fracs[i]:.4f}", ''))
 
-        # Mean lifetimes - schema A names
         for key, label in [
             ('tau_mean_amp_ns', 'τ_mean (amp-weighted)'),
             ('tau_mean_int_ns', 'τ_mean (int-weighted)'),
@@ -3900,7 +3913,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if v is not None:
                 rows.append((label, f"{v:.4f}", 'ns'))
 
-        # Schema B: derive_global_tau (stitch / tile-fit pipeline) 
         tau_global = global_summary.get('tau_mean_amp_global_ns')
         if tau_global is not None:
             rows.append(('τ_mean amp-wtd (global)', f"{tau_global:.4f}", 'ns'))
@@ -3997,7 +4009,6 @@ def launch_gui():
             root = Tk()
         else:
             root = tk.Tk()
-        # Apply a simple ttk theme for better appearance
         style = ttk.Style(root)
         for theme_name in ('clam', 'alt', 'default'):
             if theme_name in style.theme_names():

@@ -50,6 +50,21 @@ class GPUBackend:
     ):
         raise NotImplementedError
 
+    def batch_dist_scan_unimodal(
+        self,
+        stack,
+        basis,
+        bb_grid,
+        param_pairs,
+        irf_fixed,
+        tcspc_res,
+        n_bins,
+        dist_type,
+        min_photons,
+        progress_callback,
+    ):
+        raise NotImplementedError
+
 
 class _BackendMixin:
     @staticmethod

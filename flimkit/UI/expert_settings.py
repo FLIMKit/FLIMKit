@@ -4,10 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from flimkit.UI.utils import _C
+from typing import Optional
 
-
-# Expert Settings Dialog 
-# Default expert settings (mirrors configs.py)
 _EXPERT_DEFAULTS = {
     'binning_factor': 1,
     'optimizer': 'de',
@@ -22,6 +20,8 @@ _EXPERT_DEFAULTS = {
     'irf_align': 'steepest_rise',
     'irf_shift_bins': 2,
     'free_tau_perpixel': False,
+    'dist_type': 'discrete',
+    'dist_n_components': 1,
 }
 
 
@@ -37,7 +37,6 @@ class ExpertSettingsDialog(tk.Toplevel):
         self.result: Optional[dict] = None
         cfg = _C()
 
-        # Merge defaults ← config ← current overrides
         vals = dict(_EXPERT_DEFAULTS)
         vals.update({
             'binning_factor': cfg['binning_factor'],
@@ -55,7 +54,6 @@ class ExpertSettingsDialog(tk.Toplevel):
         f = ttk.Frame(self, padding=12)
         f.pack(fill='both', expand=True)
 
-        # Optimizer 
         ttk.Label(f, text='Optimizer:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_optimizer = tk.StringVar(value=vals['optimizer'])
         opt_frame = ttk.Frame(f)
@@ -65,7 +63,6 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Radiobutton(opt_frame, text='Levenberg-Marquardt (LM)',
                         variable=self._sv_optimizer, value='lm_multistart').pack(side='left')
 
-        # DE settings
         row += 1
         ttk.Label(f, text='DE population:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_de_pop = tk.StringVar(value=str(vals['de_population']))
@@ -74,33 +71,28 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_de_maxiter = tk.StringVar(value=str(vals['de_maxiter']))
         ttk.Entry(f, textvariable=self._sv_de_maxiter, width=8).grid(row=row, column=3, sticky='w', **PAD)
 
-        # LM settings
         row += 1
         ttk.Label(f, text='LM random restarts:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_lm_restarts = tk.StringVar(value=str(vals['lm_restarts']))
         ttk.Entry(f, textvariable=self._sv_lm_restarts, width=8).grid(row=row, column=1, sticky='w', **PAD)
 
-        # Binning
         row += 1
         ttk.Label(f, text='Spatial binning (NxN):').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_binning = tk.StringVar(value=str(vals['binning_factor']))
         ttk.Entry(f, textvariable=self._sv_binning, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(1 = no binning)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
-        # Workers
         row += 1
         ttk.Label(f, text='CPU workers:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_workers = tk.StringVar(value=str(vals['n_workers']))
         ttk.Entry(f, textvariable=self._sv_workers, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(-1 = all cores)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
-        # Min photons
         row += 1
         ttk.Label(f, text='Min photons/pixel:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_min_ph = tk.StringVar(value=str(vals['min_photons']))
         ttk.Entry(f, textvariable=self._sv_min_ph, width=8).grid(row=row, column=1, sticky='w', **PAD)
 
-        # Cost function
         row += 1
         ttk.Label(f, text='Cost function:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_cost = tk.StringVar(value=vals['cost_function'])
@@ -111,14 +103,12 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Radiobutton(cf_frame, text='Chi² (legacy)',
                         variable=self._sv_cost, value='chi2').pack(side='left')
 
-        # Channels
         row += 1
         ttk.Label(f, text='Channel filter:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_channels = tk.StringVar(value=str(vals.get('channels', '') or ''))
         ttk.Entry(f, textvariable=self._sv_channels, width=12).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = all channels)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
-        # IRF FWHM override
         row += 1
         ttk.Label(f, text='IRF FWHM (ns):').grid(row=row, column=0, sticky='w', **PAD)
         _irf_fwhm_val = vals.get('irf_fwhm')
@@ -126,7 +116,6 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Entry(f, textvariable=self._sv_irf_fwhm, width=12).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = 1 bin auto, e.g. 0.097)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
-        # IRF alignment target
         row += 1
         ttk.Label(f, text='IRF alignment:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_irf_align = tk.StringVar(value=vals.get('irf_align', 'steepest_rise'))
@@ -137,21 +126,40 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Radiobutton(align_frame, text='Decay peak (legacy)',
                         variable=self._sv_irf_align, value='decay_peak').pack(side='left')
 
-        # IRF shift bounds
         row += 1
         ttk.Label(f, text='IRF shift bound (±bins):').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_irf_shift = tk.StringVar(value=str(vals.get('irf_shift_bins', 2)))
         ttk.Entry(f, textvariable=self._sv_irf_shift, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(2 = recommended; 5 = legacy)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
-        # Free tau per pixel
         row += 1
         self._bv_free_tau = tk.BooleanVar(value=bool(vals.get('free_tau_perpixel', False)))
         ttk.Checkbutton(f, text='Free τ per pixel  (slower - reveals τ spatial variation for n_exp > 1)',
                         variable=self._bv_free_tau).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
 
-        # Buttons
+        row += 1
+        ttk.Label(f, text='Fit model:').grid(row=row, column=0, sticky='w', **PAD)
+        self._sv_dist_type = tk.StringVar(value=vals.get('dist_type', 'discrete'))
+        dm_frame = ttk.Frame(f)
+        dm_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)
+        ttk.Radiobutton(dm_frame, text='Discrete exponentials',
+                        variable=self._sv_dist_type, value='discrete').pack(side='left', padx=(0, 8))
+        ttk.Radiobutton(dm_frame, text='Gaussian dist.',
+                        variable=self._sv_dist_type, value='gaussian').pack(side='left', padx=(0, 8))
+        ttk.Radiobutton(dm_frame, text='Lorentzian dist.',
+                        variable=self._sv_dist_type, value='lorentzian').pack(side='left')
+
+        row += 1
+        ttk.Label(f, text='Dist. components:').grid(row=row, column=0, sticky='w', **PAD)
+        self._sv_dist_ncomp = tk.StringVar(value=str(vals.get('dist_n_components', 1)))
+        nc_frame = ttk.Frame(f)
+        nc_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)
+        ttk.Radiobutton(nc_frame, text='1  (unimodal)',
+                        variable=self._sv_dist_ncomp, value='1').pack(side='left', padx=(0, 8))
+        ttk.Radiobutton(nc_frame, text='2  (bimodal)',
+                        variable=self._sv_dist_ncomp, value='2').pack(side='left')
+
         row += 1
         btn_frame = ttk.Frame(f)
         btn_frame.grid(row=row, column=0, columnspan=4, pady=(12, 0))
@@ -160,7 +168,6 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Button(btn_frame, text='Cancel', command=self.destroy).pack(side='left', padx=4)
 
         self.protocol('WM_DELETE_WINDOW', self.destroy)
-        # Centre on parent
         self.update_idletasks()
         pw, ph = parent.winfo_width(), parent.winfo_height()
         px, py = parent.winfo_rootx(), parent.winfo_rooty()
@@ -184,6 +191,8 @@ class ExpertSettingsDialog(tk.Toplevel):
             'irf_align': self._sv_irf_align.get(),
             'irf_shift_bins': int(self._sv_irf_shift.get() or 2),
             'free_tau_perpixel': self._bv_free_tau.get(),
+            'dist_type': self._sv_dist_type.get(),
+            'dist_n_components': int(self._sv_dist_ncomp.get() or 1),
         }
 
     def _confirm(self):
@@ -209,3 +218,5 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_irf_align.set('steepest_rise')
         self._sv_irf_shift.set('2')
         self._bv_free_tau.set(False)
+        self._sv_dist_type.set('discrete')
+        self._sv_dist_ncomp.set('1')

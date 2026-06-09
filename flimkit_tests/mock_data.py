@@ -398,6 +398,45 @@ def generate_synthetic_biexp_decay(
     return model
 
 
+def generate_synthetic_gaussian_dist_decay(
+    n_bins=256,
+    tcspc_res=MOCK_TCSPC_RES,
+    tau_center_ns=2.0,
+    sigma_ns=0.4,
+    bg=5.0,
+    peak_counts=50_000.0,
+    irf_fwhm_bins=MOCK_IRF_FWHM_BINS,
+    irf_center_bin=MOCK_IRF_CENTER,
+    noise=True,
+    n_quad=200,
+):
+    t      = np.arange(n_bins, dtype=float) * tcspc_res
+    tau_c  = tau_center_ns * 1e-9
+    sigma  = sigma_ns * 1e-9
+    spread = 4.0 * sigma
+    tau_lo = max(tau_c - spread, 1e-12)
+    tau_hi = tau_c + spread
+    tau_grid = np.linspace(tau_lo, tau_hi, n_quad)
+    alpha    = np.exp(-0.5 * ((tau_grid - tau_c) / sigma) ** 2)
+    alpha   /= alpha.sum()
+    exp_mat  = np.exp(-t[None, :] / tau_grid[:, None])
+    kernel   = alpha @ exp_mat
+
+    irf_sigma_bins = irf_fwhm_bins / 2.3548
+    bins = np.arange(n_bins, dtype=float)
+    irf  = np.exp(-0.5 * ((bins - irf_center_bin) / irf_sigma_bins) ** 2)
+    irf /= irf.sum()
+
+    model = np.real(np.fft.ifft(np.fft.fft(kernel) * np.fft.fft(irf)))
+    model = model / model.max() * peak_counts + bg
+
+    if noise:
+        rng   = np.random.default_rng(0)
+        model = rng.poisson(np.maximum(model, 0)).astype(float)
+
+    return model
+
+
 def load_mock_ptu_file(ptu_path: Path):
     """Load a PTU file written by generate_mock_ptu_tiles() and return an object with .summed_decay()."""
     from flimkit.PTU.reader import PTUFile
@@ -410,7 +449,6 @@ def load_mock_ptu_file(ptu_path: Path):
     return _Wrapper(ptu)
 
 
-# FRET phasor mock data
 
 # Ground-truth FRET parameters used throughout the FRET test suite.
 MOCK_FRET_FREQ   = 80.0   # MHz  - laser repetition rate

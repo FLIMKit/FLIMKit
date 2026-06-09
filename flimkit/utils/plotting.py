@@ -83,15 +83,23 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
     ax3.set_ylabel('Frequency')
     ax3.set_title(f"Residuals  μ={rv.mean():.3f}  σ={rv.std():.3f}")
 
+    p_val = s.get('p_val')
+    p_line = f"p    = {p_val:.4f}" if p_val is not None else ""
     lines = [f"χ²_r = {s['reduced_chi2_pearson']:.4f}  (Leica)",
              f"χ²_r(tail) = {s['reduced_chi2_tail_pearson']:.4f}  (Leica)",
-             f"p    = {s['p_val']:.4f}",
+             p_line,
              f"bg   = {s['bg_fit']:.1f} cts/bin",
              f"τ_mean(int) = {s['tau_mean_int_ns']:.4f} ns",
              f"τ_mean(amp) = {s['tau_mean_amp_ns']:.4f} ns",
              f"IRF FWHM(eff) = {s['irf_fwhm_eff_ns']:.4f} ns", '']
-    for i, (tau, frac) in enumerate(zip(s['taus_ns'], s['fractions'])):
-        lines.append(f"τ{i+1}={tau:.4f} ns  f{i+1}={frac:.4f}")
+    if 'tau_centers_ns' in s:
+        width_label = 'σ' if s['dist_type'] == 'gaussian' else 'Γ'
+        for i, (tau_c, w, frac) in enumerate(
+                zip(s['tau_centers_ns'], s['widths_ns'], s['fractions'])):
+            lines.append(f"τ_c{i+1}={tau_c:.4f} ns  {width_label}={w:.4f} ns  f{i+1}={frac:.4f}")
+    else:
+        for i, (tau, frac) in enumerate(zip(s['taus_ns'], s['fractions'])):
+            lines.append(f"τ{i+1}={tau:.4f} ns  f{i+1}={frac:.4f}")
     ax4.text(0.05, 0.97, '\n'.join(lines), transform=ax4.transAxes,
              va='top', fontsize=9, family='monospace',
              bbox=dict(boxstyle='round,pad=0.4', fc='#f7f7f7', alpha=0.9))
@@ -110,6 +118,8 @@ def plot_pixel_maps(maps, n_exp, out_prefix, binning=1):
 
     def _show(ax, data, title, cmap='viridis', vmin=None, vmax=None, unit='ns'):
         ax.set_facecolor('#111')
+        if data is None:
+            ax.set_visible(False); return
         valid = data[np.isfinite(data) & (data > 0)]
         if len(valid) == 0:
             ax.set_visible(False); return

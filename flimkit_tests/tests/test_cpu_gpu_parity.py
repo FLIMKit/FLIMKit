@@ -15,12 +15,10 @@ from flimkit.FLIM.irf_tools import build_full_irf
 from flimkit.FLIM.fitters import fit_per_pixel
 
 
-# Shared constants
 N_BINS = 128
 TCSPC_RES = MOCK_TCSPC_RES
 MIN_PHOTONS = 50
 
-# Tolerances
 AMP_TOL   = 0.08   # 8 % relative mean absolute error on amplitudes
 TAU_TOL   = 0.08   # 8 % relative mean absolute error on lifetimes
 TAU1_TOL  = 0.12   # 12 % for tau_mean_amp / tau_mean_int (more noise-sensitive)

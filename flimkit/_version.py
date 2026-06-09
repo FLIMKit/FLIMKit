@@ -1,5 +1,5 @@
-__version__ = '0.9.12-latest' #Fixed tests
-fitter_version = '16'
+__version__ = '0.9.13'
+fitter_version = '17'
 
 roadmap = '''Flim program roadmap:
 Version history:
@@ -9,7 +9,7 @@ Version history:
 0.1.3 -> Added some user prompts and created defaults
 0.1.4 -> Updated interactive prompts and added some error handling
 Will be updated to 0.2.0 when ROI stitching works
-0.3.0 -> ROI stiching + fitting 
+0.3.0 -> ROI stiching + fitting
 0.4.0 -> batch processing of multiple ROIs or FOVs
 0.5.0 -> tbd
 Need to add Phasor once added to the codebase, and update version to 1.0. And added some tests.
@@ -27,5 +27,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.10 -> fixed GPU tests
 0.9.11 -> updated PhasorPy calls to match latest version (0.10.0) and added phasor filtering options
 0.9.12 -> changed masking to use cellpose-SAM
+0.9.13 -> added Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2)
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

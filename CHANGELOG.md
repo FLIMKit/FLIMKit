@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.9.13] - 2026-06-09
+
+### Added
+- Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2): continuous α(τ) distributions as an alternative to the discrete multi-exponential model
+- Per-ROI distribution fitting via Differential Evolution + Levenberg-Marquardt with full IRF reconvolution
+- Per-pixel distribution maps: 2D GPU grid scan for unimodal fits (MLX/Torch); scipy parallel LM fallback for bimodal
+- Expert settings toggle: Discrete / Gaussian distribution / Lorentzian distribution, with 1 or 2 components
+- Distribution-specific results display: τ̄_amp, τ̄_int, σ/Γ, FWHM, amplitude fractions per component
+- 11 new tests covering kernel properties, basis grid construction, τ̄ recovery, and per-pixel map shape
+
+### Notes
+- Anthropic's Claude AI assisted with parts of the implementation. All scientific design and method selection are the author's own work.
+
+---
+
+## [0.9.12] - 2026-05-20
+
+### Changed
+- Switched cell segmentation masking from Cellpose to Cellpose-SAM
+
+---
+
+## [0.9.11] - 2026-05-10
+
+### Changed
+- Updated PhasorPy calls to match API changes in v0.11
+- Added phasor spatial filtering options (Gaussian, median, wavelet) to GUI and API
+
+---
+
+## [0.9.10] - 2026-05-05
+
+### Fixed
+- GPU fitter tests and CI pipeline
+
+---
+
 ## [0.9.9] - 2026-05-01
 
 ### Fixed

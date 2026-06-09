@@ -270,7 +270,6 @@ def predict_fret_trajectory(
     )
 
 
-# Donor-Only Solver
 def fit_donor_fret(
     donor,
     params,

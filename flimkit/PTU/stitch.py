@@ -340,7 +340,6 @@ def stitch_flim_tiles(
 
 
 
-# Load helpers
 def load_stitched_flim(
     output_dir,
     mode='r',
@@ -396,7 +395,6 @@ def load_flim_for_fitting(
 
 
 
-# Per-tile fitting pipeline - pooled machine IRF
 def _peek_tile_width(ptu_dir, tile_positions, rotate_tiles):
     for t in tile_positions:
         p = Path(ptu_dir) / t['file']

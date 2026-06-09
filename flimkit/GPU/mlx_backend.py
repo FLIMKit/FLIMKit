@@ -140,7 +140,81 @@ class MLXBackend(_BackendMixin):
         )
         return maps
 
-    # Internal helpers
+    def batch_dist_scan_unimodal(
+        self,
+        stack,
+        basis,
+        bb_grid,
+        param_pairs,
+        irf_fixed,
+        tcspc_res,
+        n_bins,
+        dist_type,
+        min_photons,
+        progress_callback=None,
+    ):
+        mx = self._mx
+        ny, nx, _ = stack.shape
+
+        flat           = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        intensity_flat = flat.sum(axis=1)
+        valid_mask     = intensity_flat >= min_photons
+        valid_idx      = np.where(valid_mask)[0]
+
+        maps = dict(
+            intensity     = stack.sum(axis=2),
+            tau_mean_amp  = np.full((ny, nx), np.nan),
+            tau_mean_int  = np.full((ny, nx), np.nan),
+            chi2_r        = np.full((ny, nx), np.nan),
+            tau_center_1  = np.full((ny, nx), np.nan),
+            width_1       = np.full((ny, nx), np.nan),
+            alpha_1       = np.full((ny, nx), np.nan),
+            frac_1        = np.full((ny, nx), np.nan),
+        )
+        if valid_idx.size == 0:
+            return maps
+
+        bg_flat  = self._estimate_bg_batch(flat, valid_mask)
+        dc_flat  = np.maximum(flat - bg_flat[:, None], 0.0)
+        dc_valid = dc_flat[valid_idx]
+
+        basis_mx   = mx.array(basis)
+        bb_mx      = mx.array(bb_grid)
+        dc_mx      = mx.array(dc_valid)
+
+        bd_mx      = dc_mx @ basis_mx.T
+        dc_sq_mx   = (dc_mx ** 2).sum(axis=1)
+        costs_mx   = dc_sq_mx[:, None] - mx.maximum(bd_mx, 0.0) ** 2 / bb_mx[None, :]
+        best_g_mx  = costs_mx.argmin(axis=1)
+        mx.eval(best_g_mx, bd_mx)
+
+        best_g  = np.array(best_g_mx)
+        bd_np   = np.array(bd_mx)
+
+        tau_v   = param_pairs[best_g, 0]
+        w_v     = param_pairs[best_g, 1]
+        amp_v   = np.maximum(
+            bd_np[np.arange(len(valid_idx)), best_g] / bb_grid[best_g].astype(np.float64), 0.0)
+
+        good = amp_v > 0
+        tau_amp_ns = tau_v * 1e9
+        tau_int_ns = (tau_v + w_v ** 2 / np.maximum(tau_v, 1e-15)) * 1e9
+
+        basis_best = basis[best_g].astype(np.float64)
+        model_v    = amp_v[:, None] * basis_best + bg_flat[valid_idx, None]
+        resid_v    = dc_valid.astype(np.float64) - model_v
+        chi2_v     = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+
+        yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
+        maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
+        maps['width_1'][yi_arr[good], xi_arr[good]]      = w_v[good] * 1e9
+        maps['alpha_1'][yi_arr[good], xi_arr[good]]      = amp_v[good]
+        maps['frac_1'][yi_arr[good], xi_arr[good]]       = 1.0
+        maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
+        maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
+        maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2_v[good]
+        return maps
+
 
     @staticmethod
     def _estimate_bg_batch(flat, valid_mask):

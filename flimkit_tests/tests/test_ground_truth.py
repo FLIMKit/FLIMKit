@@ -25,7 +25,6 @@ from mock_data import (
     MOCK_IRF_FWHM_BINS,
 )
 
-# Helper
 def _irf(n_bins, tcspc_res, fwhm_ns, center_bin):
     """Build the same Gaussian IRF the fitter will use."""
     from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm

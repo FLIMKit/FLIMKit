@@ -164,7 +164,6 @@ class TestGatedDecayExtraction:
         assert decay.max() == 0
 
 
-# 3. Fit pipeline on cursor-gated decay
 class TestCursorGatedFitPipeline:
     """End-to-end: mask → decay → fit_summed → summary."""
 

@@ -310,7 +310,6 @@ def phasor_cursor_tool(
         plt.show()
         _end_output()
 
-    # Event handlers
     def _on_click(event):
         if event.inaxes != state['ax'] or event.button != 1:
             return
@@ -353,7 +352,6 @@ def phasor_cursor_tool(
         if state['cursors']:
             _analyse()
 
-    # Build the phasor plot
     if notebook:
         fig, ax = plt.subplots(figsize=figsize)
     else:
@@ -413,7 +411,6 @@ def phasor_cursor_tool(
             state['fig'].savefig(path, dpi=300, bbox_inches='tight')
             print(f"Figure exported → {path}")
 
-    # Peak detection on the live phasor
     _peak_artists: list = []          # track markers for toggle/clear
 
     def _on_peaks(_ignored=None):
@@ -438,7 +435,6 @@ def phasor_cursor_tool(
         state['ax'].figure.canvas.draw_idle()
         _end_output()
 
-    # Wire up controls
     if notebook:
         import ipywidgets as widgets  # noqa: F811
         from IPython.display import display  # noqa: F811

@@ -7,7 +7,6 @@ from phasorpy.lifetime import phasor_to_apparent_lifetime
 from phasorpy.plot import PhasorPlot
 
 
-# Peak detection
 def find_phasor_peaks(
     real_cal,
     imag_cal,
@@ -77,7 +76,6 @@ def find_phasor_peaks(
     )
 
 
-# Pretty-print
 def print_peaks(peaks: dict) -> None:
     n = peaks['n_peaks']
     print(f"Found {n} peak(s) in the phasor histogram\n")
@@ -105,7 +103,6 @@ def print_peaks(peaks: dict) -> None:
                   f"τ_m = {peaks['tau_mod'][i]:.2f} ns")
 
 
-# Plotting
 def plot_phasor_peaks(
     peaks: dict,
     real_cal: np.ndarray,

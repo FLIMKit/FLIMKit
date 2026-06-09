@@ -5,6 +5,7 @@
 FLIMKit is a Python toolkit for FLIM data from Leica SP8/FALCON (or any PTU-based system). Built as a drop-in for Leica LAS X FLIM analysis, with two workflows:
 
 - **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, and batch processing
+- **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
 - **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, spatial filtering (gaussian/median/wavelet), two-component decomposition, automatic peak detection, session save/load
 
 Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
@@ -164,6 +165,17 @@ See [ROADMAP.md](ROADMAP.md) for details.
 ## Notes on LAS X comparison
 
 Fitted lifetimes from FLIMKit will typically read slightly higher than LAS X for the same data. This is a consequence of IRF placement: FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how LAS X places the IRF. The difference is systematic and reproducible across acquisitions.
+
+## References
+
+**Lifetime distribution fitting** - Gaussian and Lorentzian α(τ) models:
+> Lakowicz, J.R. (2006). *Principles of Fluorescence Spectroscopy* (3rd ed.). Springer. §4.11.2, pp. 141-144.
+
+**PhasorPy**: Gohlke, C. et al. Zenodo. https://doi.org/10.5281/zenodo.13862586
+
+**Tile stitching**: Preibisch et al. (2009). *Bioinformatics* 25(11). https://doi.org/10.1093/bioinformatics/btp184
+
+**Cellpose-SAM**: Pachitariu & Stringer (2025). *bioRxiv*. https://doi.org/10.1101/2025.04.28.651001
 
 ## Acknowledgements
 

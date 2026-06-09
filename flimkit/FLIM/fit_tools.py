@@ -91,6 +91,43 @@ def _build_bounds(n_exp, tau_min, tau_max, decay_peak,
     return lo, hi
 
 
+def _build_bounds_dist(n_components, tau_min, tau_max, decay_peak,
+                       fit_bg, fit_sigma, bg_init=0.0, bg_upper=None,
+                       sigma_max=3.0, irf_shift_bins=5):
+    width_max = (tau_max - tau_min) / 2.0
+    width_min = tau_min / 20.0
+
+    lo = [tau_min]   * n_components + [width_min]      * n_components + [0.0]              * n_components + [-float(irf_shift_bins)]
+    hi = [tau_max]   * n_components + [width_max]      * n_components + [10 * decay_peak]  * n_components + [float(irf_shift_bins)]
+
+    if fit_sigma:
+        lo += [0.0];  hi += [sigma_max]
+
+    if fit_bg:
+        _bg_hi = bg_upper if bg_upper is not None else bg_init * 1.5 + 10
+        lo += [0.0];  hi += [_bg_hi]
+
+    return lo, hi
+
+
+def _pack_p0_dist(n_components, tau_min, tau_max, decay_peak,
+                  fit_bg, fit_sigma, bg_init):
+    tmin   = max(tau_min, 1e-14) * 1.001
+    tmax   = tau_max * 0.999
+    tau0   = np.logspace(np.log10(tmin), np.log10(tmax), n_components)
+    width0 = tau0 * 0.2
+    amp0   = np.full(n_components, decay_peak / n_components)
+    base   = np.concatenate([tau0, width0, amp0, [0.0]])
+
+    if fit_sigma:
+        base = np.concatenate([base, [0.3]])
+
+    if fit_bg:
+        base = np.concatenate([base, [bg_init]])
+
+    return base
+
+
 def _pack_p0(n_exp, tau_min, tau_max, decay_peak,
              has_tail, fit_bg, fit_sigma, bg_init,
              tau_override=None):

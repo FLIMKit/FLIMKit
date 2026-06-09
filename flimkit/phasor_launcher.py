@@ -6,8 +6,6 @@ import numpy as np
 
 
 
-# Helpers: yes/no, path prompts, file-dialog save
-
 def _yes_no(question):
     import inquirer
     ans = inquirer.prompt([inquirer.List(
@@ -61,8 +59,6 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
         return path or default_name
 
 
-
-# Save / Load
 
 def save_session(path, *,
                  real_cal,
@@ -130,8 +126,6 @@ def load_session(path):
     )
 
 
-
-# Pipeline: PTU → phasor → (optional) calibration
 
 def get_ptu_active_channels(ptu_path):
     from .PTU.reader import PTUFile
@@ -253,8 +247,6 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
     )
 
 
-
-# Main launcher
 
 def launch_phasor(ptu_path=None,
                   irf_path=None,

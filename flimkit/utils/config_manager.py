@@ -5,7 +5,6 @@ import copy
 _CONFIG_DIR = os.path.join(os.path.expanduser('~'), '.flimkit')
 _CONFIG_FILE = os.path.join(_CONFIG_DIR, 'config.json')
 
-# Keys and their defaults - flat sections
 _DEFAULTS = {
     'expert': {
         'binning_factor': 1,
@@ -117,5 +116,4 @@ class ConfigManager:
         self._load()
 
 
-# Module-level singleton
 cfg = ConfigManager()

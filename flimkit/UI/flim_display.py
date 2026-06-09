@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize, PowerNorm
 
 
-# Colormap presets
 COLORMAPS = {
     'hsv': 'hsv',
     'viridis': 'viridis',

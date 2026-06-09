@@ -4,8 +4,6 @@ from typing import List, Dict, Any, Optional
 import tifffile
 
 
-# Canvas assembly
-
 def assemble_tile_maps(
     tile_results: List[Dict[str, Any]],
     canvas_height: int,
@@ -143,8 +141,6 @@ def derive_global_tau(
 
     return summary
 
-
-# Save assembled outputs
 
 def save_assembled_maps(
     canvas: Dict[str, np.ndarray],

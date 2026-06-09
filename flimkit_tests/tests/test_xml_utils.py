@@ -4,7 +4,6 @@ from pathlib import Path
 import tempfile
 import shutil
 
-# Import test utilities
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from mock_data import generate_mock_xlif
