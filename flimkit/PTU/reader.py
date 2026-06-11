@@ -2,6 +2,7 @@ import struct
 import time
 import numpy as np
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 _TAG_TYPES = {
     0xFFFF0008: ('Empty8',      None),
