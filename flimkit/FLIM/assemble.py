@@ -35,7 +35,6 @@ def assemble_tile_maps(
         cy = y0 + th / 2.0   # tile centre row
         cx = x0 + tw / 2.0   # tile centre col
 
-        # Distance from tile centre for every pixel in this tile's footprint
         rows = np.arange(y0, y1, dtype=np.float64)
         cols = np.arange(x0, x1, dtype=np.float64)
         dy2  = (rows - cy) ** 2               # (dy,)
@@ -48,7 +47,6 @@ def assemble_tile_maps(
         min_dist2[y0:y1, x0:x1] = np.where(closer, dist2, region)
         owner[y0:y1, x0:x1]     = np.where(closer, ti, owner[y0:y1, x0:x1])
 
-    # Place tile data using ownership map
     canvas = {k: np.full((H, W), np.nan, dtype=np.float32) for k in keys_all}
     intensity_canvas = np.zeros((H, W), dtype=np.float32)
     coverage         = np.zeros((H, W), dtype=np.uint16)
@@ -63,7 +61,6 @@ def assemble_tile_maps(
         x1 = min(x0 + tw, W)
         dy, dx = y1 - y0, x1 - x0
 
-        # Mask: pixels owned by this tile
         owned = (owner[y0:y1, x0:x1] == ti)   # (dy, dx) bool
 
         tile_int = np.asarray(
@@ -156,11 +153,9 @@ def save_assembled_maps(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save raw numpy maps for downstream use
     for key, arr in canvas.items():
         np.save(str(output_dir / f"{roi_name}_{key}.npy"), arr)
 
-    # Intensity TIFF (uint16)
     # Use percentile-based clipping so a handful of very bright pixels (cell
     # clusters, tile-overlap edges) do not compress the bulk of tissue to
     # near-zero.  Display range overrides take priority when provided.

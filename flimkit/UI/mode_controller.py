@@ -6,117 +6,88 @@ class ModeController:
         self.b = builder
 
     def switch(self, form_id: str):
-        # Hide all buttons' active state
         for btn in self.b._form_buttons.values():
             btn.state(['!pressed'])
 
-        # Show selected form
         if form_id in self.b._form_inner_frames:
             # batch and irf are menu-only - no sidebar button to highlight
-            
+
             self.b._current_form = form_id
 
-            # FOV mode: use notebook with tabs
             if form_id == 'fov':
-                # Hide stitch notebook and phasor
                 self.b._stitch_tabs.grid_remove()
                 if 'phasor' in self.b._form_inner_frames:
                     self.b._form_inner_frames['phasor'][0].grid_remove()
                 if hasattr(self.b, '_roi_analysis_panel'):
                     self.b._fov_preview._roi_analysis_panel = self.b._roi_analysis_panel
-                
-                # Now show FOV form
+
                 fov_frame = self.b._form_inner_frames['fov'][0]
                 fov_frame.grid(row=0, column=0, sticky='nsew')
                 fov_frame.lift()
                 fov_frame.tkraise()
-                
-                # Show notebook with Fit Settings + ROI Analysis tabs
+
                 self.b._analysis_tabs.grid(row=0, column=0, sticky='nsew')
                 self.b._analysis_tabs.lift()
                 self.b._analysis_tabs.tkraise()
-                
-                # Select Fit Settings tab
                 self.b._analysis_tabs.select(0)
-                
-                # Force layout update (update_idletasks avoids re-entrant event processing)
+
+                # update_idletasks avoids re-entrant event processing
                 self.b._fit_settings_tab.update_idletasks()
-                
-                # Refresh canvas to ensure content displays properly
                 self.b._refresh_scrollable_frame(form_id)
 
-            # Stitch mode: use notebook with tabs
             elif form_id == 'stitch':
-                # Hide FOV notebook and phasor
                 self.b._analysis_tabs.grid_remove()
                 if 'phasor' in self.b._form_inner_frames:
                     self.b._form_inner_frames['phasor'][0].grid_remove()
-                
-                # Hide FOV form inside FOV notebook
+
                 if 'fov' in self.b._form_inner_frames:
                     self.b._form_inner_frames['fov'][0].grid_remove()
-                
-                # Show stitch form
+
                 stitch_frame = self.b._form_inner_frames['stitch'][0]
                 stitch_frame.grid(row=0, column=0, sticky='nsew')
                 stitch_frame.lift()
                 stitch_frame.tkraise()
-                
-                # Show stitch notebook with Fit Settings + ROI Analysis tabs
+
                 self.b._stitch_tabs.grid(row=0, column=0, sticky='nsew')
                 self.b._stitch_tabs.lift()
                 self.b._stitch_tabs.tkraise()
-                
-                # Add ROI analysis panel to stitch ROI tab
+
                 if not hasattr(self.b, '_stitch_roi_panel'):
-                    # Create a separate ROI analysis panel for stitch mode
                     self.b._stitch_roi_panel = RoiAnalysisPanel(self.b._stitch_roi_analysis_frame)
                     self.b._stitch_roi_panel.grid(row=0, column=0, sticky='nsew')
-                    # Connect to FOV preview
                     self.b._stitch_roi_panel.fov_preview = self.b._fov_preview
                     self.b._fov_preview._roi_analysis_panel = self.b._stitch_roi_panel
-                
-                # Select Fit Settings tab
+
                 self.b._stitch_tabs.select(0)
-                
-                # Force layout update (update_idletasks avoids re-entrant event processing)
+
+                # update_idletasks avoids re-entrant event processing
                 self.b._stitch_settings_tab.update_idletasks()
-                
-                # Refresh canvas to ensure content displays properly
                 self.b._refresh_scrollable_frame(form_id)
 
-            # Other modes: traditional layout
             else:
-                # Hide both notebooks
                 self.b._analysis_tabs.grid_remove()
                 self.b._stitch_tabs.grid_remove()
-                
-                # Hide all other traditional forms AND FOV/Stitch forms
+
                 for fid in ('phasor', 'fov', 'stitch', 'batch', 'irf'):
                     if fid != form_id and fid in self.b._form_inner_frames:
                         self.b._form_inner_frames[fid][0].grid_remove()
-                
-                # Show the selected form
+
                 if form_id in self.b._form_inner_frames:
                     selected_frame = self.b._form_inner_frames[form_id][0]
                     selected_frame.grid(row=0, column=0, sticky='nsew')
                     selected_frame.lift()
                     selected_frame.tkraise()
-                    # Refresh canvas to ensure content displays properly
                     self.b._refresh_scrollable_frame(form_id)
 
-            # Update preview panel based on form
             if form_id == 'phasor':
                 self.b._fov_preview.frame.grid_remove()
                 self.b._phasor_panel.frame.grid()
                 self.b._preview_frame_label.configure(text='  Phasor Analysis  ')
-                # Auto-populate phasor PTU + IRF from FOV fields if available
                 if (hasattr(self.b, 'sv_ph_ptu') and hasattr(self.b, 'sv_ptu')
                         and not self.b.sv_ph_ptu.get().strip()):
                     fov_ptu = self.b.sv_ptu.get().strip()
                     if fov_ptu:
                         self.b.sv_ph_ptu.set(fov_ptu)
-                    # Carry over IRF settings
                     if hasattr(self.b, '_irf_fov'):
                         method = self.b._irf_fov.sv_method.get()
                         if method == 'irf_xlsx' and hasattr(self.b, 'sv_xlsx'):
@@ -128,7 +99,6 @@ class ModeController:
                             if mirf and not self.b.sv_ph_mirf.get().strip():
                                 self.b.sv_ph_mirf.set(mirf)
             elif form_id in ('batch', 'irf'):
-                # No preview needed for batch/irf - hide both panels
                 self.b._phasor_panel.frame.grid_remove()
                 self.b._fov_preview.frame.grid_remove()
                 label = '  Machine IRF Builder  ' if form_id == 'irf' else '  Batch Processing  '
@@ -145,4 +115,3 @@ class ModeController:
         if hasattr(self.b, 'mode_status'):
             self.b.mode_status.set(f"Current: {self.b._form_labels.get(form_id, form_id)}")
             self.b._preview_frame_label.configure(text='  FOV Preview  ')
-

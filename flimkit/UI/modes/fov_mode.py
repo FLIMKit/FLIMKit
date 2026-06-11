@@ -34,54 +34,72 @@ class FovMode(BaseMode):
         fp = _section(tab, 'Fitting Parameters')
         fp.grid(row=2, column=0, sticky='ew', pady=(0, 6))
 
-        # Exponential components (row 0)
-        ttk.Label(fp, text='Exponential components:').grid(
-            row=0, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
+        self.b.state.sv_fit_model_fov = tk.StringVar(value='discrete')
+        ttk.Radiobutton(fp, text='n-exp', variable=self.b.sv_fit_model_fov,
+                        value='discrete').grid(row=0, column=1, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='Gaussian dist.', variable=self.b.sv_fit_model_fov,
+                        value='gaussian').grid(row=0, column=2, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='Lorentzian dist.', variable=self.b.sv_fit_model_fov,
+                        value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
+
         self.b.state.iv_nexp_fov = tk.IntVar(value=2)
+        self.b.state.iv_ncomp_dist_fov = tk.IntVar(value=1)
+
+        nexp_frame = ttk.Frame(fp)
+        nexp_frame.grid(row=1, column=0, columnspan=5, sticky='w')
+        ttk.Label(nexp_frame, text='Components:').pack(side='left', padx=(4, 8))
         for n in (1, 2, 3):
-            ttk.Radiobutton(fp, text=str(n), variable=self.b.iv_nexp_fov,
-                            value=n).grid(row=0, column=n, sticky='w', padx=1)
+            ttk.Radiobutton(nexp_frame, text=str(n), variable=self.b.iv_nexp_fov,
+                            value=n).pack(side='left', padx=1)
 
-         #Fitting mode row (independent, no column-width interference) 
+        dist_frame = ttk.Frame(fp)
+        ttk.Label(dist_frame, text='Components:').pack(side='left', padx=(4, 8))
+        ttk.Radiobutton(dist_frame, text='1 (unimodal)', variable=self.b.iv_ncomp_dist_fov,
+                        value=1).pack(side='left', padx=1)
+        ttk.Radiobutton(dist_frame, text='2 (bimodal)', variable=self.b.iv_ncomp_dist_fov,
+                        value=2).pack(side='left', padx=1)
+
+        def _on_fov_model_change(*_):
+            if self.b.sv_fit_model_fov.get() == 'discrete':
+                dist_frame.grid_remove()
+                nexp_frame.grid(row=1, column=0, columnspan=5, sticky='w')
+            else:
+                nexp_frame.grid_remove()
+                dist_frame.grid(row=1, column=0, columnspan=5, sticky='w')
+        self.b.sv_fit_model_fov.trace_add('write', _on_fov_model_change)
+
         mode_row = ttk.Frame(fp)
-        mode_row.grid(row=1, column=0, columnspan=5, sticky='w', pady=(2, 0))
-
+        mode_row.grid(row=2, column=0, columnspan=5, sticky='w', pady=(2, 0))
         ttk.Label(mode_row, text='Fitting mode:').pack(side='left', padx=(0, 10))
         self.b.state.sv_mode_fov = tk.StringVar(value='both')
-
-        # Pack radio buttons tightly together
         radio_frame = ttk.Frame(mode_row)
         radio_frame.pack(side='left')
         ttk.Radiobutton(radio_frame, text='Full', variable=self.b.sv_mode_fov,
                         value='both').pack(side='left', padx=2)
         ttk.Radiobutton(radio_frame, text='Fast', variable=self.b.sv_mode_fov,
                         value='summed').pack(side='left', padx=2)
-        # ttk.Radiobutton(radio_frame, text="Per-pixel", variable=self.b.sv_mode_fov,
-        #                 value="perPixel").pack(side="left", padx=2)
-
         ttk.Label(mode_row, text='(fast = no FLIM image)',
                   foreground='grey').pack(side='left', padx=(10, 0))
 
-        # Fit window (now row 2)
-        ttk.Label(fp, text='Fit window (ns):').grid(row=2, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='Fit window (ns):').grid(row=3, column=0, sticky='w', **PAD)
         self.b.state.sv_tau_min_fov = tk.StringVar(value=str(_C()['Tau_min']))
         self.b.state.sv_tau_max_fov = tk.StringVar(value=str(_C()['Tau_max']))
-        ttk.Entry(fp, textvariable=self.b.sv_tau_min_fov, width=7).grid(row=2, column=1, sticky='w', padx=4)
-        ttk.Label(fp, text='to').grid(row=2, column=2)
-        ttk.Entry(fp, textvariable=self.b.sv_tau_max_fov, width=7).grid(row=2, column=3, sticky='w', padx=4)
-        ttk.Label(fp, text='ns  (fitting range)', foreground='grey').grid(row=2, column=4, sticky='w')
+        ttk.Entry(fp, textvariable=self.b.sv_tau_min_fov, width=7).grid(row=3, column=1, sticky='w', padx=4)
+        ttk.Label(fp, text='to').grid(row=3, column=2)
+        ttk.Entry(fp, textvariable=self.b.sv_tau_max_fov, width=7).grid(row=3, column=3, sticky='w', padx=4)
+        ttk.Label(fp, text='ns  (fitting range)', foreground='grey').grid(row=3, column=4, sticky='w')
 
-        # Output prefix (now row 3)
-        ttk.Label(fp, text='Output prefix:').grid(row=3, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='Output prefix:').grid(row=4, column=0, sticky='w', **PAD)
         self.b.state.sv_out_fov = tk.StringVar(value='flim_out')
         ttk.Entry(fp, textvariable=self.b.sv_out_fov, width=35).grid(
-            row=3, column=1, columnspan=3, sticky='ew', padx=4)
+            row=4, column=1, columnspan=3, sticky='ew', padx=4)
 
         fm = _section(tab, 'Masking & Thresholding')
         fm.grid(row=3, column=0, sticky='ew', pady=(0, 6))
 
         self.b.state.bv_cell = tk.BooleanVar(value=False)
-        ttk.Checkbutton(fm, text='Apply cell mask (Otsu on intensity image)',
+        ttk.Checkbutton(fm, text='Apply cell mask (Cellpose-SAM)',
                         variable=self.b.bv_cell).grid(
             row=0, column=0, columnspan=3, sticky='w', **PAD)
 

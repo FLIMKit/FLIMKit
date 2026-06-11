@@ -20,8 +20,6 @@ _EXPERT_DEFAULTS = {
     'irf_align': 'steepest_rise',
     'irf_shift_bins': 2,
     'free_tau_perpixel': False,
-    'dist_type': 'discrete',
-    'dist_n_components': 1,
 }
 
 
@@ -139,28 +137,6 @@ class ExpertSettingsDialog(tk.Toplevel):
             row=row, column=0, columnspan=4, sticky='w', **PAD)
 
         row += 1
-        ttk.Label(f, text='Fit model:').grid(row=row, column=0, sticky='w', **PAD)
-        self._sv_dist_type = tk.StringVar(value=vals.get('dist_type', 'discrete'))
-        dm_frame = ttk.Frame(f)
-        dm_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)
-        ttk.Radiobutton(dm_frame, text='Discrete exponentials',
-                        variable=self._sv_dist_type, value='discrete').pack(side='left', padx=(0, 8))
-        ttk.Radiobutton(dm_frame, text='Gaussian dist.',
-                        variable=self._sv_dist_type, value='gaussian').pack(side='left', padx=(0, 8))
-        ttk.Radiobutton(dm_frame, text='Lorentzian dist.',
-                        variable=self._sv_dist_type, value='lorentzian').pack(side='left')
-
-        row += 1
-        ttk.Label(f, text='Dist. components:').grid(row=row, column=0, sticky='w', **PAD)
-        self._sv_dist_ncomp = tk.StringVar(value=str(vals.get('dist_n_components', 1)))
-        nc_frame = ttk.Frame(f)
-        nc_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)
-        ttk.Radiobutton(nc_frame, text='1  (unimodal)',
-                        variable=self._sv_dist_ncomp, value='1').pack(side='left', padx=(0, 8))
-        ttk.Radiobutton(nc_frame, text='2  (bimodal)',
-                        variable=self._sv_dist_ncomp, value='2').pack(side='left')
-
-        row += 1
         btn_frame = ttk.Frame(f)
         btn_frame.grid(row=row, column=0, columnspan=4, pady=(12, 0))
         ttk.Button(btn_frame, text='Confirm', command=self._confirm).pack(side='left', padx=4)
@@ -191,8 +167,6 @@ class ExpertSettingsDialog(tk.Toplevel):
             'irf_align': self._sv_irf_align.get(),
             'irf_shift_bins': int(self._sv_irf_shift.get() or 2),
             'free_tau_perpixel': self._bv_free_tau.get(),
-            'dist_type': self._sv_dist_type.get(),
-            'dist_n_components': int(self._sv_dist_ncomp.get() or 1),
         }
 
     def _confirm(self):
@@ -218,5 +192,3 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_irf_align.set('steepest_rise')
         self._sv_irf_shift.set('2')
         self._bv_free_tau.set(False)
-        self._sv_dist_type.set('discrete')
-        self._sv_dist_ncomp.set('1')

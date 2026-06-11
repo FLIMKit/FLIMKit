@@ -166,7 +166,6 @@ def build_app():
         "--hidden-import", "matplotlib",
         "--hidden-import", "numpy",
         "--hidden-import", "cv2",
-        "--hidden-import", "opencv_python",
         "--hidden-import", "phasorpy",
         "--hidden-import", "pandas",
         "--hidden-import", "scipy",
@@ -207,6 +206,11 @@ def build_app():
             try:
                 import nvidia
                 cmd += ["--collect-binaries", "nvidia"]
+                try:
+                    import nvidia.cuda_runtime
+                    cmd += ["--collect-binaries", "nvidia.cuda_runtime"]
+                except ImportError:
+                    pass
             except ImportError:
                 pass
             print(f"  CUDA detected ({torch.cuda.get_device_name(0)}) — bundling CUDA torch")

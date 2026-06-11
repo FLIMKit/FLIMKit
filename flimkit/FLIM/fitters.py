@@ -1017,9 +1017,15 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         n_workers = min(ny * nx, max(1, multiprocessing.cpu_count()))
         valid_flat = [i for i in range(ny * nx) if ph_counts[i] >= min_photons]
 
+        n_valid = len(valid_flat)
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            solutions = list(pool.map(_fit_pixel_dist, valid_flat))
+            futures = [pool.submit(_fit_pixel_dist, i) for i in valid_flat]
+            solutions = []
+            for k, f in enumerate(futures):
+                solutions.append(f.result())
+                if progress_callback is not None and k % max(1, n_valid // 200) == 0:
+                    progress_callback(k, n_valid)
 
         for sol, flat_idx in zip(solutions, valid_flat):
             if sol is None:

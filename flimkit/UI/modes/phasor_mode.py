@@ -8,15 +8,12 @@ from flimkit.UI.phasor_panel import PhasorViewPanel
 
 class PhasorMode(BaseMode):
     def build(self):
-        # Get outer and inner frames from tuple
         outer, inner = self.b._form_inner_frames['phasor']
         inner.columnconfigure(0, weight=1)
-        #  Controls strip (fixed height, top) ─
         ctrl = ttk.Frame(inner, padding=(6, 4))
         ctrl.grid(row=0, column=0, sticky='ew')
         ctrl.columnconfigure(0, weight=1)
 
-        # Input mode
         mode_fr = _section(ctrl, 'Input Mode')
         mode_fr.grid(row=0, column=0, sticky='ew', pady=(0, 4))
         mode_fr.columnconfigure(1, weight=1)
@@ -31,7 +28,6 @@ class PhasorMode(BaseMode):
                         command=self.b._ph_mode_changed).grid(
             row=0, column=1, sticky='w', padx=4, pady=1)
 
-        # New-PTU sub-frame
         self.b._ph_new = ttk.Frame(ctrl)
         self.b._ph_new.columnconfigure(0, weight=1)
         self.b._ph_new.grid(row=1, column=0, sticky='ew')
@@ -55,7 +51,6 @@ class PhasorMode(BaseMode):
                   foreground='grey').grid(
             row=3, column=1, columnspan=2, sticky='w', padx=4)
 
-        # Session sub-frame
         self.b._ph_sess = ttk.Frame(ctrl)
         self.b._ph_sess.columnconfigure(0, weight=1)
         self.b._ph_sess.grid(row=2, column=0, sticky='ew')
@@ -68,7 +63,6 @@ class PhasorMode(BaseMode):
                                   [('NPZ', '*.npz'), ('All', '*.*')]))
         self.b._ph_sess.grid_remove()
 
-        # Display options
         opt_fr = _section(ctrl, 'Display Options')
         opt_fr.grid(row=3, column=0, sticky='ew', pady=(4, 0))
         ttk.Label(opt_fr, text='Min photons (fraction):').grid(
@@ -82,13 +76,11 @@ class PhasorMode(BaseMode):
         ttk.Entry(opt_fr, textvariable=self.b.sv_ph_maxc, width=4).grid(
             row=0, column=3, sticky='w', padx=4)
 
-        # Run button
         self.b._btn_ph = ttk.Button(ctrl, text='▶  Load & Analyse',
                                    command=self.b._run_phasor)
         self.b._btn_ph.grid(row=4, column=0, pady=(6, 2), ipadx=16, ipady=3,
                           sticky='w')
 
-        # Find Peaks section
         peaks_fr = _section(ctrl, 'Find Peaks')
         peaks_fr.grid(row=5, column=0, sticky='ew', pady=(6, 0))
         peaks_fr.columnconfigure(1, weight=1)
@@ -106,7 +98,6 @@ class PhasorMode(BaseMode):
                    command=self.b._run_ph_find_peaks).grid(
             row=2, column=0, columnspan=2, sticky='w', pady=(4, 0), padx=8)
 
-        # FRET Analysis section
         fret_fr = _section(ctrl, 'FRET Analysis')
         fret_fr.grid(row=6, column=0, sticky='ew', pady=(6, 0))
         fret_fr.columnconfigure(1, weight=1)
@@ -138,5 +129,3 @@ class PhasorMode(BaseMode):
         ttk.Button(_fret_btn_fr, text='✕  Clear Overlay',
                    command=lambda: self.b._phasor_panel.clear_fret_overlay()).pack(
             side='left')
-
-        # (PhasorViewPanel lives in the right FOV-preview panel - see _init_ui)

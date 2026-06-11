@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import os, sys
+if getattr(sys, 'frozen', False) and sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
 if getattr(sys, 'frozen', False):
-    # Running as a PyInstaller bundle — point at the bundled mpl-cache/
     _mpl_cache = os.path.join(sys._MEIPASS, 'mpl-cache')
 else:
-    # Running from source — use a local mpl-cache/ next to this file
     _mpl_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mpl-cache')
 os.makedirs(_mpl_cache, exist_ok=True)
 os.environ.setdefault('MPLCONFIGDIR', _mpl_cache)
@@ -30,8 +31,7 @@ def main(fast=False, cli=False, check_updates=False):
         launch_gui()
         return
     
-    # Only import interactive components when needed (not GUI mode)
-    from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles
+    from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles, timelapse_flim_fit
     import inquirer
     from flimkit._version import __version__, roadmap
     from flimkit.utils.fancy import display_banner, flim_fitting_banner, banner_goodbye
@@ -49,30 +49,36 @@ def main(fast=False, cli=False, check_updates=False):
                 'Phasor analysis',
                 'Reconstruct a FOV and FLIM FIT',
                 'Just stitch multiple tiles together',
+                'Timelapse batch fit',
                 'About',
                 'Exit'
             ]
         )
     ]
     answers = inquirer.prompt(questions)
-    
+
     if answers['process_option'] == 'FLIM FIT a single FOV':
         if fast == False:
             flim_fitting_banner()
         print("FLIM FITting a single FOV...")
         single_FOV_flim_fit(interactive=True)
-        
+
     elif answers['process_option'] == 'Phasor analysis':
         from flimkit.phasor_launcher import phasor_inquire
         phasor_inquire()
-        
+
     elif answers['process_option'] == 'Reconstruct a FOV and FLIM FIT':
         print("Reconstructing a FOV and FLIM FITting...")
         stitch_and_fit(interactive=True)
-        
+
     elif answers['process_option'] == 'Just stitch multiple tiles together':
         print("Stitching multiple tiles together...")
         stitch_tiles(interactive=True)
+
+    elif answers['process_option'] == 'Timelapse batch fit':
+        print("Timelapse batch FLIM fitting...")
+        timelapse_flim_fit(interactive=True)
+
     elif answers['process_option'] == 'About':
         print('Current version: ' + __version__)
         try:

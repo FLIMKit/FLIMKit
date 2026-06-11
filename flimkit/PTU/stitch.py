@@ -85,7 +85,6 @@ def stitch_flim_tiles(
         print(f"  TCSPC: {tcspc_resolution * 1e12:.2f} ps/bin")
         print(f"  Time range: 0 - {time_axis_ns[-1]:.2f} ns")
 
-    # Only recompute pixel positions if they weren't pre-supplied
     _positions_precomputed = ('pixel_x' in tile_positions[0] and
                               'pixel_y' in tile_positions[0])
     if not _positions_precomputed:
@@ -190,7 +189,6 @@ def stitch_flim_tiles(
             tiles_skipped += 1
             continue
 
-    #  Optional registration using intensity maps
     if register_tiles and tiles_processed > 1 and tile_results:
         if verbose:
             print(f"\nRunning tile registration (phase correlation)...")
@@ -199,12 +197,10 @@ def stitch_flim_tiles(
             max_shift_px=reg_max_shift_px,
             verbose=verbose,
         )
-        # Update tile_positions with corrected coordinates
         for i, tr in enumerate(tile_results):
             if i < len(tile_positions):
                 tile_positions[i]['pixel_y'] = tr['pixel_y']
                 tile_positions[i]['pixel_x'] = tr['pixel_x']
-        # Recalculate ownership map with corrected positions
         _owner[:] = -1
         _min_dist2[:] = np.inf
         for ti, (hist_ti, y0_old, x0_old, h) in enumerate(_hists):
@@ -216,7 +212,6 @@ def stitch_flim_tiles(
             dy, dx = y1 - y0, x1 - x0
             if dy <= 0 or dx <= 0:
                 continue
-            # Reclaim ownership with corrected positions
             cy = y0 + h.shape[0] / 2.0
             cx = x0 + h.shape[1] / 2.0
             rows = np.arange(y0, y1, dtype=np.float64)
@@ -226,7 +221,6 @@ def stitch_flim_tiles(
             closer  = dist2 < region
             _min_dist2[y0:y1, x0:x1] = np.where(closer, dist2, region)
             _owner[y0:y1, x0:x1]     = np.where(closer, ti, _owner[y0:y1, x0:x1])
-            # Update _hists with corrected position
             _hists[ti] = (hist_ti, y0, x0, h)
 
         # Recompute canvas size from corrected positions so tiles shifted
@@ -240,14 +234,12 @@ def stitch_flim_tiles(
                     f"{canvas_height}×{canvas_width} → "
                     f"{new_canvas_height}×{new_canvas_width} px"
                 )
-            # Reallocate in-memory canvas; re-open memmap at new shape.
             intensity_canvas = np.zeros(
                 (new_canvas_height, new_canvas_width), dtype=np.float64)
             flim_canvas._mmap.close()
             flim_canvas = np.memmap(
                 str(output_flim), dtype=np.uint32, mode='w+',
                 shape=(new_canvas_height, new_canvas_width, n_time_bins))
-            # Rebuild ownership map at the new size.
             _owner     = np.full(
                 (new_canvas_height, new_canvas_width), -1,     dtype=np.int32)
             _min_dist2 = np.full(
@@ -267,7 +259,6 @@ def stitch_flim_tiles(
             canvas_height = new_canvas_height
             canvas_width  = new_canvas_width
 
-    # Write each tile's data only for pixels it owns
     if verbose:
         blending_mode = 'with registration' if (register_tiles and tiles_processed > 1) else 'no blending'
         print(f"  Writing canvas (nearest-centre, {blending_mode})...")
@@ -281,7 +272,6 @@ def stitch_flim_tiles(
                 h[owned_r, owned_c, :].sum(axis=1).astype(np.float64)
     del _min_dist2
 
-    # Coverage report
     n_covered = int((_owner >= 0).sum())
     if verbose:
         print(f"  {n_covered:,} pixels covered  "
@@ -519,7 +509,6 @@ def _register_tile_columns(
     if not tile_results:
         return tile_results
 
-    #  geometry from original XLIF positions ─
     orig_col_xs = sorted(set(int(round(tr['pixel_x']/10)*10) for tr in tile_results))
     orig_row_ys = sorted(set(int(round(tr['pixel_y']/10)*10) for tr in tile_results))
     tile_w = max(tr['tile_w'] for tr in tile_results)

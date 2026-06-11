@@ -35,7 +35,6 @@ class StitchMode(BaseMode):
                         variable=self.b.bv_rotate).grid(
             row=4, column=0, columnspan=3, sticky='w', padx=4, pady=(4, 0))
 
-        # Pipeline mode
         fp = _section(tab, 'Pipeline')
         fp.grid(row=1, column=0, sticky='ew', pady=(4, 2))
         self.b.state.sv_pipeline = tk.StringVar(value='stitch_only')
@@ -54,14 +53,12 @@ class StitchMode(BaseMode):
         self.build_fit(self.b._fit_frame)
         self.b._fit_frame.grid_remove()
 
-        # Expert settings banner (hidden until expert settings are confirmed)
         self.b._expert_banner_st = ttk.Label(
             tab, text='⚙  Custom expert settings active',
             foreground='#e8a838', font=('TkDefaultFont', 9, 'bold'))
         self.b._expert_banner_st.grid(row=3, column=0, sticky='w', padx=8)
         self.b._expert_banner_st.grid_remove()
 
-        # Bottom row: Expert Settings + Run button
         btn_row_st = ttk.Frame(tab)
         btn_row_st.grid(row=4, column=0, pady=8)
         self.b._btn_expert_st = ttk.Button(btn_row_st, text='⚙  Expert Settings',
@@ -80,23 +77,50 @@ class StitchMode(BaseMode):
         fp = _section(parent, 'Fitting Parameters')
         fp.grid(row=1, column=0, sticky='ew', pady=(0, 6))
 
-        ttk.Label(fp, text='Exponential components:').grid(
-            row=0, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
+        self.b.state.sv_fit_model_st = tk.StringVar(value='discrete')
+        ttk.Radiobutton(fp, text='n-exp', variable=self.b.sv_fit_model_st,
+                        value='discrete').grid(row=0, column=1, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='Gaussian dist.', variable=self.b.sv_fit_model_st,
+                        value='gaussian').grid(row=0, column=2, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='Lorentzian dist.', variable=self.b.sv_fit_model_st,
+                        value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
+
         self.b.state.iv_nexp_st = tk.IntVar(value=2)
+        self.b.state.iv_ncomp_dist_st = tk.IntVar(value=1)
+
+        nexp_frame_st = ttk.Frame(fp)
+        nexp_frame_st.grid(row=1, column=0, columnspan=5, sticky='w')
+        ttk.Label(nexp_frame_st, text='Components:').pack(side='left', padx=(4, 8))
         for n in (1, 2, 3):
-            ttk.Radiobutton(fp, text=str(n), variable=self.b.iv_nexp_st,
-                            value=n).grid(row=0, column=n, sticky='w', padx=4)
+            ttk.Radiobutton(nexp_frame_st, text=str(n), variable=self.b.iv_nexp_st,
+                            value=n).pack(side='left', padx=4)
+
+        dist_frame_st = ttk.Frame(fp)
+        ttk.Label(dist_frame_st, text='Components:').pack(side='left', padx=(4, 8))
+        ttk.Radiobutton(dist_frame_st, text='1 (unimodal)', variable=self.b.iv_ncomp_dist_st,
+                        value=1).pack(side='left', padx=4)
+        ttk.Radiobutton(dist_frame_st, text='2 (bimodal)', variable=self.b.iv_ncomp_dist_st,
+                        value=2).pack(side='left', padx=4)
+
+        def _on_st_model_change(*_):
+            if self.b.sv_fit_model_st.get() == 'discrete':
+                dist_frame_st.grid_remove()
+                nexp_frame_st.grid(row=1, column=0, columnspan=5, sticky='w')
+            else:
+                nexp_frame_st.grid_remove()
+                dist_frame_st.grid(row=1, column=0, columnspan=5, sticky='w')
+        self.b.sv_fit_model_st.trace_add('write', _on_st_model_change)
 
         self.b.state.bv_perpix = tk.BooleanVar(value=False)
         ttk.Checkbutton(fp, text='Per-pixel fitting [REQUIRED FOR ROI ANALYSIS]',
                         variable=self.b.bv_perpix,
                         command=self.b._perpix_toggled).grid(
-            row=1, column=0, columnspan=4, sticky='w', **PAD)
+            row=2, column=0, columnspan=4, sticky='w', **PAD)
 
         self.b._pxf = ttk.Frame(fp)
-        self.b._pxf.grid(row=2, column=0, columnspan=4, sticky='ew', padx=20)
+        self.b._pxf.grid(row=3, column=0, columnspan=4, sticky='ew', padx=20)
 
-        # Weighted map export options
         self.b.state.bv_save_tau_weighted = tk.BooleanVar(value=True)
         self.b.state.bv_save_int_weighted = tk.BooleanVar(value=True)
         self.b.state.bv_save_amp_weighted = tk.BooleanVar(value=False)
@@ -116,7 +140,6 @@ class StitchMode(BaseMode):
         self.b.state.sv_int_lo = tk.StringVar()
         self.b.state.sv_int_hi = tk.StringVar()
 
-        # Range controls for weighted maps
         ttk.Label(self.b._pxf, text='Lifetime display (ns):').grid(row=2, column=0, sticky='w', pady=2)
         ttk.Entry(self.b._pxf, textvariable=self.b.sv_tau_lo, width=7).grid(row=2, column=1, padx=4)
         ttk.Label(self.b._pxf, text='to').grid(row=2, column=2)
@@ -131,7 +154,6 @@ class StitchMode(BaseMode):
 
         self.b._pxf.grid_remove()
 
-        # Fit window - applies to all fitting modes, not just per-pixel
         self.b.state.sv_tau_fit_lo = tk.StringVar(value=str(_C()['Tau_min']))
         self.b.state.sv_tau_fit_hi = tk.StringVar(value=str(_C()['Tau_max']))
         ttk.Label(fp, text='Fit window (ns):').grid(row=3, column=0, sticky='w', pady=2)
@@ -160,7 +182,6 @@ class StitchMode(BaseMode):
                         variable=self.b.bv_correct_pileup_st).grid(
             row=1, column=0, columnspan=3, sticky='w', **PAD)
 
-        # Registration
         freg = _section(parent, 'Tile Registration')
         freg.grid(row=3, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_register = tk.BooleanVar(value=True)
@@ -174,7 +195,6 @@ class StitchMode(BaseMode):
         ttk.Label(freg, text='(increase if drift > 120px)',
                   foreground='grey').grid(row=1, column=2, sticky='w')
 
-        # Per-tile extras (shown only in tile_fit pipeline mode)
         self.b._tile_extras_frame = ttk.Frame(parent)
         self.b._tile_extras_frame.columnconfigure(0, weight=1)
         self.b._tile_extras_frame.grid(row=4, column=0, sticky='ew', pady=(0, 4))

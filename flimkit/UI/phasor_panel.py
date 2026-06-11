@@ -54,7 +54,6 @@ class PhasorViewPanel:
         self._freq  = 80.0                  # MHz
         self._valid = None   # boolean (min-photons)
 
-        # Phasor filter state
         self._filter_method = tk.StringVar(value='none')
         self._filter_sigma  = tk.DoubleVar(value=1.0)
         self._filter_size   = tk.IntVar(value=3)
@@ -73,7 +72,6 @@ class PhasorViewPanel:
         self._drag_idx  = None           # cursor index being dragged
         self._drag_last = (0.0, 0.0)             # last (g, s) during drag
 
-        # Per-cursor decay fitting
         self._ptu_path  = None   # set by FLIMKitApp after load
         self._channel   = None   # set by FLIMKitApp after load
         self._last_fit_result = None  # cached result for reopen
@@ -84,7 +82,6 @@ class PhasorViewPanel:
         self._radius = tk.DoubleVar(value=0.05)
         self._ratio  = tk.DoubleVar(value=0.60)    # radius_minor = ratio × radius
 
-        #  outer frame 
         self.frame = ttk.Frame(parent)
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(1, weight=1)        # row 1 = figure, expands
@@ -103,7 +100,6 @@ class PhasorViewPanel:
         ctrl = ttk.Frame(self.frame)
         ctrl.grid(row=0, column=0, sticky='ew', padx=4, pady=(4, 2))
 
-        #Row 0: cursor management + mode + sliders 
         row0 = ttk.Frame(ctrl)
         row0.pack(side='top', fill='x')
 
@@ -114,7 +110,6 @@ class PhasorViewPanel:
         ttk.Button(row0, text='Save session',
                    command=self._on_save).pack(side='left', padx=(0, 12))
 
-        # Drawing mode toggle
         ttk.Separator(row0, orient='vertical').pack(
             side='left', fill='y', padx=(0, 8))
         ttk.Label(row0, text='Mode:').pack(side='left')
@@ -155,7 +150,6 @@ class PhasorViewPanel:
         self._radius.trace_add('write', lambda *_: self._update_param_labels())
         self._ratio.trace_add('write',  lambda *_: self._update_param_labels())
 
-        # Row 1: decay fitting buttons 
         row1 = ttk.Frame(ctrl)
         row1.pack(side='top', fill='x', pady=(2, 0))
         ttk.Button(row1, text='⚗ Fit Cursor Decay',
@@ -163,7 +157,6 @@ class PhasorViewPanel:
         ttk.Button(row1, text='View Fit',
                    command=self._view_last_fit_result).pack(side='left')
 
-        # Row 2: phasor filter controls
         row_filt = ttk.Frame(ctrl)
         row_filt.pack(side='top', fill='x', pady=(2, 0))
         ttk.Label(row_filt, text='Phasor filter:').pack(side='left')
@@ -494,8 +487,6 @@ class PhasorViewPanel:
         self._ax_img.set_ylabel('Y (px)', fontsize=8)
         self._ax_img.tick_params(labelsize=7)
 
-    #  FRET trajectory overlay
-
     def overlay_fret_trajectory(self, traj):
         self._fret_trajectory = traj
         self._redraw_phasor()
@@ -524,8 +515,6 @@ class PhasorViewPanel:
             self._ax_ph.plot(ag, as_, color='magenta', lw=2, alpha=0.85, zorder=6)
             self._ax_ph.plot(ag[0],  as_[0],  'mo', ms=7, zorder=7)
             self._ax_ph.plot(ag[-1], as_[-1], 'm^', ms=7, zorder=7)
-
-    #  Peaks overlay
 
     def overlay_peaks(self, peaks):
         self._peak_results = peaks
@@ -557,7 +546,6 @@ class PhasorViewPanel:
         r_min = r * self._ratio.get()
         n     = len(self._cursors)
 
-        # Build per-cursor masks (ellipse or polygon)
         mask_list = []
         for cur in self._cursors:
             if cur.get('type', 'ellipse') == 'poly':
@@ -575,7 +563,6 @@ class PhasorViewPanel:
 
         self._redraw_image(masks)
 
-        # Per-cursor τ_φ stats
         print(f"\n{'─' * 50}")
         for ci in range(n):
             m    = masks[ci]
@@ -592,7 +579,6 @@ class PhasorViewPanel:
                   f"{n_px} px  |  τ_φ = {lo:.2f}-{hi:.2f} ns  "
                   f"(median {med:.2f} ns)")
 
-        # Two-component decomposition - only for the first two ellipse cursors
         ellipse_curs = [c for c in self._cursors
                         if c.get('type', 'ellipse') == 'ellipse']
         if len(ellipse_curs) >= 2:
@@ -629,7 +615,6 @@ class PhasorViewPanel:
         if self._toolbar.mode != '':
             return
 
-        # Right-click in poly mode: close/cancel - handle before anything else
         if event.button == 3 and self._mode_var.get() == 'poly':
             self._on_click_poly(event)
             return
@@ -641,7 +626,6 @@ class PhasorViewPanel:
         if event.xdata is None or event.ydata is None:
             return
 
-        # Drag an existing cursor (not while a polygon is being drawn)
         if not self._poly_pts:
             hit = self._hit_test(event.xdata, event.ydata)
             if hit is not None:
@@ -650,7 +634,6 @@ class PhasorViewPanel:
                 self._status_var.set(f"Dragging C{hit + 1} - release to drop.")
                 return
 
-        # No hit → create new cursor
         if self._mode_var.get() == 'poly':
             self._on_click_poly(event)
         else:
@@ -705,14 +688,12 @@ class PhasorViewPanel:
                 self._do_drag(event.xdata, event.ydata)
             return
 
-        # Hover cursor: show 'move' icon when over an existing region
         if (event.inaxes is self._ax_ph and event.xdata is not None
                 and not self._poly_pts):
             hit = self._hit_test(event.xdata, event.ydata)
             self._canvas.get_tk_widget().configure(
                 cursor='fleur' if hit is not None else '')
 
-        # Rubber-band preview while drawing a polygon
         if not self._poly_pts:
             return
         if event.inaxes is not self._ax_ph:
@@ -852,7 +833,6 @@ class PhasorViewPanel:
         self._status_var.set(
             'Polygon cancelled. Left-click to start a new one.')
 
-    #  Per-cursor decay fitting
     def _build_cursor_union_mask(self):
         """Return a boolean (Y×X) union mask for all current cursors.
 
@@ -882,7 +862,6 @@ class PhasorViewPanel:
         from pathlib import Path
         from flimkit.UI.roi_tools import _ask_roi_fit_options
 
-        # Guards
         if self._real is None:
             messagebox.showwarning('No Phasor Data',
                                    'Load a PTU file and compute phasors first.')
@@ -938,7 +917,6 @@ class PhasorViewPanel:
             if progress_callback:
                 progress_callback(1, 4)
 
-            # Infer the spatial binning from the phasor shape
             native_h, native_w = ptu.n_y, ptu.n_x
             ph_h,     ph_w     = union_mask_snapshot.shape
             if native_h % ph_h != 0 or native_w % ph_w != 0:
@@ -1047,7 +1025,6 @@ class PhasorViewPanel:
     def _on_undo(self):
         if self._real is None:
             return
-        # If polygon in progress, undo the last vertex first
         if self._poly_pts:
             self._poly_pts.pop()
             if self._poly_pts:

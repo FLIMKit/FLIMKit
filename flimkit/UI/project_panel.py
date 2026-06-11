@@ -3,8 +3,6 @@ from tkinter import ttk, filedialog
 from pathlib import Path
 
 
-#  visual constants 
-
 _ICON_FIT_ONLY    = '●'   # fit session only
 _ICON_PHASOR_ONLY = '◐'   # phasor session only
 _ICON_BOTH        = '◉'   # both fit + phasor
@@ -34,19 +32,16 @@ class ProjectBrowserPanel:
         self._project = None
         self._stems   = []   # parallel to Listbox rows
 
-        #  outer frame (fixed width, no propagation) 
         self.frame = ttk.Frame(parent, width=width)
         self.frame.grid_propagate(False)
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(1, weight=1)   # listbox expands
 
-        #  header row 
         hdr = ttk.Frame(self.frame)
         hdr.grid(row=0, column=0, sticky='ew', padx=4, pady=(6, 2))
         ttk.Label(hdr, text='Project',
                   font=('TkDefaultFont', 9, 'bold')).pack(side='left')
 
-        #  listbox + scrollbar 
         lb_outer = ttk.Frame(self.frame, relief='sunken', borderwidth=1)
         lb_outer.grid(row=1, column=0, sticky='nsew', padx=4, pady=2)
         lb_outer.columnconfigure(0, weight=1)
@@ -70,7 +65,6 @@ class ProjectBrowserPanel:
         sb.config(command=self._lb.yview)
         self._lb.bind('<<ListboxSelect>>', self._on_select)
 
-        #  status line 
         self._sv_status = tk.StringVar(value='No project open')
         ttk.Label(
             self.frame,
@@ -81,10 +75,7 @@ class ProjectBrowserPanel:
             anchor       = 'w',
         ).grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
 
-        # Setup drag and drop for folder
         self._setup_dnd()
-
-    #  public interface 
 
     def grid(self, **kw):
         self.frame.grid(**kw)
@@ -125,8 +116,6 @@ class ProjectBrowserPanel:
         self._project.save()
         self._refresh()
 
-    #  private helpers 
-
     def _setup_dnd(self):
         # tkinterdnd2 has compatibility issues on many systems
         # Users can use File > Open Project Folder... instead
@@ -138,7 +127,6 @@ class ProjectBrowserPanel:
         from flimkit.project import ProjectFile
         self._project = ProjectFile.load_or_create(Path(folder))
         self._project.save()   # write project.json immediately
-        # Apply per-project config overrides
         if self._project.config:
             from flimkit.utils.config_manager import cfg
             cfg.load_project_overrides(self._project.config)
@@ -171,7 +159,6 @@ class ProjectBrowserPanel:
             else:
                 session_dot = _ICON_NOSESSION
             type_tag    = _ICON_XLIF if rec.scan_type == 'xlif' else _ICON_FOV
-            # Format: "◉ F my_fov_name"  or  "○ T R 2"
             label = f"{session_dot} {type_tag} {stem}"
             self._lb.insert(tk.END, label)
             self._stems.append(stem)
@@ -203,7 +190,6 @@ class ProjectBrowserPanel:
     def _load_scan(self, rec):
         app = self._app
 
-        # Cancel any pending after() loads from previous scan selection
         if hasattr(app, '_cancel_pending_scan_loads'):
             app._cancel_pending_scan_loads()
 
@@ -218,8 +204,6 @@ class ProjectBrowserPanel:
                 panel._refresh_region_list()
 
         if rec.scan_type == 'fov':
-            #  Single FOV ──────────────────────────────────
-            # Determine which mode the user is in
             current_form = getattr(app, '_current_form', 'fov')
             want_phasor = (current_form == 'phasor')
 
@@ -233,38 +217,29 @@ class ProjectBrowserPanel:
             if hasattr(app, '_last_loaded_ptu'):
                 app._last_loaded_ptu = rec.source_path
             
-            # Set PTU path (triggers preview, but auto-load trace will return early)
             app.sv_ptu.set(rec.source_path)
-
-            # Always load the FOV intensity preview from the project panel
             if hasattr(app, '_fov_preview'):
                 app._fov_preview.load_fov(rec.source_path)
-            # Auto-populate XLSX if a paired file exists
             if rec.xlsx_path and hasattr(app, 'sv_xlsx'):
                 app.sv_xlsx.set(rec.xlsx_path)
-            # If no XLSX, default to Machine IRF; otherwise default to Leica analytical
             if hasattr(app, '_irf_fov'):
                 if rec.xlsx_path:
                     app._irf_fov.sv_method.set('irf_xlsx')
                 else:
                     app._irf_fov.sv_method.set('machine_irf')
-            # Auto-populate output prefix with PTU base name
             if hasattr(app, 'sv_out_fov'):
                 app.sv_out_fov.set(rec.stem)
             
             if want_phasor:
-                # Populate phasor PTU field and auto-restore phasor session
                 if hasattr(app, 'sv_ph_ptu'):
                     app.sv_ph_ptu.set(rec.source_path)
                 if rec.phasor_session_path and hasattr(app, '_restore_phasor_session'):
                     app._restore_phasor_session(str(rec.phasor_session_path))
             else:
-                # Restore fit session if available
                 if rec.session_path and hasattr(app, '_load_fitted_data_from_file'):
                     app._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)
 
         else:
-            #  XLIF / Tile scan 
             app._switch_form('stitch')
 
             # Set guard flag BEFORE sv_xlif.set() to prevent auto-load trace from firing
@@ -281,6 +256,5 @@ class ProjectBrowserPanel:
             if hasattr(app, 'sv_out_st'):
                 app.sv_out_st.set(out_st)
 
-            # If a session exists, restore it using the File > Restore NPZ pathway (suppress popups for project tree)
             if rec.session_path and hasattr(app, '_load_fitted_data_from_file'):
                 app._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)

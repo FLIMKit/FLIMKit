@@ -26,7 +26,14 @@ class FLIMKitController:
         a.irf_bins      = cfg['IRF_BINS']
         a.irf_fit_width = cfg['IRF_FIT_WIDTH']
         a.irf_fwhm      = cfg['IRF_FWHM']
-        a.nexp          = self.b.iv_nexp_fov.get()
+        _model = self.b.sv_fit_model_fov.get()
+        a.dist_type = _model
+        if _model == 'discrete':
+            a.nexp = self.b.iv_nexp_fov.get()
+            a.dist_n_components = 1
+        else:
+            a.nexp = 2
+            a.dist_n_components = self.b.iv_ncomp_dist_fov.get()
         a.tau_min       = float(self.b.sv_tau_min_fov.get() or cfg['Tau_min'])
         a.tau_max       = float(self.b.sv_tau_max_fov.get() or cfg['Tau_max'])
         a.mode          = self.b.sv_mode_fov.get()
@@ -77,7 +84,14 @@ class FLIMKitController:
         a.no_xlsx_irf   = irf['no_xlsx_irf']
         a.estimate_irf  = irf['estimate_irf'] if irf['estimate_irf'] != 'none' else 'gaussian'
         a.machine_irf   = irf.get('machine_irf') or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
-        a.nexp          = self.b.iv_nexp_st.get()
+        _model_st = self.b.sv_fit_model_st.get()
+        a.dist_type = _model_st
+        if _model_st == 'discrete':
+            a.nexp = self.b.iv_nexp_st.get()
+            a.dist_n_components = 1
+        else:
+            a.nexp = 2
+            a.dist_n_components = self.b.iv_ncomp_dist_st.get()
         a.tau_min       = float(self.b.sv_tau_fit_lo.get() or cfg['Tau_min'])
         a.tau_max       = float(self.b.sv_tau_fit_hi.get() or cfg['Tau_max'])
         a.register_tiles     = self.b.bv_register.get()
