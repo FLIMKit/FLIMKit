@@ -841,8 +841,11 @@ def single_FOV_flim_fit_inquire():
 
 
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
+    _dt = getattr(args, 'dist_type', 'discrete')
+    _model_label = (f"{args.nexp}-exp" if _dt == 'discrete'
+                    else f"{getattr(args, 'dist_n_components', 1)}-comp {_dt} dist.")
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f"  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
 
     print(f"\n[1] PTU: {args.ptu}")
@@ -1551,6 +1554,156 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         'tcspc_res': tcspc_ref,
         'n_bins': n_bins_pooled,
     }
+
+
+def _run_timelapse_fit(args, progress_callback=None, cancel_event=None):
+    from .FLIM.timelapse import fit_timelapse
+
+    print(f"\n{'='*60}")
+    print(f'  TIMELAPSE FLIM FITTING')
+    print(f"{'='*60}")
+    print(f'  Input:  {args.ptu_dir}')
+    print(f'  Output: {args.output_dir}')
+    print(f'  Model:  {args.nexp}-exp  |  optimizer={args.optimizer}')
+
+    pool = getattr(args, 'pool_positions', False)
+    print(f'  Positions: {"pooled" if pool else "independent"}')
+
+    return fit_timelapse(
+        ptu_dir=args.ptu_dir,
+        output_dir=args.output_dir,
+        args=args,
+        ref_tau1_ns=getattr(args, 'ref_tau1', None),
+        ref_tau2_ns=getattr(args, 'ref_tau2', None),
+        ref_tau3_ns=getattr(args, 'ref_tau3', None),
+        channel=getattr(args, 'channel', None),
+        pool_positions=pool,
+        compute_bound_fraction=getattr(args, 'bound_fraction', False),
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+    )
+
+
+def timelapse_flim_fit(interactive=False):
+    if interactive:
+        import inquirer
+        print('\n Timelapse FLIM Fit')
+        print('Expected filename pattern: region_tX[_sY][_zZ].ptu\n')
+
+        ptu_dir = input('Enter folder containing timelapse PTU files: ').strip()
+        if not ptu_dir or not Path(ptu_dir).exists():
+            raise ValueError(f'PTU folder not found: {ptu_dir}')
+
+        output_dir = input('Enter output directory: ').strip()
+        if not output_dir:
+            raise ValueError('Output directory is required.')
+
+        nexp_q = [inquirer.List('nexp',
+                                message='Number of exponential components',
+                                choices=['1', '2', '3'],
+                                default='2')]
+        nexp = int(inquirer.prompt(nexp_q)['nexp'])
+
+        supplied_q = yes_no_question('Provide reference τ values instead of fitting from pooled data?')
+        ref_tau1 = None
+        ref_tau2 = None
+        if supplied_q == 'y':
+            ref_tau1 = float(input('  τ₁ (ns): ').strip())
+            if nexp >= 2:
+                ref_tau2 = float(input('  τ₂ (ns): ').strip())
+
+        print('\nIRF options:')
+        print("  1. 'gaussian'              - simple Gaussian (fastest)")
+        print("  2. 'parametric'            - fit Gaussian+tail to rising edge")
+        print("  3. 'machine_irf'           - prebuilt machine IRF (.npy)")
+        print("  4. 'machine_irf_sigma_half'- machine IRF + σ≤0.5 (recommended)")
+        irf_q = [inquirer.List('irf',
+                               message='IRF method',
+                               choices=['gaussian', 'parametric', 'machine_irf',
+                                        'machine_irf_sigma_half', 'machine_irf_sigma_full',
+                                        'raw'])]
+        estimate_irf = inquirer.prompt(irf_q)['irf']
+
+        machine_irf = None
+        if estimate_irf.startswith('machine_irf'):
+            _default = str(MACHINE_IRF_DEFAULT_PATH)
+            machine_irf = input(
+                f'Path to machine IRF .npy (Enter for default: {_default}): ').strip()
+            machine_irf = machine_irf or _default
+
+        save_stack_q = yes_no_question('Save 4D stacks (T, H, W) for each map? (uses more disk)')
+        no_plots_q = yes_no_question('Skip summary plots?')
+
+        args = argparse.Namespace()
+        args.ptu_dir = ptu_dir
+        args.output_dir = output_dir
+        args.nexp = nexp
+        args.tau_min = Tau_min
+        args.tau_max = Tau_max
+        args.ref_tau1 = ref_tau1
+        args.ref_tau2 = ref_tau2
+        args.estimate_irf = estimate_irf
+        args.machine_irf = machine_irf
+        args.irf_fwhm = IRF_FWHM
+        args.irf_bins = IRF_BINS
+        args.irf_fit_width = IRF_FIT_WIDTH
+        args.optimizer = 'de'
+        args.restarts = lm_restarts
+        args.de_population = de_population
+        args.de_maxiter = de_maxiter
+        args.workers = n_workers
+        args.no_polish = False
+        args.cost_function = 'poisson'
+        args.channel = channels
+        args.min_photons = MIN_PHOTONS_PERPIX
+        args.correct_pileup = False
+        args.save_stack = (save_stack_q == 'y')
+        args.no_plots = (no_plots_q == 'y')
+
+        _run_timelapse_fit(args)
+
+    else:
+        ap = argparse.ArgumentParser(
+            description='Timelapse FLIM batch fitting from region_tX[_sY][_zZ].ptu files'
+        )
+        ap.add_argument('--ptu-dir',    required=True,
+                        help='Folder containing timelapse PTU files')
+        ap.add_argument('--output-dir', required=True,
+                        help='Base output directory')
+        ap.add_argument('--nexp',       type=int, default=n_exp, choices=[1, 2, 3])
+        ap.add_argument('--tau-min',    type=float, default=Tau_min)
+        ap.add_argument('--tau-max',    type=float, default=Tau_max)
+        ap.add_argument('--ref-tau1',   type=float, default=None,
+                        help='Reference τ₁ (ns); skips pooled global fit')
+        ap.add_argument('--ref-tau2',   type=float, default=None,
+                        help='Reference τ₂ (ns); required with --ref-tau1 for nexp≥2')
+        ap.add_argument('--estimate-irf',
+                        choices=['gaussian', 'parametric', 'raw',
+                                 'machine_irf', 'machine_irf_sigma_full',
+                                 'machine_irf_sigma_half'],
+                        default='gaussian')
+        ap.add_argument('--machine-irf', default=str(MACHINE_IRF_DEFAULT_PATH))
+        ap.add_argument('--irf-fwhm',   type=float, default=IRF_FWHM)
+        ap.add_argument('--irf-bins',   type=int,   default=IRF_BINS)
+        ap.add_argument('--irf-fit-width', type=float, default=IRF_FIT_WIDTH)
+        ap.add_argument('--optimizer',  choices=['lm_multistart', 'de'], default='de')
+        ap.add_argument('--restarts',   type=int, default=lm_restarts)
+        ap.add_argument('--de-population', type=int, default=de_population)
+        ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--workers',    type=int, default=n_workers)
+        ap.add_argument('--no-polish',  action='store_true')
+        ap.add_argument('--channel',    type=int, default=channels)
+        ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
+        ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--cost-function', choices=['chi2', 'poisson'], default='poisson')
+        ap.add_argument('--no-stack',   action='store_true',
+                        help='Skip saving 4D (T,H,W) stacks')
+        ap.add_argument('--no-plots',   action='store_true')
+
+        args = ap.parse_args()
+        args.save_stack = not args.no_stack
+
+        _run_timelapse_fit(args)
 
 
 def tile_fit(interactive=False):

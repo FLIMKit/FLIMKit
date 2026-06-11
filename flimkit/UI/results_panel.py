@@ -29,12 +29,15 @@ class ResultsPanel:
 
         self._build_progress()
         self._build_summary()
-        
-        # Store references for export and load functionality
+        self._build_images()
+
+        self._imgs = []
+        self._folder = None
+        self._img_i = 0
         self._fit_result = None
         self._output_dir = None
-        self._current_npz_path = None  # Track current fit NPZ file location
-        self._scan_name = None  # Current FOV/scan stem for export filenames
+        self._current_npz_path = None
+        self._scan_name = None
         self._export_callback = None
         self._load_callback = None
         self._save_npz_callback = None
@@ -97,7 +100,6 @@ class ResultsPanel:
             self._current_npz_path = npz_path
         if scan_name:
             self._scan_name = scan_name
-        # Enable buttons if there are images to export
         has_images = any(isinstance(v, np.ndarray) for v in (fit_result or {}).values())
         self._export_btn.configure(state='normal' if has_images else 'disabled')
     
@@ -135,7 +137,6 @@ class ResultsPanel:
             if not csv_file:
                 return
             
-            # Get all rows from summary table
             rows = []
             for item in self._tv.get_children():
                 values = self._tv.item(item)['values']
@@ -145,7 +146,6 @@ class ResultsPanel:
                 messagebox.showwarning('No Data', 'No summary data to export.')
                 return
             
-            # Write to CSV
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Parameter', 'Value', 'Unit'])
@@ -196,25 +196,45 @@ class ResultsPanel:
         tv.tag_configure('warn', foreground='#c0550a', background='#fff8f0')
         self._tv = tv
         
-        # Add export button below treeview
         btn_bar = ttk.Frame(f)
         btn_bar.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(4, 0))
         self._export_btn = ttk.Button(btn_bar, text='Export Images...', 
                                      command=self._on_export_clicked, state='disabled')
         self._export_btn.pack(side='left', padx=4)
 
+    def _build_images(self):
+        f = ttk.Frame(self._nb, padding=4)
+        self._nb.add(f, text='  Images  ')
+        f.columnconfigure(0, weight=1)
+        f.rowconfigure(0, weight=1)
+
+        fig = Figure(figsize=(5, 5), facecolor='#2b2b2b')
+        self._ax = fig.add_subplot(111)
+        self._ax.set_facecolor('#2b2b2b')
+        self._ax.axis('off')
+        self._canvas_mpl = FigureCanvasTkAgg(fig, master=f)
+        self._canvas_mpl.get_tk_widget().grid(row=0, column=0, sticky='nsew')
+
+        self._img_lbl = tk.StringVar(value='No images loaded')
+        ttk.Label(f, textvariable=self._img_lbl, foreground='grey').grid(
+            row=1, column=0, sticky='w', padx=4, pady=(2, 0))
+
+        nav = ttk.Frame(f)
+        nav.grid(row=2, column=0, sticky='ew', pady=(4, 0))
+        ttk.Button(nav, text='◀ Prev', command=self._img_prev).pack(side='left', padx=4)
+        ttk.Button(nav, text='Next ▶', command=self._img_next).pack(side='left', padx=4)
+        ttk.Button(nav, text='Open folder', command=self._open_folder).pack(side='right', padx=4)
+        ttk.Button(nav, text='Save all...', command=self._save_all_imgs).pack(side='right', padx=4)
+        ttk.Button(nav, text='Save image...', command=self._save_img).pack(side='right', padx=4)
+
     def populate_summary(self, rows: list):
         for item in self._tv.get_children():
             self._tv.delete(item)
         
-        # Force layout to ensure widget has proper dimensions
         self._tv.update()
-        
         for i, (param, val, unit) in enumerate(rows):
             tag = 'warn' if param.startswith('⚠') else ('odd' if i % 2 else 'even')
             self._tv.insert('', tk.END, values=(param, val, unit), tags=(tag,))
-        
-        # Force final redraw
         self._tv.update_idletasks()
         
         if rows:
@@ -310,9 +330,3 @@ class ResultsPanel:
         if   s == 'Darwin':  subprocess.Popen(['open',     self._folder])
         elif s == 'Windows': subprocess.Popen(['explorer', self._folder])
         else:                subprocess.Popen(['xdg-open', self._folder])
-
-    def set_status(self, msg: str):
-        self._status.set(msg)
-
-    def grid(self, **kw):
-        self.frame.grid(**kw)

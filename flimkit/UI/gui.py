@@ -78,10 +78,6 @@ from flimkit.UI.controller import FLIMKitController
 class _UIBuilder:
 
     def __getattr__(self, nam):
-        # Delegate FLIM app-state variables (sv_/bv_/iv_, mode) to AppState.
-        # Only fires for attributes missing on the instance, so widgets, panel
-        # refs and methods are untouched. Raises AttributeError when absent so
-        # hasattr(self, 'sv_x') stays correct.
         state = self.__dict__.get('state')
         if state is not None and nam in state.__dict__:
             return state.__dict__[nam]
@@ -104,10 +100,9 @@ class _UIBuilder:
 
         def _on_inner_configure(_evt=None):
             canvas.configure(scrollregion=canvas.bbox('all'))
-            # Expand inner frame to fill canvas width and minimum height
             inner_height = inner.winfo_reqheight()
             canvas_height = canvas.winfo_height()
-            if canvas_height > 1:  # Canvas has been sized
+            if canvas_height > 1:
                 canvas.itemconfigure(window_id, height=max(inner_height, canvas_height))
             canvas.itemconfigure(window_id, width=canvas.winfo_width() if canvas.winfo_width() > 1 else None)
 
@@ -116,7 +111,6 @@ class _UIBuilder:
                 canvas.itemconfigure(window_id, width=evt.width)
 
         def _on_mousewheel(evt):
-            # Windows: evt.delta, Mac: evt.delta, Linux: evt.num
             if evt.num == 5 or evt.delta < 0:
                 canvas.yview_scroll(3, 'units')
             elif evt.num == 4 or evt.delta > 0:
@@ -124,15 +118,13 @@ class _UIBuilder:
 
         inner.bind('<Configure>', _on_inner_configure)
         canvas.bind('<Configure>', _on_canvas_configure)
-        # Bind mousewheel events for all platforms
-        canvas.bind('<MouseWheel>', _on_mousewheel)  # Windows & Mac
-        canvas.bind('<Button-4>', _on_mousewheel)    # Linux scroll up
-        canvas.bind('<Button-5>', _on_mousewheel)    # Linux scroll down
+        canvas.bind('<MouseWheel>', _on_mousewheel)
+        canvas.bind('<Button-4>', _on_mousewheel)
+        canvas.bind('<Button-5>', _on_mousewheel)
         inner.bind('<MouseWheel>', _on_mousewheel)
         inner.bind('<Button-4>', _on_mousewheel)
         inner.bind('<Button-5>', _on_mousewheel)
 
-        # Store canvas and window_id references on the inner frame for later refresh
         inner._canvas = canvas
         inner._window_id = window_id
         outer._canvas = canvas
@@ -161,25 +153,14 @@ class _UIBuilder:
 
     def _set_pane_positions(self):
         try:
-            # Update to ensure accurate measurements
             self.root.update_idletasks()
-            
-            # Get main paned window width (excluding padding)
             main_width = self._main_paned.winfo_width()
             if main_width < 100:
                 return
-            
-            # Calculate positions for 15:45:40 ratio
-            # Total: left_paned (60%) | preview (40%)
+            # 15:45:40 ratio: left_paned (60%) | preview (40%)
             left_width = int(main_width * 0.6)
-            
-            # Set main paned sash (between left_paned and preview)
             self._main_paned.sashpos(0, left_width)
-            
-            # Within left_paned: Project (15%) | Settings (45%)
             project_width = int(main_width * 0.15)
-            
-            # Set left paned sash (between Project and Settings)
             self._left_paned.sashpos(0, project_width)
             
         except Exception as e:
@@ -198,7 +179,6 @@ class _UIBuilder:
 
         def worker():
             orig_stdout, orig_stderr = sys.stdout, sys.stderr
-            # Always redirect to UI's ScrolledText widget with thread-safe updates
             redir = _Redirect(self._res.log, self._buf, root=self.root)
             redir_err = _Redirect(self._res.log, self._buf, root=self.root, is_stderr=True)
             sys.stdout = redir
@@ -235,15 +215,14 @@ class _UIBuilder:
         
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='File', menu=file_menu)
-        
+
         file_menu.add_command(label='Restore NPZ...', command=self._menu_restore_npz)
         file_menu.add_command(label='Save NPZ', command=self._menu_save_npz)
         file_menu.add_command(label='Save NPZ As...', command=self._menu_save_npz_as)
         file_menu.add_separator()
         file_menu.add_command(label='Open Project Folder...', command=self._menu_open_project_folder)
         file_menu.add_separator()
-        
-        # Export submenu
+
         export_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label='Export', menu=export_menu)
         export_menu.add_command(label='Export Summed Fit CSV', command=self._menu_export_fit_csv)
@@ -254,27 +233,25 @@ class _UIBuilder:
         file_menu.add_command(label='Import GeoJSON...', command=self._menu_import_geojson)
         
         file_menu.add_separator()
-        
-        # Recent Files submenu
+
         self._recent_files_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label='Recent Files', menu=self._recent_files_menu)
-        self._recent_files = self._load_recent_list()  # [{"path": ..., "type": "file"|"project"}]
+        self._recent_files = self._load_recent_list()
         self._update_recent_files_menu()
-        
+
         file_menu.add_separator()
         file_menu.add_command(label='Preferences...', command=self._menu_preferences)
         file_menu.add_separator()
         file_menu.add_command(label='Exit', command=self.root.quit)
-        
+
         edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Edit', menu=edit_menu)
-        
+
         edit_menu.add_command(label='Undo', command=self._menu_undo, accelerator='Ctrl+Z')
         edit_menu.add_command(label='Redo', command=self._menu_redo, accelerator='Ctrl+Shift+Z')
         edit_menu.add_separator()
         edit_menu.add_command(label='Reset', command=self._menu_reset)
-        
-        # Bind keyboard shortcuts
+
         self.root.bind('<Control-z>', lambda e: self._menu_undo())
         self.root.bind('<Control-Shift-Z>', lambda e: self._menu_redo())
         
@@ -288,6 +265,8 @@ class _UIBuilder:
                                command=lambda: self._menu_batch_processing('tiled'))
         batch_menu.add_command(label='Single FOV Fit',
                                command=lambda: self._menu_batch_processing('fov'))
+        batch_menu.add_command(label='Timelapse Fit',
+                               command=lambda: self._menu_batch_processing('timelapse'))
         
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Help', menu=help_menu)
@@ -415,31 +394,26 @@ class _UIBuilder:
     
     def _menu_export_fit_csv(self):
         print('[Menu] Export Fit CSV')
-        # Delegate to existing method if available
         if hasattr(self, '_res') and self._res:
             self._res._export_summed_csv()
-    
+
     def _menu_export_roi_csv(self):
         print('[Menu] Export ROI CSV')
-        # Delegate to ROI panel
         if self._roi_analysis_panel:
             self._roi_analysis_panel._export_all_rois_csv()
-    
+
     def _menu_export_roi_geojson(self):
         print('[Menu] Export ROI GeoJSON')
-        # Delegate to ROI panel
         if self._roi_analysis_panel:
             self._roi_analysis_panel._export_selected_region()
-    
+
     def _menu_export_all_rois_geojson(self):
         print('[Menu] Export All ROIs GeoJSON')
-        # Delegate to ROI panel
         if self._roi_analysis_panel:
             self._roi_analysis_panel._export_all_rois_geojson()
-    
+
     def _menu_import_geojson(self):
         print('[Menu] Import GeoJSON')
-        # Delegate to ROI panel
         if self._roi_analysis_panel:
             self._roi_analysis_panel._import_rois_geojson()
     
@@ -452,59 +426,52 @@ class _UIBuilder:
         pref_win.geometry('500x400')
         pref_win.resizable(False, False)
         
-        # Main frame with padding
         main_frame = ttk.Frame(pref_win, padding=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title label
+
         ttk.Label(main_frame, text='FLIMKit Preferences', font=('TkDefaultFont', 12, 'bold')).pack(anchor='w', pady=(0, 10))
-        
-        # Create a notebook for tabs
+
         note = ttk.Notebook(main_frame)
         note.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
-        # Display Tab
+
         disp_frame = ttk.Frame(note, padding=10)
         note.add(disp_frame, text='Display')
-        
+
         ttk.Label(disp_frame, text='Colormap:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         cmap_var = tk.StringVar(value=prefs.get('colormap', 'viridis'))
-        ttk.Combobox(disp_frame, textvariable=cmap_var, 
+        ttk.Combobox(disp_frame, textvariable=cmap_var,
                      values=['viridis', 'plasma', 'gray', 'jet'], state='readonly').pack(anchor='w', pady=(0, 10))
-        
+
         ttk.Label(disp_frame, text='Font Size:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         font_var = tk.IntVar(value=prefs.get('font_size', 9))
         ttk.Spinbox(disp_frame, from_=8, to=14, textvariable=font_var, width=10).pack(anchor='w', pady=(0, 10))
-        
-        # Analysis Tab
+
         anal_frame = ttk.Frame(note, padding=10)
         note.add(anal_frame, text='Analysis')
-        
+
         ttk.Label(anal_frame, text='Default Number of Exponents:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         exp_var = tk.IntVar(value=prefs.get('default_nexp', 2))
         ttk.Spinbox(anal_frame, from_=1, to=5, textvariable=exp_var, width=10).pack(anchor='w', pady=(0, 10))
-        
+
         ttk.Label(anal_frame, text='Export Format:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         fmt_var = tk.StringVar(value=prefs.get('export_format', 'CSV'))
-        ttk.Combobox(anal_frame, textvariable=fmt_var, 
+        ttk.Combobox(anal_frame, textvariable=fmt_var,
                      values=['CSV', 'Excel', 'NumPy'], state='readonly').pack(anchor='w', pady=(0, 10))
-        
-        # Files Tab
+
         files_frame = ttk.Frame(note, padding=10)
         note.add(files_frame, text='Files')
-        
+
         ttk.Label(files_frame, text='Output Directory:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         saved_outdir = prefs.get('output_directory', '') or os.path.expanduser('~/FLIMKit/output')
         output_var = tk.StringVar(value=saved_outdir)
         ttk.Entry(files_frame, textvariable=output_var, width=40).pack(anchor='w', pady=(0, 5))
         ttk.Button(files_frame, text='Browse...', width=10,
                    command=lambda: output_var.set(filedialog.askdirectory())).pack(anchor='w', pady=(0, 10))
-        
+
         ttk.Label(files_frame, text='Auto-save NPZ:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         autosave_var = tk.BooleanVar(value=prefs.get('auto_save_npz', True))
         ttk.Checkbutton(files_frame, text='Enable auto-save', variable=autosave_var).pack(anchor='w', pady=(0, 10))
-        
-        # Buttons
+
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(0, 0))
         
@@ -525,17 +492,14 @@ class _UIBuilder:
     
     def _menu_undo(self):
         print('[Menu] Undo')
-        # TODO: Implement when undo/redo system is built
-    
+
     def _menu_redo(self):
         print('[Menu] Redo')
-        # TODO: Implement when undo/redo system is built
     
     def _menu_reset(self):
         from tkinter import messagebox
         if messagebox.askyesno('Reset', 'Clear all regions and results? This cannot be undone.'):
             print('[Menu] Resetting analysis...')
-            # Clear ROI regions
             if self._roi_analysis_panel and self._roi_analysis_panel.fov_preview:
                 roi_manager = self._roi_analysis_panel.fov_preview._roi_manager
                 region_ids = [r['id'] for r in roi_manager.get_all_regions()]
@@ -543,16 +507,13 @@ class _UIBuilder:
                     roi_manager.remove_region(region_id)
                 self._roi_analysis_panel._refresh_region_list()
                 self._roi_analysis_panel.fov_preview._redraw_region_overlays()
-            # Clear results panel
             if self._res:
                 self._res._tv.delete(*self._res._tv.get_children())
-                pass  # Export and save buttons now in File menu
             messagebox.showinfo('Reset Complete', 'Analysis cleared.')
             print('[Menu] Reset complete.')
     
     def _menu_irf_builder(self):
         print('[Menu] Machine IRF Builder')
-        # Switch to IRF form view
         if hasattr(self, '_switch_form'):
             self._switch_form('irf')
     
@@ -709,7 +670,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _setup_global_scroll(self):
         def _scroll(evt):
-            # Find canvas responsible for the widget under the cursor
             try:
                 widget = self.root.winfo_containing(evt.x_root, evt.y_root)
                 if widget is None:
@@ -717,7 +677,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 canvas = self._find_scroll_canvas(widget)
                 if canvas is None:
                     return
-                # Only scroll if canvas has a scrollable region
                 sr = canvas.cget('scrollregion')
                 if not sr:
                     return
@@ -742,13 +701,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         def _clean(data: str) -> str:
             data = data.strip()
-            # Multi-file drop: take first path only
+            # multi-file drop: take first path only
             if data.startswith('{'):
-                # Extract content of first braced group
                 end = data.find('}')
                 if end != -1:
                     return data[1:end].strip()
-            # Space-separated paths (take first)
             parts = data.split()
             if parts:
                 return parts[0]
@@ -757,18 +714,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         def _register(widget):
             try:
                 widget.drop_target_register(DND_FILES, DND_TEXT)
-                # Get the textvariable name and look it up on the widget
                 tv_name = widget.cget('textvariable')
                 if tv_name:
-                    tv = widget.nametowidget(str(tv_name)) if False else None
-                    # Simpler: bind directly to widget.set via StringVar
                     def _drop(evt, w=widget):
                         path = _clean(evt.data)
                         try:
-                            # Directly update the entry text
                             w.delete(0, 'end')
                             w.insert(0, path)
-                            # Also fire any associated traces
                             w.event_generate('<<Modified>>')
                         except Exception:
                             pass
@@ -790,7 +742,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         print('[DnD] Drop targets registered on all Entry widgets')
 
     def _init_ui(self):
-        # Install Tk-level error handler for exceptions in event loop callbacks
         from flimkit.utils.crash_handler import install_tk_error_handler
         install_tk_error_handler(self.root)
 
@@ -799,20 +750,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._controller = FLIMKitController(self)
 
         self._buf: list = []
-        self._current_session_file = None  # Track current session file for auto-save
-        self._current_npz_path = None  # For backward compatibility
-        self._last_loaded_ptu = None  # Guard against duplicate auto-loads
-        self._last_loaded_xlif = None  # Guard against duplicate auto-loads
-        self._ptu_after_id = None   # Pending after() ID for FOV load
-        self._xlif_after_id = None  # Pending after() ID for XLIF load
-        self._form_buttons = {}  # Dictionary to store form mode buttons
-        self._form_frames = {}  # Dictionary to store form frames
-        self._form_inner_frames = {}  # Dictionary to store scrollable inner frames
+        self._current_session_file = None
+        self._current_npz_path = None
+        self._last_loaded_ptu = None
+        self._last_loaded_xlif = None
+        self._ptu_after_id = None
+        self._xlif_after_id = None
+        self._form_buttons = {}
+        self._form_frames = {}
+        self._form_inner_frames = {}
 
-        # Build menu bar
         self._build_menu_bar()
 
-        # Mode Toolbar (below menu bar)
         self._mode_toolbar = ttk.Frame(self.root)
         self._mode_toolbar.grid(row=0, column=0, sticky='ew', padx=10, pady=(2, 0))
         self._mode_toolbar.columnconfigure(0, weight=1)
@@ -841,59 +790,46 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self.state.mode_status = tk.StringVar(value='Current: Single FOV Fit')
         ttk.Label(self._mode_toolbar, textvariable=self.mode_status, foreground='grey').pack(side='left', padx=10)
 
-        # Update status in _switch_form
         self._form_labels = {'fov': 'Single FOV Fit', 'stitch': 'Tile Stitch/Fit', 'phasor': 'Phasor Analysis'}
-        
-        # Separator between toolbar and main content
+
         ttk.Separator(self.root, orient='horizontal').grid(row=1, column=0, sticky='ew', pady=(2, 0))
 
-        # Main horizontal PanedWindow: left (tabs+content+results) | right (FOV preview)
         self._main_paned = ttk.PanedWindow(self.root, orient='horizontal')
         self._main_paned.grid(row=2, column=0, sticky='nsew', padx=4, pady=(2, 4))
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=0, minsize=0)  # toolbar row - fixed height
-        self.root.rowconfigure(1, weight=0, minsize=0)  # separator row - fixed height
-        self.root.rowconfigure(2, weight=1)  # main content - expands
+        self.root.rowconfigure(0, weight=0, minsize=0)
+        self.root.rowconfigure(1, weight=0, minsize=0)
+        self.root.rowconfigure(2, weight=1)
 
-        
-
-        
         self._left_paned = ttk.PanedWindow(self._main_paned, orient='horizontal')
-        self._main_paned.add(self._left_paned, weight=3)  # 60% of total width (for Project 20% + Settings 40%)
+        self._main_paned.add(self._left_paned, weight=3)
 
-        # Project Browser Panel (resizable)
         btn_frame = ttk.Frame(self._left_paned)
-        self._left_paned.add(btn_frame, weight=1)  # 20% of total (1 out of 1+2)
+        self._left_paned.add(btn_frame, weight=1)
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.rowconfigure(0, weight=1)
 
         self._proj_browser = ProjectBrowserPanel(btn_frame, app=self, width=170)
         self._proj_browser.frame.grid(row=0, column=0, sticky='nsew')
 
-        # Content pane in resizable section
         content_paned = ttk.PanedWindow(self._left_paned, orient='vertical')
-        self._left_paned.add(content_paned, weight=2)  # 40% of total (2 out of 1+2)
+        self._left_paned.add(content_paned, weight=2)
 
-        # Create wrapper frames for each form (initially hidden)
         form_wrapper = ttk.Frame(content_paned)
-        content_paned.add(form_wrapper, weight=3)  # Increased from 2 to give more space to forms
+        content_paned.add(form_wrapper, weight=3)
         form_wrapper.columnconfigure(0, weight=1)
         form_wrapper.rowconfigure(0, weight=1)
 
-        # Analysis Notebook: Fit Settings | ROI Analysis
-        # Only shown for FOV mode
         self._analysis_tabs = ttk.Notebook(form_wrapper)
         self._analysis_tabs.grid(row=0, column=0, sticky='nsew')
-        self._analysis_tabs.grid_remove()  # Hidden by default
-        
-        # Tab 0: Fit Settings (form content goes here)
+        self._analysis_tabs.grid_remove()
+
         fit_settings_outer = ttk.Frame(self._analysis_tabs)
         self._analysis_tabs.add(fit_settings_outer, text='  Fit Settings  ')
         fit_settings_outer.columnconfigure(0, weight=1)
         fit_settings_outer.rowconfigure(0, weight=1)
         self._fit_settings_tab = fit_settings_outer
-        
-        # Tab 1: ROI Analysis
+
         roi_frame = ttk.Frame(self._analysis_tabs, padding=4)
         self._analysis_tabs.add(roi_frame, text='  ROI Analysis  ')
         roi_frame.columnconfigure(0, weight=1)
@@ -901,21 +837,17 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._roi_analysis_panel = RoiAnalysisPanel(roi_frame)
         self._roi_analysis_panel.grid(row=0, column=0, sticky='nsew')
         self._roi_analysis_frame = roi_frame
-        
-        # Stitch Notebook: Fit Settings | ROI Analysis
-        # Only shown for Stitch mode
+
         self._stitch_tabs = ttk.Notebook(form_wrapper)
         self._stitch_tabs.grid(row=0, column=0, sticky='nsew')
-        self._stitch_tabs.grid_remove()  # Hidden by default
-        
-        # Tab 0: Stitch Fit Settings
+        self._stitch_tabs.grid_remove()
+
         stitch_settings_outer = ttk.Frame(self._stitch_tabs)
         self._stitch_tabs.add(stitch_settings_outer, text='  Fit Settings  ')
         stitch_settings_outer.columnconfigure(0, weight=1)
         stitch_settings_outer.rowconfigure(0, weight=1)
         self._stitch_settings_tab = stitch_settings_outer
-        
-        # Tab 1: Stitch ROI Analysis
+
         stitch_roi_frame = ttk.Frame(self._stitch_tabs, padding=4)
         self._stitch_tabs.add(stitch_roi_frame, text='  ROI Analysis  ')
         stitch_roi_frame.columnconfigure(0, weight=1)
@@ -924,7 +856,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         self._form_content_frame = form_wrapper
 
-        # Register batch and irf scroll frames (menu-only; no sidebar button)
         for _fid in ('batch', 'irf'):
             _outer, _inner = self._make_scroll_frame(form_wrapper)
             _outer.grid(row=0, column=0, sticky='nsew')
@@ -932,10 +863,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._form_inner_frames[_fid] = (_outer, _inner)
             self._form_frames[_fid]       = (_outer, _inner)
 
-        # Create scrollable frames for each form
-        # FOV: inside notebook's Fit Settings tab
-        # Stitch: inside stitch notebook's Fit Settings tab
-        # Others: traditional layout
         form_list = [
             ('fov', 'Single FOV Fit'),
             ('stitch', 'Tile Stitch/Fit'),
@@ -946,26 +873,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         
         for form_id, form_label in form_list:
             if form_id == 'fov':
-                # FOV form goes inside the Fit Settings tab
                 outer, inner = self._make_scroll_frame(self._fit_settings_tab)
-                outer.grid(row=0, column=0, sticky='nsew')
-                outer.grid_remove()  # Hide initially; show on demand
-                self._form_inner_frames[form_id] = (outer, inner)
             elif form_id == 'stitch':
-                # Stitch form goes inside the Stitch Fit Settings tab
                 outer, inner = self._make_scroll_frame(self._stitch_settings_tab)
-                outer.grid(row=0, column=0, sticky='nsew')
-                outer.grid_remove()  # Hide initially; show on demand
-                self._form_inner_frames[form_id] = (outer, inner)
             else:
-                # Phasor (and others) use traditional layout
                 outer, inner = self._make_scroll_frame(form_wrapper)
-                outer.grid(row=0, column=0, sticky='nsew')
-                outer.grid_remove()
-                self._form_inner_frames[form_id] = (outer, inner)
-            self._form_frames[form_id] = self._form_inner_frames[form_id]
+            outer.grid(row=0, column=0, sticky='nsew')
+            outer.grid_remove()
+            self._form_inner_frames[form_id] = (outer, inner)
+            self._form_frames[form_id] = (outer, inner)
 
-        # Bottom: Results panel (progress, summary, images)
         results_frame = ttk.Frame(content_paned)
         content_paned.add(results_frame, weight=1)
         results_frame.columnconfigure(0, weight=1)
@@ -973,26 +890,21 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         self._res = ResultsPanel(results_frame, root=self.root)
         self._res.grid(row=0, column=0, sticky='nsew')
-        # Set callbacks for export, save, and load buttons
         self._res.set_export_callback(self._show_export_dialog)
         self._res.set_load_callback(self._load_fitted_data_from_file)
         self._res.set_save_npz_callback(self._save_npz_quick)
 
-        # Expert fit settings overrides (shared by FOV and stitch tabs)
         from flimkit.utils.config_manager import cfg as _cfg_mgr
         _saved_expert = _cfg_mgr.get_section('expert')
         _is_default = all(_saved_expert.get(k) == v for k, v in _EXPERT_DEFAULTS.items())
         self._expert_overrides: dict = {} if _is_default else _saved_expert
 
-        # Build form content for each form
         self._build_fov_tab()
         self._build_stitch_tab()
         self._build_phasor_tab()
         self._build_batch_tab()
         self._build_machine_irf_tab()
-        # Batch and Machine IRF are accessible via the Tools menu
 
-        
         preview_frame = ttk.LabelFrame(self._main_paned, text='  FOV Preview  ', padding=4)
         self._main_paned.add(preview_frame, weight=2)  # 40% of total
         preview_frame.columnconfigure(0, weight=1)
@@ -1000,50 +912,32 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         self._fov_preview = FOVPreviewPanel(preview_frame)
         self._fov_preview.grid(row=0, column=0, sticky='nsew')
-        
-        # Connect ROI Analysis panel to FOV preview
+
         self._roi_analysis_panel.fov_preview = self._fov_preview
         self._fov_preview._roi_analysis_panel = self._roi_analysis_panel
-        # Provide threading + fit-params callbacks for per-ROI decay fitting
         self._roi_analysis_panel.run_with_progress = self.run_with_progress
         self._roi_analysis_panel.get_fit_params = self._get_roi_fit_params
 
-        # Phasor panel shares the same right-panel cell; hidden until needed.
         self._phasor_panel = PhasorViewPanel(preview_frame, max_cursors=6)
         self._phasor_panel.on_change = self._on_phasor_change
         self._phasor_panel.frame.grid(row=0, column=0, sticky='nsew')
         self._phasor_panel.frame.grid_remove()
 
-        # Provide the same callbacks for phasor-cursor decay fitting
         self._phasor_panel.run_with_progress = self.run_with_progress
         self._phasor_panel.get_fit_params    = self._get_roi_fit_params
         self._preview_frame_label = preview_frame
 
-        # Show first form by default
         self._switch_form('fov')
 
-        # Redirect stdout/stderr to the log widget
         redir = _Redirect(self._res.log, self._buf, root=self.root)
         sys.stdout = redir
         sys.stderr = redir
 
-        # Ensure initial window fits within screen bounds
         self.root.after_idle(self._fit_window_to_screen)
-        
-        # Set sash positions for 20:40:40 layout (Project:Settings:FOV)
         self.root.after_idle(self._set_pane_positions)
-
-        # Global mousewheel scroll (works over any child widget)
         self._setup_global_scroll()
-
-        # Global DnD registration (all Entry widgets)
-        # Deferred so all widgets exist before we walk the tree.
-        self.root.after(500, self._setup_global_dnd)
-
-        # Set close handler
+        self.root.after(500, self._setup_global_dnd)  # deferred so all widgets exist before tree walk
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
-
-        # Set window icon if available
         self._set_window_icon()
 
     def _refresh_scrollable_frame(self, form_id: str):
@@ -1054,17 +948,22 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if not hasattr(outer, '_canvas'):
             return
 
-        # Guard against re-entrant refreshes
+        # guard against re-entrant refreshes
         if hasattr(outer, '_refresh_scheduled') and outer._refresh_scheduled:
             return
         outer._refresh_scheduled = True
 
-        canvas = outer._canvas
-        window_id = outer._window_id
-
         def do_refresh():
             try:
                 self.root.update_idletasks()
+                if form_id in ('fov', 'stitch'):
+                    self._fit_settings_tab.update_idletasks()
+                    self._analysis_tabs.update_idletasks()
+                if not hasattr(outer, '_canvas') or not hasattr(outer, '_window_id'):
+                    return
+                canvas = outer._canvas
+                window_id = outer._window_id
+                outer.update()
                 canvas_width = canvas.winfo_width()
                 canvas_height = canvas.winfo_height()
                 if canvas_width > 1:
@@ -1087,69 +986,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             finally:
                 outer._refresh_scheduled = False
 
-        self.root.after_idle(lambda: self.root.after(80, do_refresh))
-        
-        # Schedule refresh on next event loop iteration to allow grid() to complete
-        def do_refresh():
-            try:
-                # Process all pending events first
-                self.root.update_idletasks()
-                
-                # For notebook-contained forms (FOV/Stitch), also update the notebook
-                if form_id in ('fov', 'stitch'):
-                    # Update the notebook to reflect size changes
-                    self._fit_settings_tab.update_idletasks()
-                    self._analysis_tabs.update_idletasks()
-                
-                # Now refresh the canvas
-                if hasattr(outer, '_canvas') and hasattr(outer, '_window_id'):
-                    canvas = outer._canvas
-                    window_id = outer._window_id
-                    
-                    # Make sure outer frame is properly laid out
-                    outer.update()
-                    
-                    # Get canvas dimensions
-                    canvas_width = canvas.winfo_width()
-                    canvas_height = canvas.winfo_height()
-                    
-                    # Ensure canvas window width matches canvas width
-                    if canvas_width > 1:
-                        canvas.itemconfigure(window_id, width=canvas_width)
-                    
-                    # Update inner frame to get its requested size
-                    inner.update()
-                    inner_height = inner.winfo_reqheight()
-                    
-                    # Configure window height to inner frame's requested height
-                    # This ensures scrollbar works properly
-                    if inner_height > 1:
-                        canvas.itemconfigure(window_id, height=inner_height)
-                    
-                    # Recalculate scroll region based on all content
-                    bbox = canvas.bbox('all')
-                    if bbox:
-                        canvas.configure(scrollregion=bbox)
-                    else:
-                        # Fallback: use reasonable defaults
-                        h = max(canvas_height, inner_height, 300) if inner_height > 1 else 500
-                        w = max(canvas_width, 300) if canvas_width > 1 else 400
-                        canvas.configure(scrollregion=(0, 0, w, h))
-                    
-                    # Reset scroll position to top
-                    canvas.yview_moveto(0)
-                    
-                    # Final update to ensure everything is rendered
-                    canvas.update()
-            except Exception as e:
-                # Silently ignore errors if widgets have been destroyed
-                pass
-        
-        # Schedule with after() to let grid() complete first (200ms)
         self.root.after(200, do_refresh)
 
     def _switch_form(self, form_id: str):
         self._mode_controller.switch(form_id)
+
     def _set_window_icon(self):
         base_path = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(__file__).parent
         icon_paths = [
@@ -1180,29 +1021,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _capture_form_state(self) -> dict:
         try:
             state = {
-                # Current active form mode
                 'active_form': getattr(self, '_current_form', 'fov'),
-                
-                # Input files (common to all)
                 'ptu_file': self.sv_ptu.get() if hasattr(self, 'sv_ptu') else '',
                 'xlsx_file': self.sv_xlsx.get() if hasattr(self, 'sv_xlsx') else '',
-                
-                # IRF settings (common to all)
                 'irf_method': self._irf_fov.sv_method.get() if hasattr(self, '_irf_fov') else 'irf_xlsx',
                 'irf_file': self._irf_fov.sv_path.get() if hasattr(self, '_irf_fov') else '',
-                
-                # FOV mode fitting parameters
                 'nexp_fov': self.iv_nexp_fov.get() if hasattr(self, 'iv_nexp_fov') else 3,
+                'fit_model_fov': self.sv_fit_model_fov.get() if hasattr(self, 'sv_fit_model_fov') else 'discrete',
+                'ncomp_dist_fov': self.iv_ncomp_dist_fov.get() if hasattr(self, 'iv_ncomp_dist_fov') else 1,
                 'tau_fit_lo': self.sv_tau_fit_lo.get() if hasattr(self, 'sv_tau_fit_lo') else '0.1',
                 'tau_fit_hi': self.sv_tau_fit_hi.get() if hasattr(self, 'sv_tau_fit_hi') else '10.0',
-                
-                # Stitch mode parameters
                 'nexp_st': self.iv_nexp_st.get() if hasattr(self, 'iv_nexp_st') else 3,
-                
-                # Batch mode parameters
+                'fit_model_st': self.sv_fit_model_st.get() if hasattr(self, 'sv_fit_model_st') else 'discrete',
+                'ncomp_dist_st': self.iv_ncomp_dist_st.get() if hasattr(self, 'iv_ncomp_dist_st') else 1,
                 'nexp_batch': self.iv_nexp_batch.get() if hasattr(self, 'iv_nexp_batch') else 3,
-                
-                # Other common settings
                 'register': self.bv_register.get() if hasattr(self, 'bv_register') else False,
                 'channel': self.sv_channel_focus.get() if hasattr(self, 'sv_channel_focus') else 'auto',
                 'threshold': self.sv_int_threshold.get() if hasattr(self, 'sv_int_threshold') else '5',
@@ -1216,8 +1048,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 'cell_mask':      self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
                 'correct_pileup': self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False,
                 'correct_pileup_st': self.bv_correct_pileup_st.get() if hasattr(self, 'bv_correct_pileup_st') else False,
-
-                # Stitch / tile-fit specific
                 'xlif_file':      self.sv_xlif.get()    if hasattr(self, 'sv_xlif')    else '',
                 'ptu_dir':        self.sv_ptu_dir.get() if hasattr(self, 'sv_ptu_dir') else '',
                 'out_st':         self.sv_out_st.get()  if hasattr(self, 'sv_out_st')  else '',
@@ -1236,7 +1066,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 'irf_st_path':    self._irf_st.sv_path.get()   if hasattr(self, '_irf_st') else '',
                 'tile_irf_dir':   self.sv_tile_irf_dir.get() if hasattr(self, 'sv_tile_irf_dir') else '',
 
-                # Expert fit settings overrides
                 'expert_overrides': self._expert_overrides if hasattr(self, '_expert_overrides') else {},
             }
             print(f"[Session] Captured form state: active_form={state.get('active_form')}")
@@ -1247,25 +1076,26 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _restore_form_state(self, state: dict):
         try:
-            # if "ptu_file" in state and hasattr(self, 'sv_ptu'):
-            #     self.sv_ptu.set(state["ptu_file"])
-            # if "xlsx_file" in state and hasattr(self, 'sv_xlsx'):
-            #     self.sv_xlsx.set(state["xlsx_file"])
-            
-            # Restore IRF settings
             if 'irf_method' in state and hasattr(self, '_irf_fov'):
                 self._irf_fov.sv_method.set(state['irf_method'])
             if 'irf_file' in state and hasattr(self, '_irf_fov'):
                 self._irf_fov.sv_path.set(state['irf_file'])
-            
-            # Restore fitting parameters (for all modes)
+
             if 'nexp_fov' in state and hasattr(self, 'iv_nexp_fov'):
                 self.iv_nexp_fov.set(state['nexp_fov'])
+            if 'fit_model_fov' in state and hasattr(self, 'sv_fit_model_fov'):
+                self.sv_fit_model_fov.set(state['fit_model_fov'])
+            if 'ncomp_dist_fov' in state and hasattr(self, 'iv_ncomp_dist_fov'):
+                self.iv_ncomp_dist_fov.set(state['ncomp_dist_fov'])
             if 'nexp_st' in state and hasattr(self, 'iv_nexp_st'):
                 self.iv_nexp_st.set(state['nexp_st'])
+            if 'fit_model_st' in state and hasattr(self, 'sv_fit_model_st'):
+                self.sv_fit_model_st.set(state['fit_model_st'])
+            if 'ncomp_dist_st' in state and hasattr(self, 'iv_ncomp_dist_st'):
+                self.iv_ncomp_dist_st.set(state['ncomp_dist_st'])
             if 'nexp_batch' in state and hasattr(self, 'iv_nexp_batch'):
                 self.iv_nexp_batch.set(state['nexp_batch'])
-            
+
             if 'tau_fit_lo' in state and hasattr(self, 'sv_tau_fit_lo'):
                 self.sv_tau_fit_lo.set(state['tau_fit_lo'])
             if 'tau_fit_hi' in state and hasattr(self, 'sv_tau_fit_hi'):
@@ -1277,25 +1107,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if 'tau_max_fov' in state and hasattr(self, 'sv_tau_max_fov'): self.sv_tau_max_fov.set(state['tau_max_fov'])
             if 'thr_fov_en' in state and hasattr(self, 'bv_thr_fov'): self.bv_thr_fov.set(state['thr_fov_en'])
             if 'thr_fov_val' in state and hasattr(self, 'sv_thr_fov'): self.sv_thr_fov.set(state['thr_fov_val'])
-            if 'cell_mask' in state and hasattr(self, 'bv_cell'): self.bv_cell.set(state['cell_mask'])    
+            if 'cell_mask' in state and hasattr(self, 'bv_cell'): self.bv_cell.set(state['cell_mask'])
             if 'correct_pileup' in state and hasattr(self, 'bv_correct_pileup'): self.bv_correct_pileup.set(state['correct_pileup'])
             if 'correct_pileup_st' in state and hasattr(self, 'bv_correct_pileup_st'): self.bv_correct_pileup_st.set(state['correct_pileup_st'])
-                        
-            # Restore other settings
+
             if 'register' in state and hasattr(self, 'bv_register'):
                 self.bv_register.set(state['register'])
             if 'channel' in state and hasattr(self, 'sv_channel_focus'):
                 self.sv_channel_focus.set(state['channel'])
             if 'threshold' in state and hasattr(self, 'sv_int_threshold'):
                 self.sv_int_threshold.set(state['threshold'])
-            
-            # Stitch-form fields
-            # Skip xlif_file and ptu_dir-they're mode-specific and should come
-            # fresh from project browser, not from old state
-            # if "xlif_file" in state and hasattr(self, 'sv_xlif'):
-            #     self.sv_xlif.set(state["xlif_file"])
-            # if "ptu_dir" in state and hasattr(self, 'sv_ptu_dir'):
-            #     self.sv_ptu_dir.set(state["ptu_dir"])
+
+            # xlif_file and ptu_dir intentionally skipped — mode-specific, should come fresh from project browser
             if 'out_st' in state and hasattr(self, 'sv_out_st'):
                 self.sv_out_st.set(state['out_st'])
             if 'bv_rotate' in state and hasattr(self, 'bv_rotate'):
@@ -1318,59 +1141,28 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self.sv_reg_max_shift.set(state['reg_max_shift'])
             if 'tile_irf_dir' in state and hasattr(self, 'sv_tile_irf_dir'):
                 self.sv_tile_irf_dir.set(state['tile_irf_dir'])
-            # Stitch IRF widget
             if 'irf_st_method' in state and hasattr(self, '_irf_st'):
                 self._irf_st.sv_method.set(state['irf_st_method'])
-                self._irf_st._update()   # refresh path/note visibility
+                self._irf_st._update()
             if 'irf_st_path' in state and hasattr(self, '_irf_st'):
                 self._irf_st.sv_path.set(state['irf_st_path'])
 
-            # Refresh IRF widget visibility after method restore
             if hasattr(self, '_irf_fov'):
                 self._irf_fov._update()
 
-            # Pipeline + per-pixel - restore conditional frames
             if 'pipeline' in state and hasattr(self, 'sv_pipeline'):
                 self.sv_pipeline.set(state['pipeline'])
-                self._pipeline_changed()   # show/hide _fit_frame + tile_extras
+                self._pipeline_changed()
             if 'bv_perpix' in state and hasattr(self, 'bv_perpix'):
                 self.bv_perpix.set(state['bv_perpix'])
-                self._perpix_toggled()     # show/hide _pxf
+                self._perpix_toggled()
 
-            # Stitch-form fields
-            # Skip xlif_file and ptu_dir-they're mode-specific
-            # if "xlif_file"     in state and hasattr(self, 'sv_xlif'):          self.sv_xlif.set(state["xlif_file"])
-            # if "ptu_dir"       in state and hasattr(self, 'sv_ptu_dir'):        self.sv_ptu_dir.set(state["ptu_dir"])
-            if 'out_st'        in state and hasattr(self, 'sv_out_st'):         self.sv_out_st.set(state['out_st'])
-            if 'bv_rotate'     in state and hasattr(self, 'bv_rotate'):         self.bv_rotate.set(state['bv_rotate'])
-            if 'tau_lo'        in state and hasattr(self, 'sv_tau_lo'):         self.sv_tau_lo.set(state['tau_lo'])
-            if 'tau_hi'        in state and hasattr(self, 'sv_tau_hi'):         self.sv_tau_hi.set(state['tau_hi'])
-            if 'int_lo'        in state and hasattr(self, 'sv_int_lo'):         self.sv_int_lo.set(state['int_lo'])
-            if 'int_hi'        in state and hasattr(self, 'sv_int_hi'):         self.sv_int_hi.set(state['int_hi'])
-            if 'thr_st_en'     in state and hasattr(self, 'bv_thr_st'):         self.bv_thr_st.set(state['thr_st_en'])
-            if 'thr_st_val'    in state and hasattr(self, 'sv_thr_st'):         self.sv_thr_st.set(state['thr_st_val'])
-            if 'bv_register'   in state and hasattr(self, 'bv_register'):       self.bv_register.set(state['bv_register'])
-            if 'reg_max_shift' in state and hasattr(self, 'sv_reg_max_shift'): self.sv_reg_max_shift.set(state['reg_max_shift'])
-            if 'tile_irf_dir'  in state and hasattr(self, 'sv_tile_irf_dir'): self.sv_tile_irf_dir.set(state['tile_irf_dir'])
-            if 'irf_st_method' in state and hasattr(self, '_irf_st'):
-                self._irf_st.sv_method.set(state['irf_st_method'])
-                self._irf_st._update()   # refresh path/note visibility
-            if 'irf_st_path'   in state and hasattr(self, '_irf_st'): self._irf_st.sv_path.set(state['irf_st_path'])
-            if hasattr(self, '_irf_fov'): self._irf_fov._update()
-            # Trigger pipeline/perpix commands so conditional frames appear
-            if 'pipeline'  in state and hasattr(self, 'sv_pipeline'):
-                self.sv_pipeline.set(state['pipeline']); self._pipeline_changed()
-            if 'bv_perpix' in state and hasattr(self, 'bv_perpix'):
-                self.bv_perpix.set(state['bv_perpix']); self._perpix_toggled()
-
-            # Restore expert fit settings
             if 'expert_overrides' in state and hasattr(self, '_expert_overrides'):
                 ex = state['expert_overrides']
                 if isinstance(ex, dict):
                     self._expert_overrides = ex
                     self._update_expert_banners()
 
-            # Restore active form mode
             if 'active_form' in state:
                 _form = state['active_form']
                 # legacy NPZ stored an int index; convert to form-id string
@@ -1378,7 +1170,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     _form = [None, 'fov', 'stitch', 'batch', 'irf', 'phasor'][_form] or 'fov'
                 if _form in self._form_buttons:
                     self._switch_form(_form)
-            
+
             print(f"[Session] Restored form state")
         except Exception as e:
             print(f"[Session] Could not restore form state: {e}")
@@ -1391,33 +1183,27 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             import json
             from datetime import datetime
             import numpy as np
-            
+
             base_path = Path(path)
-            # For PTU files, save next to the PTU; for directories, save inside it
             if base_path.is_file():
                 session_file = base_path.parent / f"{base_path.stem}.roi_session.npz"
             else:
                 session_file = base_path / 'roi_session.npz'
-            
-            # Capture current form state
+
             form_state = self._capture_form_state()
-            
-            # Build comprehensive session data - ONE FILE WITH EVERYTHING
             session_data = {
                 'timestamp': datetime.now().isoformat(),
                 'source': str(path),
-                'form_state_json': json.dumps(form_state, default=str),  # All form settings
+                'form_state_json': json.dumps(form_state, default=str),
             }
-            
-            # Save all numpy arrays from fit_result
+
             print(f"[Session] Saving fit_result keys: {list(fit_result.keys())}")
             for key, val in fit_result.items():
                 if isinstance(val, np.ndarray):
                     session_data[key] = val
                     print(f"  ✓ Saved array: {key} {val.shape}")
                 elif isinstance(val, dict):
-                    # Hoist any numpy arrays out of the dict before JSON-ing it,
-                    # otherwise default=str silently corrupts them (e.g. global_summary['model']).
+                    # hoist numpy arrays out of dicts before JSON-ing — default=str silently corrupts them
                     try:
                         hoisted = {}
                         json_safe = {}
@@ -1434,7 +1220,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     except Exception as e:
                         print(f"  ✗ Could not save dict {key}: {e}")
                 elif isinstance(val, (list, tuple)):
-                    # Save lists/tuples as arrays if they're numeric
                     try:
                         arr = np.array(val)
                         if arr.dtype != object:
@@ -1443,27 +1228,17 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     except:
                         pass
                 elif val is not None and not callable(val):
-                    # Save scalar metadata
                     try:
                         session_data[key] = val
                     except:
                         pass
-            
-            # Add summary table
-            summary_params = []
-            summary_values = []
-            summary_units = []
-            for param, value, unit in summary_rows:
-                summary_params.append(param)
-                summary_values.append(value)
-                summary_units.append(unit)
-            
-            if summary_params:
-                session_data['summary_params'] = np.array(summary_params, dtype=object)
-                session_data['summary_values'] = np.array(summary_values, dtype=object)
-                session_data['summary_units'] = np.array(summary_units, dtype=object)
-            
-            # Add FOV preview state
+
+            if summary_rows:
+                params, values, units = zip(*summary_rows)
+                session_data['summary_params'] = np.array(params, dtype=object)
+                session_data['summary_values'] = np.array(values, dtype=object)
+                session_data['summary_units'] = np.array(units, dtype=object)
+
             if self._fov_preview._ptu_path:
                 session_data['fov_ptu_path'] = self._fov_preview._ptu_path
             if self._fov_preview._lifetime_map is not None:
@@ -1472,18 +1247,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 session_data['fov_intensity_map'] = self._fov_preview._intensity_map
             session_data['fov_color_scale'] = json.dumps(self._fov_preview._flim_color_scale)
             session_data['fov_n_exp'] = self._fov_preview._n_exp
-            
-            # Save regions
             session_data['fov_regions'] = self._fov_preview._roi_manager.to_json()
-            
-            # Write single comprehensive session NPZ file
+
             np.savez_compressed(session_file, **session_data)
             print(f"✓ Session saved: {session_file}")
             print(f"  Saved {len(session_data)} items (fit results + form state + FOV preview)")
-            
-            # Also store the path for quick save
             self._current_session_file = str(session_file)
-            
+
         except Exception as e:
             import traceback
             print(f"[Save Error] {e}")
@@ -1492,27 +1262,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _load_roi_session(self, session_path: str) -> dict:
         try:
             import numpy as np
-            import json
-            
+
             data = np.load(session_path, allow_pickle=True)
             loaded = {}
-            
-            # Extract all arrays from NPZ
             for key in data.files:
                 val = data[key]
-                # Convert numpy scalar types to Python equivalents
                 if isinstance(val, np.ndarray):
                     if val.ndim == 0:
-                        # 0-d array (scalar) - extract with .item()
                         val = val.item()
                     elif val.dtype == object:
-                        # Object array - convert to list
                         val = val.tolist()
-                    # else: keep as ndarray (image data, etc.)
                 loaded[key] = val
-            
             print(f"✓ Loaded session from {session_path}")
-            # Also store for later use
             self._current_session_file = session_path
             return loaded
         except Exception as e:
@@ -1532,17 +1293,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             
             if session_file.exists():
                 print(f"[Auto-Load] Found session for PTU: {session_file.name}")
-                
-                # Load the session
                 session_data = self._load_roi_session(str(session_file))
                 if not session_data:
                     return
-                
-                # Restore form state
                 if 'form_state_json' in session_data:
                     try:
                         form_state_str = session_data['form_state_json']
-                        # Handle numpy array scalar
                         if isinstance(form_state_str, np.ndarray):
                             form_state_str = form_state_str.item()
                         if isinstance(form_state_str, bytes):
@@ -1553,10 +1309,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         print(f"[Auto-Load] Could not restore form state: {e}")
                         import traceback
                         traceback.print_exc()
-                
-                # Restore fit results to display
+
                 try:
-                    # Extract summary
                     params = session_data.get('summary_params', [])
                     values = session_data.get('summary_values', [])
                     units = session_data.get('summary_units', [])
@@ -1578,7 +1332,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             unit = unit.decode('utf-8')
                         rows.append((str(param), str(val), str(unit)))
                     
-                    # Display summary
                     if rows:
                         self._res.populate_summary(rows)
                     if 'fov_regions' in session_data:
@@ -1588,14 +1341,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             if isinstance(regions_json, bytes):
                                 regions_json = regions_json.decode('utf-8')
                             self._fov_preview._load_regions_from_json(regions_json)
-                            
-                            # Refresh the RoiAnalysisPanel tree list to show restored regions
                             if self._roi_analysis_panel is not None:
                                 self._roi_analysis_panel._refresh_region_list()
                         except Exception as _e:
                             print(f"[Auto-Load] Could not restore regions: {_e}")
 
-                    # Restore FOV preview
                     if 'fov_intensity_map' in session_data and 'fov_lifetime_map' in session_data:
                         intensity = session_data['fov_intensity_map']
                         lifetime = session_data['fov_lifetime_map']
@@ -1604,7 +1354,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             self._fov_preview._intensity_map = intensity
                         if isinstance(lifetime, np.ndarray):
                             self._fov_preview._lifetime_map = lifetime                     
-                        # Restore color scale
                         if 'fov_color_scale' in session_data:
                             try:
                                 import json
@@ -1624,7 +1373,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             print(f"[Auto-Load] Could not render FLIM display: {_e}")
 
                         try:
-                            # Redraw the FOV preview decay with fit overlay
                             ax_decay = self._fov_preview._ax_decay
                             ax_decay.clear()
                             if 'decay' in session_data and 'time_ns' in session_data:
@@ -1639,10 +1387,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                         irf_scaled = (irf / irf.max()) * decay.max() * 0.2
                                         ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                                         color='orange', linewidth=2.0, label='IRF', alpha=0.8)
-                                    # Reconstruct global_summary with hoisted arrays
                                     gs = _reconstruct_dict_from_session(session_data, 'global_summary')
                                     model = gs.get('model')
-                                    # Safely convert string model back to array if needed
                                     if model is not None and isinstance(model, str):
                                         model = _safe_array_from_json(model)
                                     if model is not None and len(model) > 0:
@@ -1650,7 +1396,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                                         label='Fitted', alpha=0.8)
                                     ax_decay.legend(fontsize=8, loc='upper right', labelcolor='black')
 
-                                    # Restore residuals panel
                                     ax_resid = self._fov_preview._ax_resid
                                     ax_resid.clear()
                                     ax_resid.set_facecolor('white')
@@ -1683,7 +1428,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             ax_decay.grid(True, alpha=0.3)
                             ax_decay.tick_params(labelsize=8, colors='white')
 
-                            # Reconstruct fit_result from session data for export
                             _SESSION_ONLY_KEYS = {
                                 'timestamp', 'source', 'form_state_json', 'fov_ptu_path',
                                 'fov_lifetime_map', 'fov_intensity_map', 'fov_color_scale',
@@ -1697,7 +1441,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                 and isinstance(v, np.ndarray)
                                 and v.ndim == 2
                             }
-                            # Fallback: use FOV maps if no pixel-map arrays found
                             if not fit_result_for_export:
                                 if isinstance(session_data.get('fov_intensity_map'), np.ndarray):
                                     fit_result_for_export['intensity'] = session_data['fov_intensity_map']
@@ -1710,7 +1453,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                 scan_name=self._current_scan_stem(),
                             )
 
-                            # Update status
                             self._res._status.set('✓ Session restored - ready to export or re-fit')
                             self._fov_preview._ctrl_frame.grid()
                             self._fov_preview._canvas_mpl.draw_idle()
@@ -1749,10 +1491,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             print(f"[Auto-Load] Found tile session: {session_file.name}")
             session_data = np.load(session_file, allow_pickle=True)
 
-            # Convert to dict for easier handling
             loaded = {key: session_data[key] for key in session_data.files}
 
-            # Restore form state
             if 'form_state_json' in loaded:
                 try:
                     form_state_str = loaded['form_state_json']
@@ -1765,7 +1505,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 except Exception as e:
                     print(f"[Auto-Load] Could not restore form state: {e}")
 
-            # Restore summary table
             if 'summary_params' in loaded:
                 params = loaded['summary_params']
                 values = loaded['summary_values']
@@ -1788,7 +1527,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if rows:
                     self._res.populate_summary(rows)
 
-            # Restore FOV preview state (color scale, n_exp)
             if 'fov_color_scale' in loaded:
                 try:
                     cs = loaded['fov_color_scale']
@@ -1803,19 +1541,17 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if isinstance(n_exp, (np.integer, int)):
                     self._fov_preview._n_exp = int(n_exp)
 
-            # Restore ROI regions (before redrawing FLIM image)
             if 'fov_regions' in loaded:
                 regions_json = loaded['fov_regions']
                 if isinstance(regions_json, np.ndarray):
                     regions_json = regions_json.item()
                 if isinstance(regions_json, bytes):
                     regions_json = regions_json.decode('utf-8')
-                if regions_json:  # Only load if not empty
+                if regions_json:
                     self._fov_preview._load_regions_from_json(regions_json)
                     if self._roi_analysis_panel:
                         self._roi_analysis_panel._refresh_region_list()
 
-            # Build a fit_result dict from the loaded data
             fit_result = {}
             for key, val in loaded.items():
                 if key in ('summary_params', 'summary_values', 'summary_units',
@@ -1823,30 +1559,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     continue
                 fit_result[key] = val
 
-            # Reconstruct global_summary with hoisted arrays (like in _load_fitted_data_from_file)
             if 'global_summary_json' in fit_result:
                 fit_result['global_summary'] = _reconstruct_dict_from_session(fit_result, 'global_summary')
 
-            # Ensure intensity TIFF is loaded before displaying fit results.
-            # Call load_stitched_roi to get the intensity image from TIFF files,
-            # but only if we haven't loaded it yet.
             if self._fov_preview._intensity_map is None:
                 self._fov_preview.load_stitched_roi(output_dir)
 
-            # Display the decay plot and FLIM image
-            # display_fit_results will compute and draw the FLIM lifetime map
-            # from pixel_maps in the fit result, so it will overwrite any TIFF-based
-            # lifetime that load_stitched_roi might have started.
             self._fov_preview.display_fit_results(None, fit_result)
-            
-            # Ensure canvas is fully rendered before proceeding
             self._fov_preview._canvas_mpl.draw_idle()
 
-            # Store fit result for export/save buttons
             self._res.set_fit_result(fit_result, output_dir, npz_path=str(session_file),
                                      scan_name=self._current_scan_stem())
 
-            # Update status
             self._res._status.set('✓ Session restored - ready to export or re-fit')
             self._fov_preview._ctrl_frame.grid()
             self._res._export_btn.configure(state='normal')
@@ -1864,11 +1588,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             
             data = np.load(npz_path, allow_pickle=True)
             loaded = {}
-            
-            # Extract all arrays from NPZ
             for key in data.files:
                 val = data[key]
-                # Convert object arrays back to lists if needed
                 if hasattr(val, 'dtype') and val.dtype == object:
                     val = val.tolist()
                 loaded[key] = val
@@ -1885,67 +1606,52 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             import shutil
             import numpy as np
             
-            # Find the existing session file - prefer stored path, then look next to PTU
             session_source = None
-            
-            # First try the stored session path (from loading or just saved)
+
             if self._current_session_file:
                 session_source = Path(self._current_session_file)
-                if session_source.exists():
-                    print(f"[Save Session] Using stored session path: {session_source}")
-                else:
-                    print(f"[Save Session] Stored path no longer exists: {session_source}")
+                if not session_source.exists():
                     session_source = None
-            
-            # Fallback: look for session file next to PTU file
+
             if not session_source:
                 ptu_path = self._fov_preview._ptu_path if self._fov_preview else None
-                
-                # Convert ptu_path to string if it's an ndarray or bytes
                 if ptu_path is not None:
                     if isinstance(ptu_path, np.ndarray):
                         ptu_path = ptu_path.item() if ptu_path.ndim == 0 else str(ptu_path[0])
                     if isinstance(ptu_path, bytes):
                         ptu_path = ptu_path.decode('utf-8')
                     ptu_path = str(ptu_path)
-                
                 if ptu_path:
                     base_path = Path(ptu_path)
                     if base_path.is_file():
-                        session_source = base_path.parent / f"{base_path.stem}.roi_session.npz"
-                        if session_source.exists():
-                            print(f"[Save Session] Found session next to PTU: {session_source}")
-                        else:
-                            session_source = None
+                        candidate = base_path.parent / f"{base_path.stem}.roi_session.npz"
+                        if candidate.exists():
+                            session_source = candidate
             
             if not session_source or not session_source.exists():
                 messagebox.showwarning('No session data', 'No saved session (.roi_session.npz) found.\n\nRun a fit first to create a session.')
                 return
             
-            # Ask user where to save
             output_path = Path(filedialog.askdirectory(
                 title='Save Session File',
                 initialdir=output_dir))
-            
+
             if not output_path or output_path == Path():
-                return  # User cancelled
-            
-            # Check if source and dest are the same file
+                return
+
             session_dest = output_path / session_source.name
-            
+
             if session_source.samefile(session_dest) if session_dest.exists() else session_source == session_dest:
                 messagebox.showinfo('Already Saved', 
                     f"Session already saved at:\n{session_source}")
                 return
             
-            # If destination exists, ask to override
             if session_dest.exists():
                 response = messagebox.askyesno('File Exists', 
                     f"File already exists:\n{session_dest.name}\n\nOverride?")
                 if not response:
                     return
             
-            # Copy to chosen location
             session_dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(session_source, session_dest)
             
@@ -1959,78 +1665,60 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showerror('Error', f"Failed to save session:\n{str(e)}")
 
     def _load_fitted_data_from_file(self, npz_path: str, suppress_popups: bool = False):
-        """Load previously fitted data from NPZ and display in results panel.
-        
-        Args:
-            npz_path: Path to the NPZ file to load
-            suppress_popups: If True, suppress success/error messagebox popups (e.g., when loading from project tree)
-        """
         try:
             import numpy as np
             import json
             from pathlib import Path
-            
+
             fit_result = self.load_roi_fit(npz_path)
             if not fit_result:
                 if not suppress_popups:
                     messagebox.showerror('Load Error', f"Failed to load fitted data from:\n{npz_path}")
                 return
-            
-            # Extract summary data
+
             params = fit_result.get('summary_params', [])
             values = fit_result.get('summary_values', [])
             units = fit_result.get('summary_units', [])
-            
-            # Build rows for display
+
             rows = []
-            if isinstance(params, np.ndarray):
-                params = params.tolist()
-            if isinstance(values, np.ndarray):
-                values = values.tolist()
-            if isinstance(units, np.ndarray):
-                units = units.tolist()
-            
+            if isinstance(params, np.ndarray): params = params.tolist()
+            if isinstance(values, np.ndarray): values = values.tolist()
+            if isinstance(units, np.ndarray): units = units.tolist()
+
             for param, val, unit in zip(params, values, units):
-                if isinstance(param, bytes):
-                    param = param.decode('utf-8')
-                if isinstance(val, bytes):
-                    val = val.decode('utf-8')
-                if isinstance(unit, bytes):
-                    unit = unit.decode('utf-8')
+                if isinstance(param, bytes): param = param.decode('utf-8')
+                if isinstance(val, bytes): val = val.decode('utf-8')
+                if isinstance(unit, bytes): unit = unit.decode('utf-8')
                 rows.append((str(param), str(val), str(unit)))
-            
-            # Display in results panel
+
             try:
                 if rows:
                     self._res.populate_summary(rows)
-            except Exception as populate_err:
+            except Exception:
                 import traceback
                 traceback.print_exc()
-            
-            # Restore FOV preview state if available
+
             try:
                 if 'fov_ptu_path' in fit_result:
                     ptu_path = fit_result['fov_ptu_path']
-                    # Handle various types: bytes, ndarray, str
                     if isinstance(ptu_path, bytes):
                         ptu_path = ptu_path.decode('utf-8')
                     elif isinstance(ptu_path, np.ndarray):
-                        # Convert 0-d array to scalar
                         ptu_path = ptu_path.item() if ptu_path.ndim == 0 else str(ptu_path[0])
                         if isinstance(ptu_path, bytes):
                             ptu_path = ptu_path.decode('utf-8')
                     self._fov_preview._ptu_path = str(ptu_path) if ptu_path else None
-                
+
                 if 'fov_lifetime_map' in fit_result:
                     lifetime = fit_result['fov_lifetime_map']
                     if isinstance(lifetime, np.ndarray):
                         self._fov_preview._lifetime_map = lifetime
-                
+
                 if 'fov_intensity_map' in fit_result:
                     intensity = fit_result['fov_intensity_map']
                     if isinstance(intensity, np.ndarray):
                         self._fov_preview._intensity_map = intensity
-                
+
                 if 'fov_color_scale' in fit_result:
                     try:
                         cs = fit_result['fov_color_scale']
@@ -2039,53 +1727,43 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         self._fov_preview._flim_color_scale = json.loads(cs)
                     except:
                         pass
-            except Exception as fov_err:
+            except Exception:
                 import traceback
                 traceback.print_exc()
-            
-            import sys
 
+            import sys
             sys.stdout.flush()
-            
+
             if 'fov_regions' in fit_result:
                 try:
                     regions_json = fit_result['fov_regions']
-                    
-                    # Handle numpy array (0-d array containing string)
                     if isinstance(regions_json, np.ndarray):
                         regions_json = regions_json.item() if regions_json.ndim == 0 else regions_json[0]
-                    
                     if isinstance(regions_json, bytes):
                         regions_json = regions_json.decode('utf-8')
-                    
                     self._fov_preview._load_regions_from_json(regions_json)
-                    
-                    # Refresh the RoiAnalysisPanel tree list to show restored regions
                     if self._roi_analysis_panel is not None:
                         self._roi_analysis_panel._refresh_region_list()
-                except Exception as e:
+                except Exception:
                     import traceback
                     traceback.print_exc()
-            
+
             if 'fov_n_exp' in fit_result:
                 n_exp = fit_result['fov_n_exp']
                 if isinstance(n_exp, (np.integer, int)):
                     self._fov_preview._n_exp = int(n_exp)
-            
-            # Redraw FOV preview with restored data
+
             try:
                 if self._fov_preview._lifetime_map is not None and self._fov_preview._intensity_map is not None:
                     from flimkit.UI import flim_display
 
                     intensity = self._fov_preview._intensity_map
                     lifetime  = self._fov_preview._lifetime_map
-
                     ax_img  = self._fov_preview._ax_img
                     ax_flim = self._fov_preview._ax_flim
                     ax_cbar = self._fov_preview._ax_cbar
                     fig     = self._fov_preview._fig
 
-                    # - Intensity image -
                     ax_img.clear()
                     intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
                     ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
@@ -2101,7 +1779,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         gamma=cs.get('gamma', 1.0),
                     )
                     cmap_obj = flim_display.get_colormap(cs.get('cmap', 'viridis'))
-                    cmap_obj.set_bad(color='black')                          # ← KEY FIX
+                    cmap_obj.set_bad(color='black')
                     ax_flim.clear()
                     ax_cbar.clear()
                     im = ax_flim.imshow(scaled, cmap=cmap_obj, origin='upper', vmin=0, vmax=1)
@@ -2122,8 +1800,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
                     ax_decay = self._fov_preview._ax_decay
                     ax_decay.clear()
-                    decay    = fit_result.get('decay')
-                    time_ns  = fit_result.get('time_ns')
+                    decay   = fit_result.get('decay')
+                    time_ns = fit_result.get('time_ns')
                     if decay is not None and time_ns is not None:
                         ax_decay.semilogy(time_ns, decay, 'o-', color='steelblue',
                                         linewidth=1.5, markersize=3, label='Measured', alpha=0.7)
@@ -2132,10 +1810,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             irf_scaled = (irf / irf.max()) * decay.max() * 0.2
                             ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                             color='orange', linewidth=2.0, label='IRF', alpha=0.8)
-                        # Reconstruct global_summary with hoisted arrays
                         gs = _reconstruct_dict_from_session(fit_result, 'global_summary')
                         model = gs.get('model')
-                        # Safely convert string model back to array if needed
                         if model is not None and isinstance(model, str):
                             model = _safe_array_from_json(model)
                         if model is not None and len(model) > 0:
@@ -2148,9 +1824,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     ax_decay.grid(True, alpha=0.3)
                     ax_decay.tick_params(labelsize=8, colors='white')
 
-                    # Redraw region overlays
                     self._fov_preview._redraw_region_overlays()
-                    
                     self._fov_preview._ctrl_frame.grid()
                     self._fov_preview._canvas_mpl.draw_idle()
                     print(f"[Load] Restored FOV preview from cached data")
@@ -2175,13 +1849,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 except Exception as e:
                     print(f"[Load] Could not restore form state: {e}")
 
-            
-            # Store fit result for export (use NPZ directory as output dir)
+
             output_dir = str(Path(npz_path).parent)
             self._res.set_fit_result(fit_result, output_dir, npz_path=npz_path,
                                      scan_name=self._current_scan_stem())
-            
-            # Stay on the current form (no "results" form exists)
             if not suppress_popups:
                 messagebox.showinfo('Success', f"Loaded fitted data from:\n{Path(npz_path).name}")
             
@@ -2195,68 +1866,53 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _show_export_dialog(self, image_dict: dict, output_dir: str):
         try:
             print(f"[Export Dialog] Starting with {len(image_dict)} items")
-            
+
             if not image_dict or not any(isinstance(v, np.ndarray) for v in image_dict.values()):
                 messagebox.showinfo('No images', 'No fit images available to export.')
                 return
-            
-            # Find all numpy arrays that look like images (2D or 3D with reasonable size)
+
             available_images = {}
             for k, v in image_dict.items():
                 if isinstance(v, np.ndarray):
-                    # Must be 2D (grayscale) or 3D with 3 channels (RGB)
                     if (v.ndim == 2) or (v.ndim == 3 and v.shape[2] == 3):
                         available_images[k] = v
                         print(f"[Export] Found image: {k} shape={v.shape}")
-            
+
             if not available_images:
                 messagebox.showinfo('No images', 'No valid FLIM result images found to export.')
                 return
-            
+
             print(f"[Export] {len(available_images)} images available: {list(available_images.keys())}")
-            print(f"[Export Dialog] Creating Toplevel on root={self.root}")
-            
-            # Create dialog
+
             dlg = tk.Toplevel(self.root)
             dlg.title('Export Results')
             dlg.resizable(True, True)
             dlg.minsize(560, 400)
             dlg.transient(self.root)
             dlg.grab_set()
-            print(f"[Export Dialog] Dialog created successfully")
-            
-            # Options
+
             bv_scalebar = tk.BooleanVar(value=True)
             bv_annotations = tk.BooleanVar(value=True)
-            image_vars = {}  # Initialize dictionary
+            image_vars = {key: tk.BooleanVar(value=True) for key in available_images}
 
-            for key in available_images.keys():
-                image_vars[key] = tk.BooleanVar(value=True)
-            
-            # Title
             ttk.Label(dlg, text='Export Results', font=('TkDefaultFont', 11, 'bold')).pack(pady=10)
-            
-            # Image selection section (multi-column layout)
+
             img_frame = ttk.LabelFrame(dlg, text='Images to Export', padding=10)
             img_frame.pack(fill='both', expand=True, padx=20, pady=5)
-            
-            # Organize images into 3 columns
+
             sorted_images = sorted(available_images.keys())
             n_cols = 3
             n_rows = (len(sorted_images) + n_cols - 1) // n_cols
-            
-            # Configure columns to have equal weight
+
             for col in range(n_cols):
                 img_frame.columnconfigure(col, weight=1)
-            
-            # Add checkboxes in grid layout
+
             for idx, key in enumerate(sorted_images):
                 row = idx % n_rows
                 col = idx // n_rows
-                ttk.Checkbutton(img_frame, text=key.replace('_', ' ').title(), 
+                ttk.Checkbutton(img_frame, text=key.replace('_', ' ').title(),
                                variable=image_vars[key]).grid(row=row, column=col, sticky='w', padx=5, pady=2)
-            
-            # Select all / None buttons (below the grid)
+
             sel_btn_frame = ttk.Frame(img_frame)
             sel_btn_frame.grid(row=n_rows, column=0, columnspan=n_cols, sticky='w', pady=(10, 0))
             def select_all():
@@ -2267,23 +1923,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     v.set(False)
             ttk.Button(sel_btn_frame, text='All', command=select_all, width=8).pack(side='left', padx=2)
             ttk.Button(sel_btn_frame, text='None', command=select_none, width=8).pack(side='left', padx=2)
-            
-            # Image rendering options
+
             opt_frame = ttk.LabelFrame(dlg, text='Rendering Options', padding=10)
             opt_frame.pack(fill='x', padx=20, pady=5)
             ttk.Checkbutton(opt_frame, text='Include scale bar', variable=bv_scalebar).pack(anchor='w', pady=3)
             ttk.Checkbutton(opt_frame, text='Include ROI annotations', variable=bv_annotations).pack(anchor='w', pady=3)
-            
-            # Format selection
+
             fmt_frame = ttk.LabelFrame(dlg, text='Image Format', padding=10)
             fmt_frame.pack(fill='x', padx=20, pady=5)
             bv_format = tk.StringVar(value='png')
-            ttk.Radiobutton(fmt_frame, text='PNG (smaller file size, web-friendly)', 
+            ttk.Radiobutton(fmt_frame, text='PNG (smaller file size, web-friendly)',
                            variable=bv_format, value='png').pack(anchor='w', pady=3)
-            ttk.Radiobutton(fmt_frame, text='OME-TIFF (lossless, metadata-rich)', 
+            ttk.Radiobutton(fmt_frame, text='OME-TIFF (lossless, metadata-rich)',
                            variable=bv_format, value='ometiff').pack(anchor='w', pady=3)
-            
-            # Export location
+
             loc_frame = ttk.LabelFrame(dlg, text='Save Location', padding=10)
             loc_frame.pack(fill='x', padx=20, pady=5)
             export_path = tk.StringVar(value=output_dir)
@@ -2301,8 +1954,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             
             def do_export():
                 try:
-                    # Filter images to only those selected
-                    selected_images = {k: v for k, v in available_images.items() 
+                    selected_images = {k: v for k, v in available_images.items()
                                      if image_vars[k].get()}
                     if not selected_images:
                         messagebox.showwarning('No selection', 'Please select at least one image to export.')
@@ -2329,21 +1981,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             
             btn_frame = ttk.Frame(dlg)
             btn_frame.pack(pady=15, fill='x', padx=20)
-            
-            # Export button (main action)
-            export_btn = ttk.Button(btn_frame, text='💾 Export', command=do_export)
-            export_btn.pack(side='left', padx=5, fill='x', expand=True)
-            
-            # Cancel button
-            cancel_btn = ttk.Button(btn_frame, text='Cancel', command=dlg.destroy)
-            cancel_btn.pack(side='left', padx=5)
-            
-            # Auto-size to fit content, capped at 85% of screen height
+
+            ttk.Button(btn_frame, text='💾 Export', command=do_export).pack(side='left', padx=5, fill='x', expand=True)
+            ttk.Button(btn_frame, text='Cancel', command=dlg.destroy).pack(side='left', padx=5)
+
             dlg.update_idletasks()
             req_w = max(560, dlg.winfo_reqwidth() + 24)
             req_h = min(dlg.winfo_reqheight() + 24, int(dlg.winfo_screenheight() * 0.85))
             dlg.geometry(f"{req_w}x{req_h}")
-            print(f"[Export Dialog] Dialog fully created, awaiting user input")
             
         except Exception as e:
             print(f"[Export Dialog Error] {e}")
@@ -2367,23 +2012,19 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             
             exported_count = 0
 
-            # Resolve pixel size (µm/px) for scale bar
             pixel_size_um = self._get_pixel_size_um()
             if with_scalebar and pixel_size_um is None:
                 print('[Export] No pixel size available - scale bar will be omitted')
                 with_scalebar = False
             
             if fmt == 'ometiff':
-                # Try to use tifffile for OME-TIFF export (lossless, preserves metadata)
                 try:
                     import tifffile
-                    
-                    # Export intensity as OME-TIFF
+
                     if 'intensity' in image_dict and isinstance(image_dict['intensity'], np.ndarray):
                         try:
                             intensity = image_dict['intensity']
                             intensity_16bit = (intensity / intensity.max() * 65535).astype(np.uint16) if intensity.max() > 0 else intensity.astype(np.uint16)
-                            
                             output_file = output_path / 'intensity.ome.tiff'
                             tifffile.imwrite(output_file, intensity_16bit, photometric='minisblack',
                                            metadata={'description': 'FLIM Intensity Image'})
@@ -2391,15 +2032,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             exported_count += 1
                         except Exception as e:
                             print(f"[Export] Error exporting intensity TIFF: {e}")
-                    
-                    # Export lifetime as OME-TIFF
+
                     if 'lifetime' in image_dict and isinstance(image_dict['lifetime'], np.ndarray):
                         try:
                             lifetime = image_dict['lifetime']
-                            # Replace NaN with 0
                             lifetime = np.nan_to_num(lifetime, nan=0.0)
                             lifetime_32bit = lifetime.astype(np.float32)
-                            
                             output_file = output_path / 'lifetime.ome.tiff'
                             tifffile.imwrite(output_file, lifetime_32bit, photometric='minisblack',
                                            metadata={'description': 'FLIM Lifetime Map (ns)'})
@@ -2407,25 +2045,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             exported_count += 1
                         except Exception as e:
                             print(f"[Export] Error exporting lifetime TIFF: {e}")
-                            
+
                 except ImportError:
                     print(f"[Export] tifffile not installed, falling back to PNG")
                     fmt = 'png'
-            
+
             if fmt == 'png':
-                # Export as PNG (high quality)
-                # Export intensity image at maximum resolution
                 if 'intensity' in image_dict and isinstance(image_dict['intensity'], np.ndarray):
                     try:
                         intensity = image_dict['intensity']
                         print(f"[Export] Intensity shape: {intensity.shape}")
-                        
-                        # Create figure with no margins for maximum resolution
                         h, w = intensity.shape
-                        fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')  # 1:1 pixel ratio
-                        ax = fig.add_axes([0, 0, 1, 1])  # Full figure area
+                        fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')
+                        ax = fig.add_axes([0, 0, 1, 1])
                         ax.set_facecolor('black')
-                        
                         intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
                         im = ax.imshow(intensity_clipped, cmap='inferno', origin='upper', aspect='auto')
                         ax.axis('off')
@@ -2443,16 +2076,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         import traceback
                         traceback.print_exc()
                 
-                # Export lifetime/FLIM map at maximum resolution
                 if 'lifetime' in image_dict and isinstance(image_dict['lifetime'], np.ndarray):
                     try:
                         lifetime = image_dict['lifetime']
                         print(f"[Export] Lifetime shape: {lifetime.shape}")
-                        
-                        # Create figure with no margins for maximum resolution
                         h, w = lifetime.shape[:2]
-                        fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')  # 1:1 pixel ratio
-                        ax = fig.add_axes([0, 0, 1, 1])  # Full figure area
+                        fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')
+                        ax = fig.add_axes([0, 0, 1, 1])
                         ax.set_facecolor('black')
                         
                         im = ax.imshow(lifetime, cmap='viridis', origin='upper', aspect='auto')
@@ -2461,7 +2091,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if with_scalebar:
                             self._draw_scale_bar(ax, w, h, pixel_size_um)
                         
-                        # Add ROI annotations if requested
                         if with_annotations and self._fov_preview._roi_manager.get_all_regions():
                             from flimkit.UI.roi_tools import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
                             for region in self._fov_preview._roi_manager.get_all_regions():
@@ -2492,16 +2121,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         import traceback
                         traceback.print_exc()
             
-            # Export summed decay plot for reference (always PNG)
             try:
                 if self._fov_preview is not None and hasattr(self._fov_preview, '_ax_decay'):
                     ax_decay = self._fov_preview._ax_decay
-                    
-                    # Create a high-quality decay plot
                     fig, ax = plt.subplots(figsize=(14, 8), dpi=150, facecolor='white', edgecolor='white')
                     ax.set_facecolor('white')
-                    
-                    # Clone all lines from the preview
                     for line in ax_decay.get_lines():
                         ax.plot(line.get_xdata(), line.get_ydata(), 
                                color=line.get_color(), linewidth=2.5,
@@ -2527,12 +2151,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 traceback.print_exc()
             
             print(f"✓ Export complete: {exported_count} high-resolution images to {output_path}")
-            
-            # Open the folder in finder
             try:
                 import subprocess
                 subprocess.Popen(['open', str(output_path)])
-                print(f"✓ Opened export folder in Finder")
             except Exception as e:
                 print(f"[Export] Could not open folder: {e}")
                 
@@ -2545,7 +2166,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         try:
             from pathlib import Path
 
-            # 1) Stitch mode - check stitch metadata JSON for pixel_size_um
             if getattr(self, '_current_form', None) == 'stitch':
                 xlif = self.sv_xlif.get().strip() if hasattr(self, 'sv_xlif') else ''
                 if xlif:
@@ -2554,14 +2174,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     if pixel_size_m and pixel_size_m > 0:
                         return pixel_size_m * 1e6
 
-            # 2) FOV mode - read ImgHdr_PixRes from the PTU header
             ptu_path = getattr(self._fov_preview, '_ptu_path', None)
             if ptu_path and Path(ptu_path).exists():
                 from flimkit.PTU.reader import PTUFile
                 ptu = PTUFile(str(ptu_path), verbose=False)
                 pix_res = ptu.tags.get('ImgHdr_PixRes', 0)
                 if pix_res and float(pix_res) > 0:
-                    # ImgHdr_PixRes is in metres per pixel
                     return float(pix_res) * 1e6
         except Exception as e:
             print(f"[Export] Could not determine pixel size: {e}")
@@ -2569,15 +2187,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     @staticmethod
     def _draw_scale_bar(ax, img_w_px: int, img_h_px: int, pixel_size_um: float):
-        """Draw a scale bar in the bottom-right corner of *ax*.
-
-        Chooses a "nice" bar length (1, 2, 5, 10, 20, 50, 100, 200, 500 µm)
-        that occupies roughly 15-25 % of the image width.
-        """
         from matplotlib.patches import FancyBboxPatch
 
         fov_um = img_w_px * pixel_size_um
-        target = fov_um * 0.20  # aim for ~20 % of width
+        target = fov_um * 0.20  # aim for ~20% of width
 
         nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
         bar_um = nice[0]
@@ -2595,7 +2208,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         x0 = img_w_px - margin_x - bar_px
         y0 = img_h_px - margin_y - bar_h
 
-        # Semi-transparent background behind bar + label
         label = f"{bar_um} µm"
         fontsize = max(7, min(14, img_h_px * 0.035))
         pad_x = bar_px * 0.08
@@ -2610,13 +2222,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         )
         ax.add_patch(bg)
 
-        # White bar
         from matplotlib.patches import Rectangle
         bar = Rectangle((x0, y0), bar_px, bar_h,
                          facecolor='white', edgecolor='none', zorder=10)
         ax.add_patch(bar)
 
-        # Label centred above bar
         ax.text(x0 + bar_px / 2, y0 - fontsize * 0.35,
                 label, color='white', fontsize=fontsize,
                 ha='center', va='bottom', zorder=10)
@@ -2625,15 +2235,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         try:
             from pathlib import Path
             import shutil
-            # Find the existing NPZ file that was saved after fitting
             npz_source = None
-            # If we have ptu_path, look for the NPZ next to it
             if ptu_path:
                 base_path = Path(ptu_path)
                 if base_path.is_file():
                     npz_source = base_path.parent / f"{base_path.stem}.roi_fit.npz"
-            
-            # If not found, try to infer from fit_result
             if not npz_source or not npz_source.exists():
                 source = fit_result.get('source')
                 if isinstance(source, bytes):
@@ -2644,8 +2250,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         npz_source = base_path.parent / f"{base_path.stem}.roi_fit.npz"
                     else:
                         npz_source = base_path / 'roi_fit.npz'
-            
-            # Copy the NPZ file to export directory
             if npz_source and npz_source.exists():
                 output_path = Path(output_dir)
                 output_path.mkdir(parents=True, exist_ok=True)
@@ -2658,17 +2262,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             print(f"✗ NPZ export error: {e}")
             import traceback
             traceback.print_exc()
-            import traceback
-            traceback.print_exc()
 
-    
-    # TAB 1 - Single-FOV FLIM fit
-    
+
     def _build_fov_tab(self):
         from flimkit.UI.modes.fov_mode import FovMode
         FovMode(self).build()
-    # TAB 2 - Tile Stitch / Fit
-    
+
     def _build_stitch_tab(self):
         from flimkit.UI.modes.stitch_mode import StitchMode
         StitchMode(self).build()
@@ -2676,6 +2275,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _build_stitch_fit(self, parent):
         from flimkit.UI.modes.stitch_mode import StitchMode
         StitchMode(self).build_fit(parent)
+
     def _apply_expert_overrides(self, a):
         ex = self._expert_overrides
         if not ex:
@@ -2706,21 +2306,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.irf_shift_bins = ex['irf_shift_bins']
         if 'free_tau_perpixel' in ex:
             a.free_tau_perpixel = ex['free_tau_perpixel']
-        if 'dist_type' in ex:
-            a.dist_type = ex['dist_type']
-        if 'dist_n_components' in ex:
-            a.dist_n_components = ex['dist_n_components']
 
     def _open_expert_settings(self):
         from flimkit.utils.config_manager import cfg
-        # Merge persisted config with in-memory overrides
         saved = cfg.get_section('expert')
         merged = dict(saved)
         merged.update(self._expert_overrides)
         dlg = ExpertSettingsDialog(self.root, merged)
         self.root.wait_window(dlg)
         if dlg.result is not None:
-            # Check if all values match defaults → treat as "no overrides"
             is_default = all(
                 dlg.result.get(k) == v for k, v in _EXPERT_DEFAULTS.items()
             )
@@ -2728,9 +2322,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self._expert_overrides = {}
             else:
                 self._expert_overrides = dlg.result
-            # Persist to config.yaml
             cfg.update_section('expert', dlg.result)
-            # Also save to project.json if a project is open
             if hasattr(self, '_proj_browser') and self._proj_browser and self._proj_browser._project:
                 self._proj_browser._project.config['expert'] = dlg.result
                 self._proj_browser._project.save()
@@ -2773,7 +2365,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._pxf.grid()
         else:
             self._pxf.grid_remove()
-        # Update scrollbar for the stitch form when content changes
         self._update_form_scrollbar('stitch')
         self.root.after_idle(self._fit_window_to_screen)
     
@@ -2811,36 +2402,174 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _build_batch_tab(self):
         from flimkit.UI.modes.batch_mode import BatchMode
         BatchMode(self).build()
+
     def _batch_mode_changed(self):
-        is_tiled = (self.sv_batch_mode.get() == 'tiled')
-        label_text = 'Mode: Multi-Tile ROI Fit' if is_tiled else 'Mode: Single FOV Fit'
-        self._batch_mode_label.configure(text=label_text)
-        if is_tiled:
+        mode = self.sv_batch_mode.get()
+        labels = {
+            'tiled':      'Mode: Multi-Tile ROI Fit',
+            'fov':        'Mode: Single FOV Fit',
+            'timelapse':  'Mode: Timelapse Fit',
+        }
+        self._batch_mode_label.configure(text=labels.get(mode, ''))
+        if mode == 'tiled':
             self._batch_xlif_fr.grid()
             self._batch_freg.grid()
-            self._btn_batch.configure(text='▶  Run Batch ROI Fit')
-            self._batch_io_help.configure(
-                text='One sub-folder per ROI created inside the output base dir.')
         else:
             self._batch_xlif_fr.grid_remove()
             self._batch_freg.grid_remove()
-            self._btn_batch.configure(text='▶  Run Batch FOV Fit')
-            self._batch_io_help.configure(
-                text='One sub-folder per PTU file created inside the output base dir.')
+        if mode == 'timelapse':
+            self._batch_tl_fr.grid()
+        else:
+            self._batch_tl_fr.grid_remove()
+        btn_texts = {
+            'tiled':     '▶  Run Batch ROI Fit',
+            'fov':       '▶  Run Batch FOV Fit',
+            'timelapse': '▶  Run Timelapse Fit',
+        }
+        self._btn_batch.configure(text=btn_texts.get(mode, '▶  Run'))
+        help_texts = {
+            'tiled':     'One sub-folder per ROI created inside the output base dir.',
+            'fov':       'One sub-folder per PTU file created inside the output base dir.',
+            'timelapse': 'One sub-folder per (region, series, z) group inside the output base dir.',
+        }
+        self._batch_io_help.configure(text=help_texts.get(mode, ''))
 
     def _dispatch_batch(self):
-        if self.sv_batch_mode.get() == 'tiled':
+        mode = self.sv_batch_mode.get()
+        if mode == 'tiled':
             self._run_batch()
+        elif mode == 'timelapse':
+            self._run_timelapse_batch()
         else:
             self._run_batch_fov()
 
+    def _resolve_batch_out_dir(self, ptu_dir: str) -> str:
+        if self.bv_batch_save_beside.get():
+            out = str(Path(ptu_dir) / 'save')
+            Path(out).mkdir(parents=True, exist_ok=True)
+            return out
+        return self.sv_batch_out_dir.get().strip()
+
+    def _run_timelapse_batch(self):
+        ptu_dir = self.sv_batch_ptu_dir.get().strip()
+        if not ptu_dir or not Path(ptu_dir).is_dir():
+            messagebox.showerror('Missing input', 'Please select a valid PTU folder.')
+            return
+        out_dir = self._resolve_batch_out_dir(ptu_dir)
+        if not out_dir:
+            messagebox.showerror('Missing input', 'Please specify an output directory.')
+            return
+
+        from flimkit.FLIM.timelapse import group_timelapse_files
+        groups = group_timelapse_files(ptu_dir)
+        if not groups:
+            messagebox.showerror(
+                'No timelapse PTUs',
+                f"No files matching region_tX[_sY][_zZ].ptu found in:\n{ptu_dir}"
+            )
+            return
+
+        cfg    = _C()
+        mirf   = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
+        n_exp  = self.iv_nexp_batch.get()
+        tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
+        tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
+        thr     = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        correct_pileup  = self.bv_batch_correct_pileup.get()
+        save_stack      = self.bv_batch_save_stack.get()
+        pool_positions  = self.bv_tl_pool_positions.get()
+        compute_bound_fraction = self.bv_tl_bound_fraction.get()
+        expert_overrides = dict(self._expert_overrides)
+
+        ref_tau1 = ref_tau2 = ref_tau3 = None
+        if self.bv_tl_fix_tau.get():
+            # Only the first n_exp τ fields are shown/required
+            _raw = [self.sv_tl_tau1.get().strip(),
+                    self.sv_tl_tau2.get().strip(),
+                    self.sv_tl_tau3.get().strip()][:n_exp]
+            _parsed = []
+            for i, _t in enumerate(_raw):
+                if not _t:
+                    _parsed.append(None)
+                    continue
+                try:
+                    _parsed.append(float(_t))
+                except ValueError:
+                    messagebox.showerror('Bad value', f"τ{i+1} must be a number (got '{_t}').")
+                    return
+            if any(v is None for v in _parsed):
+                messagebox.showerror(
+                    'Missing τ',
+                    f"Fix reference τ is on — please enter all {n_exp} τ value(s), "
+                    "or untick it to fit τ from the pooled decay.")
+                return
+            ref_tau1, ref_tau2, ref_tau3 = (_parsed + [None, None, None])[:3]
+
+        n_groups = len(groups)
+        n_frames = sum(len(v) for v in groups.values())
+
+        from flimkit.FLIM.timelapse import fit_timelapse
+
+        def task(progress_callback, cancel_event):
+            a = argparse.Namespace(
+                nexp=n_exp,
+                tau_min=tau_min,
+                tau_max=tau_max,
+                estimate_irf='machine_irf',
+                machine_irf=mirf,
+                irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
+                irf_bins=cfg['IRF_BINS'],
+                irf_fit_width=cfg['IRF_FIT_WIDTH'],
+                optimizer=expert_overrides.get('optimizer', 'de'),
+                restarts=expert_overrides.get('lm_restarts', cfg['lm_restarts']),
+                de_population=expert_overrides.get('de_population', cfg['de_population']),
+                de_maxiter=expert_overrides.get('de_maxiter', cfg['de_maxiter']),
+                workers=expert_overrides.get('n_workers', cfg['n_workers']),
+                no_polish=False,
+                channel=expert_overrides.get('channels', cfg['channels']),
+                min_photons=expert_overrides.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
+                correct_pileup=correct_pileup,
+                cost_function='poisson',
+                save_stack=save_stack,
+                no_plots=False,
+                intensity_threshold=thr,
+            )
+            return fit_timelapse(
+                ptu_dir=ptu_dir,
+                output_dir=out_dir,
+                args=a,
+                ref_tau1_ns=ref_tau1,
+                ref_tau2_ns=ref_tau2,
+                ref_tau3_ns=ref_tau3,
+                channel=expert_overrides.get('channels', cfg['channels']),
+                pool_positions=pool_positions,
+                compute_bound_fraction=compute_bound_fraction,
+                progress_callback=progress_callback,
+                cancel_event=cancel_event,
+            )
+
+        def on_done(result):
+            self._set_buttons('normal')
+            self._res.set_status(f'✓  Timelapse complete — {n_groups} group(s), {n_frames} frames.')
+            self._res.load_images(out_dir)
+
+        self._set_buttons('disabled')
+        self.run_with_progress(
+            task,
+            task_name=f'Timelapse Fit ({n_groups} group(s), {n_frames} frames)',
+            on_done=on_done,
+            output_dir=out_dir,
+        )
+
     def _run_batch_fov(self):
         ptu_dir = self.sv_batch_ptu_dir.get().strip()
-        out_dir = self.sv_batch_out_dir.get().strip()
-        for val, name in [(ptu_dir, 'PTU folder'), (out_dir, 'Output directory')]:
-            if not val or not Path(val).is_dir():
-                messagebox.showerror('Missing input', f"Please select a valid {name}.")
-                return
+        if not ptu_dir or not Path(ptu_dir).is_dir():
+            messagebox.showerror('Missing input', 'Please select a valid PTU folder.')
+            return
+        out_dir = self._resolve_batch_out_dir(ptu_dir)
+        if not out_dir:
+            messagebox.showerror('Missing input', 'Please specify an output directory.')
+            return
 
         ptu_files = sorted(Path(ptu_dir).glob('*.ptu'))
         if not ptu_files:
@@ -2849,7 +2578,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         cfg      = _C()
         mirf     = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
-        n_exp    = self.iv_nexp_batch.get()
+        _batch_model = self.sv_fit_model_batch.get()
+        n_exp    = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
         tau_min  = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
         tau_max  = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
         tau_lo   = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
@@ -2857,7 +2587,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         save_npy = self.bv_batch_save_npy.get()
         thr      = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
-        # Snapshot expert overrides now (before the worker thread runs)
         expert_overrides = dict(self._expert_overrides)
 
         from flimkit.interactive import _run_flim_fit
@@ -2893,6 +2622,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         irf_fit_width=cfg['IRF_FIT_WIDTH'],
                         irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
                         nexp=n_exp,
+                        dist_type=_batch_model,
+                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model != 'discrete' else 1),
                         tau_min=tau_min,
                         tau_max=tau_max,
                         mode='both',
@@ -2954,13 +2685,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _run_batch(self):
         xlif_dir = self.sv_batch_xlif_dir.get().strip()
         ptu_dir  = self.sv_batch_ptu_dir.get().strip()
-        out_dir  = self.sv_batch_out_dir.get().strip()
-        for val, name in [(xlif_dir, 'XLIF folder'),
-                          (ptu_dir,  'PTU folder'),
-                          (out_dir,  'Output directory')]:
+        for val, name in [(xlif_dir, 'XLIF folder'), (ptu_dir, 'PTU folder')]:
             if not val or not Path(val).is_dir():
                 messagebox.showerror('Missing input', f"Please select a valid {name}.")
                 return
+        out_dir = self._resolve_batch_out_dir(ptu_dir)
+        if not out_dir:
+            messagebox.showerror('Missing input', 'Please specify an output directory.')
+            return
         xlif_files = sorted(Path(xlif_dir).glob('*.xlif'))
         if not xlif_files:
             messagebox.showerror('No XLIF files', f"No .xlif files found in:\n{xlif_dir}")
@@ -2968,7 +2700,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         cfg       = _C()
         mirf      = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
-        n_exp     = self.iv_nexp_batch.get()
+        _batch_model = self.sv_fit_model_batch.get()
+        n_exp     = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
         tau_min   = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
         tau_max   = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
         tau_lo        = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
@@ -2983,7 +2716,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         reg_shift = int(self.sv_batch_reg_shift.get() or 120)
         thr       = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
-        # Snapshot expert overrides now (before the worker thread runs)
         expert_overrides = dict(self._expert_overrides)
 
         from flimkit.PTU.stitch    import fit_flim_tiles
@@ -3010,7 +2742,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
                 try:
                     fit_args = argparse.Namespace(
-                        nexp=n_exp, tau_min=tau_min, tau_max=tau_max,
+                        nexp=n_exp, dist_type=_batch_model,
+                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model != 'discrete' else 1),
+                        tau_min=tau_min, tau_max=tau_max,
                         optimizer=expert_overrides.get('optimizer', 'de'),
                         restarts=expert_overrides.get('lm_restarts', 1),
                         de_population=expert_overrides.get('de_population', cfg['de_population']),
@@ -3098,17 +2832,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self.run_with_progress(
             task, task_name=f"Batch ROI Fit ({len(xlif_files)} ROIs)", on_done=on_done, output_dir=out_dir)
 
-    
-    # TAB 4 - Machine IRF Builder
-    
+
     def _build_machine_irf_tab(self):
         from flimkit.UI.modes.irf_mode import IrfMode
         IrfMode(self).build()
-    # TAB 5 - Phasor
-    
+
     def _build_phasor_tab(self):
         from flimkit.UI.modes.phasor_mode import PhasorMode
         PhasorMode(self).build()
+
     def _ph_mode_changed(self):
         if self.sv_ph_mode.get() == 'new':
             self._ph_new.grid()
@@ -3192,9 +2924,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         except Exception as exc:
             messagebox.showerror('FRET fit failed', str(exc))
 
-    
-    # FOV Preview auto-load
-    
+
     def _on_fov_ptu_changed(self, var, index, mode):
         ptu_path = self.sv_ptu.get().strip()
         if not ptu_path:
@@ -3236,7 +2966,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if not xlif_path:
             return
 
-        # Prevent duplicate loads
         if xlif_path == self._last_loaded_xlif:
             return
         if getattr(self, '_loading_xlif', False):
@@ -3245,7 +2974,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._last_loaded_xlif = xlif_path
         self._loading_xlif = True
 
-        # Find the corresponding ScanRecord in the project
         stem = Path(xlif_path).stem
         output_dir = None
         session_file = None
@@ -3267,10 +2995,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     output_dir = str(out_path / roi_name)
                 session_file = Path(output_dir) / 'roi_session.npz'
                 if not session_file.exists():
-                    # Session might be missing, but output_dir is still correct for preview
                     session_file = None
 
-        # Fallback to UI fields if project record not available
         if output_dir is None:
             ptu_dir = self.sv_ptu_dir.get().strip()
             out_base = self.sv_out_st.get().strip()
@@ -3280,14 +3006,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         if output_dir is None:
             self._loading_xlif = False
-            return  # Not enough info
+            return
 
-        # Cancel any previous pending XLIF load
         if self._xlif_after_id is not None:
             self.root.after_cancel(self._xlif_after_id)
 
-        # Load stitched preview and session in a single deferred callback
-        _sf = session_file  # capture for closure
+        _sf = session_file
         def _do_xlif_load():
             try:
                 self._fov_preview.load_stitched_roi(output_dir)
@@ -3297,8 +3021,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self._loading_xlif = False
 
         self._xlif_after_id = self.root.after(100, _do_xlif_load)
-    
-    # Run handlers
 
     def _get_roi_fit_params(self) -> dict:
         cfg = _C()
@@ -3320,7 +3042,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'irf_align':      'steepest_rise',
             'irf_shift_bins': 2,
         }
-        # Apply expert overrides that affect fitting
         expert = self._expert_overrides
         if expert:
             if 'cost_function' in expert:
@@ -3371,30 +3092,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             captured = ''.join(self._buf)
             rows = _parse_summary(captured)
 
-            
-            # For tile_fit, result is a dict with fit data
             if pipeline == 'tile_fit' and isinstance(result, dict):
-                print(f"[on_done] Executing tile_fit branch")
                 fit_result = result
                 global_summary = fit_result.get('global_summary', {})
                 global_popt = fit_result.get('global_popt')
-                
-                # Extract summary from fit result
                 if global_summary:
                     extracted_rows = self._extract_summary_rows(global_summary, global_popt)
                     if extracted_rows:
                         rows = extracted_rows
-                        print(f"[on_done] Extracted {len(extracted_rows)} summary rows from global_summary")
-                
                 try:
                     self._fov_preview.load_stitched_roi(a.output_dir)
-                    print(f"[on_done] Loaded stitched ROI from {a.output_dir}")
                 except Exception as e:
                     print(f"[Warning] Could not load stitched image: {e}")
-
                 try:
                     self._fov_preview.display_fit_results(None, fit_result)
-                    print(f"[on_done] Displayed fit results (decay + FLIM) from fit_result")
                 except Exception as e:
                     import traceback
                     print(f"[Warning] Could not display fit results: {e}")
@@ -3407,8 +3118,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         npz_path=str(npz_path) if npz_path.exists() else None,
                         scan_name=self._current_scan_stem(),
                     )
-                    print(f"[on_done] Saved tile fit session → {npz_path}")
-                    # Notify project browser: remember output dir, refresh indicators.
                     if hasattr(self, '_proj_browser'):
                         xlif_stem = Path(a.xlif).stem if hasattr(a, 'xlif') else None
                         if xlif_stem:
@@ -3427,17 +3136,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 except:
                     pass
             else:
-                print(f"[on_done] Executing stitch branch (load_stitched_roi)")
                 try:
                     self._fov_preview.load_stitched_roi(a.output_dir)
                 except Exception as e:
                     print(f"Warning: Could not load stitched image: {e}")
-            
+
             if rows:
-                print(f"[on_done] Populating summary with {len(rows)} rows")
                 self._res.populate_summary(rows)
-            else:
-                print(f"[on_done] No rows to populate summary (rows={rows})")
 
         def task(progress_callback, cancel_event):
             if pipeline == 'stitch_only':
@@ -3534,10 +3239,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     display_image=result.get('display_image'),
                     min_photons=min_ph,
                 )
-                # Store PTU path + channel so cursor-gated fitting can use them
                 self._phasor_panel._ptu_path = ptu
                 self._phasor_panel._channel  = channel
-                # Auto-save phasor session next to the PTU file
                 self._auto_save_phasor(ptu)
                 self._res.set_status(
                     f"✓  Phasor data loaded from channel {channel} - click the phasor to place cursors.")
@@ -3586,10 +3289,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             )
 
     def _phasor_thread(self, worker_fn, done_cb, *, status='  Working...'):
-        """Run worker_fn in a daemon thread; call done_cb(result) on the main thread.
-        Only disables the phasor run button while running - the rest of the UI
-        stays responsive (unlike _launch which locks all buttons).
-        """
+        # Only disables the phasor run button — the rest of the UI stays responsive unlike _launch
         self._btn_ph.configure(state='disabled')
         self._res.set_status(status)
 
@@ -3629,7 +3329,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 display_image=sd.get('display_image'),
             )
             print(f"[Phasor] Auto-saved session → {save_path}")
-            # Notify project browser
             if hasattr(self, '_proj_browser'):
                 self._proj_browser.on_phasor_done(p.stem)
         except Exception as e:
@@ -3700,7 +3399,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             tcspc_ns = float(meta.get('tcspc_res_ns_mean', 0.05))
             import numpy as np
             time_ns = np.arange(len(irf)) * tcspc_ns
-            # Build or reuse IRF plot canvas in the right panel
             preview_parent = self._preview_frame_label
             if not hasattr(self, '_irf_plot_frame'):
                 import tkinter as _tk
@@ -3713,7 +3411,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self._irf_ax  = self._irf_fig.add_subplot(111)
                 self._irf_canvas_mpl = FigureCanvasTkAgg(self._irf_fig, master=self._irf_plot_frame)
                 self._irf_canvas_mpl.get_tk_widget().pack(fill='both', expand=True)
-            # Draw the IRF
             ax = self._irf_ax
             ax.clear()
             ax.set_facecolor('#1e1e1e')
@@ -3728,7 +3425,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                          color='white', fontsize=10)
             ax.tick_params(colors='white')
             ax.spines[:].set_color('#555')
-            # Mark FWHM
             import numpy as _np
             half_max = irf.max() / 2
             above = _np.where(irf >= half_max)[0]
@@ -3740,7 +3436,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                            alpha=0.12, color='#ff9900')
             ax.legend(fontsize=8, facecolor='#2a2a2a', edgecolor='#555', labelcolor='white')
             self._irf_canvas_mpl.draw_idle()
-            # Make it visible
             self._irf_plot_frame.grid()
             self._fov_preview.frame.grid_remove()
             self._preview_frame_label.configure(text='  Machine IRF Builder  ')
@@ -3780,9 +3475,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         result = fn(progress_callback=progress_callback, cancel_event=cancel_event)
                 else:
                     result = fn()
-                
-                self.root.after(0, lambda: win.close())
-                self.root.after(0, lambda: win_manager.close_all())
                 captured = ''.join(self._buf)
                 rows     = _parse_summary(captured)
                 if _on_done_override is not None:
@@ -3796,6 +3488,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 log_exception(f"_launch: {task_name}")
                 self.root.after(0, lambda e=exc: self._res.set_status(f"✗  Error: {e}"))
             finally:
+                self.root.after(0, lambda: win.close())
+                self.root.after(0, lambda: win_manager.close_all())
                 if hasattr(redir, 'close'):
                     redir.close()
                 else:
@@ -3833,7 +3527,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if ptu_path or output_dir:
             try:
                 self._save_roi_progress(ptu_path or output_dir, fit_result, rows or [])
-                # Figure out where the session file was saved
                 from pathlib import Path
                 base_path = Path(ptu_path) if ptu_path else Path(output_dir)
                 if base_path.is_file():
@@ -3842,13 +3535,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     npz_file_path = str(base_path / 'roi_session.npz')
             except Exception as e:
                 print(f"[Info] Could not save ROI progress: {e}")
-        
-        # Store fit result with NPZ path so quick save knows where it is
+
         self._res.set_fit_result(fit_result or {}, output_dir, npz_path=npz_file_path,
                                  scan_name=Path(ptu_path).stem if ptu_path else self._current_scan_stem())
 
-        # Notify project browser so the session indicator (● / ○) refreshes
-        # and the output prefix is remembered for next launch.
         if hasattr(self, '_proj_browser'):
             stem = Path(ptu_path).stem if ptu_path else None
             prefix = self.sv_out_fov.get().strip() if hasattr(self, 'sv_out_fov') else None
@@ -3856,12 +3546,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self._proj_browser.on_fit_done(stem, output_prefix=prefix)
 
     def _extract_summary_rows(self, global_summary: dict, global_popt=None) -> list:
-        """Extract fit summary rows from global_summary dict.
-
-        Handles two schemas:
-          • fit_summed schema  - keys: taus_ns, amps, fractions, tau_mean_amp_ns ...
-          • derive_global_tau schema - keys: tau_mean_amp_global_ns, tau1_mean_ns ...
-        """
         if not global_summary:
             return []
 
@@ -3929,7 +3613,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if n_px is not None:
             rows.append(('Pixels fitted', f"{n_px:,}", ''))
 
-        # Per-component rows for tile schema  (tau1_mean_ns, a1_mean_frac ...)
         k = 1
         while True:
             tau_k = global_summary.get(f'tau{k}_mean_ns')
@@ -3941,7 +3624,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 rows.append((f"f{k} mean (amp frac)", f"{a_k:.4f}", ''))
             k += 1
 
-        #  Shared fields (present in both schemas) 
         bg_fit = global_summary.get('bg_fit')
         if bg_fit is not None:
             rows.append(('Background (fitted)', f"{bg_fit:.2f}", 'cts/bin'))
@@ -3972,9 +3654,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         for btn in (self._btn_fov, self._btn_st, self._btn_ph):
             btn.configure(state=state)
 
-
-
-# Themed version (uses TKinterModernThemes)
 
 if HAS_TKMT:
     class FLIMKitGUIThemed(TKMT.ThemedTKinterFrame, _UIBuilder):
