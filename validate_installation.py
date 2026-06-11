@@ -242,7 +242,7 @@ def test_stitching():
     print_header("Testing Tile Stitching")
     
     try:
-        from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim
+        from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim, _close_memmap
         import tempfile
         
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -276,11 +276,11 @@ def test_stitching():
             
             assert flim.shape[:2] == canvas, f"Wrong FLIM spatial shape: {flim.shape[:2]} vs {canvas}"
             assert flim.shape[2] == len(time_axis), "FLIM bins != time axis length"
-            assert intensity.shape == canvas, f"Wrong intensity shape: {intensity.shape} vs {canvas}"
-            
+            assert intensity.shape == canvas, f"Wrong intensity shape: {intensity.shape} vs {canvas}"      
             print_success("Stitched data loads correctly")
+            _close_memmap(flim)
+            del flim
             return True
-            
     except Exception as e:
         print_error(f"Stitching test failed: {e}")
         traceback.print_exc()

@@ -35,7 +35,7 @@ class IRFWidget:
                 row=i, column=0, columnspan=3, sticky='w', padx=4, pady=1)
 
         r = len(self.CHOICES)
-        self._path_lbl = ttk.Label(self.frame, text='IRF / XLSX path')
+        self._path_lbl = ttk.Label(self.frame, text='IRF file')
         self._path_lbl.grid(row=r, column=0, sticky='e', padx=6, pady=3)
         self._path_e = ttk.Entry(self.frame, textvariable=self.sv_path, width=45)
         self._path_e.grid(row=r, column=1, sticky='ew', padx=4, pady=3)
@@ -63,7 +63,7 @@ class IRFWidget:
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
-            text='Machine IRF (.npy) path' if method.startswith('machine_irf') else 'IRF / XLSX path')
+            text='Machine IRF (.npy) path' if method.startswith('machine_irf') else 'IRF file')
         if method.startswith('machine_irf') and not self.sv_path.get().endswith('.npy'):
             self.sv_path.set(self._machine_irf_default)
         self._path_lbl.grid()

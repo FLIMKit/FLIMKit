@@ -195,10 +195,23 @@ def irf_from_scatter_ptu(path: str, ptu_ref: PTUFile,
                          channel: int | None = None) -> np.ndarray:
     scatter = PTUFile(path, verbose=False)
     decay   = scatter.summed_decay(channel=channel)
-    decay   = decay[:ptu_ref.n_bins]
     s       = decay.sum()
+    if s == 0 and channel is not None:
+        decay = scatter.summed_decay(channel=None)
+        s     = decay.sum()
+        if s > 0:
+            print(f"  Scatter PTU has no photons on channel {channel}; "
+                  f"using auto-detected channel {scatter.photon_channel} instead")
     if s == 0:
         raise ValueError(f"Scatter PTU {path!r} has no photons.")
+    n = ptu_ref.n_bins
+    if decay.size < n:
+        decay = np.concatenate([decay, np.zeros(n - decay.size)])
+    else:
+        decay = decay[:n]
+    s = decay.sum()
+    if s == 0:
+        raise ValueError(f"Scatter PTU {path!r} has no photons in the first {n} bins.")
     print(f"  IRF from scatter PTU: {s:,.0f} photons")
     return decay / s
 

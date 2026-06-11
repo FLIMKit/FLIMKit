@@ -290,6 +290,8 @@ def stitch_flim_tiles(
     # Save ownership map: each value = tile index + 1 (0 = uncovered)
     np.save(str(output_weight), (_owner + 1).astype(np.uint16))
     flim_canvas.flush()
+    flim_canvas._mmap.close()
+    del flim_canvas
 
     metadata = {
         'canvas_shape':        (canvas_height, canvas_width),
@@ -373,6 +375,12 @@ def load_stitched_flim(
     return flim, time_axis, intensity, metadata
 
 
+def _close_memmap(arr):
+    mm = getattr(arr, '_mmap', None)
+    if mm is not None:
+        mm.close()
+
+
 def load_flim_for_fitting(
     source_dir,
     load_to_memory=False,
@@ -380,7 +388,11 @@ def load_flim_for_fitting(
     flim_memmap, _, _, metadata = load_stitched_flim(source_dir)
     tcspc_res = metadata['tcspc_resolution_ps'] * 1e-12
     n_bins    = metadata['n_time_bins']
-    stack = np.array(flim_memmap, dtype=np.float32) if load_to_memory else flim_memmap
+    if load_to_memory == True:
+        stack = np.array(flim_memmap, dtype=np.float32)
+        _close_memmap(flim_memmap)
+    else:
+        stack = flim_memmap
     return stack, tcspc_res, n_bins
 
 
