@@ -1,3 +1,4 @@
+import math
 import struct
 import time
 import numpy as np
@@ -87,7 +88,7 @@ class PTUFile:
                                        1 / t.get('TTResult_SyncRate', 20e6)))
         self.sync_rate  = 1.0 / global_res
         self.period_ns  = global_res * 1e9
-        self.n_bins     = self._get_n_bins_from_records()
+        self.n_bins     = int(math.ceil(global_res / self.tcspc_res))
         self.n_x        = int(t.get('ImgHdr_PixX', t.get('$ReqHdr_PixelNumber_X', 256)))
         self.n_y        = int(t.get('ImgHdr_PixY', t.get('$ReqHdr_PixelNumber_Y', 256)))
         self.rec_type   = int(t.get('TTResultFormat_TTTRRecType', 0x00010303))
@@ -95,23 +96,20 @@ class PTUFile:
         self.time_ns    = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
         self.photon_channel = None
         self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
-        # Pile-up metrics - populated after summed_decay() is called
         self._total_photons = None
-        # pixel_time in seconds
         pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)   # in ms? check units
         self.pixel_time = pixel_time_ms * 1e-3                      # convert to seconds
         if self.pixel_time <= 0:
-            # fallback: compute from line time
             line_time = self.global_line_time * self.global_resolution
             self.pixel_time = line_time / self.n_x
 
         if self.verbose:
-            # print(f"  HW type  : {t.get('HW_Type','?')}")
-            # print(f"  RecType  : 0x{self.rec_type:08X}  "f"({'PicoHarpT3' if self.rec_type==0x00010303 else 'other'})")
-            # print(f"  TCSPC    : {self.n_bins} bins × {self.tcspc_res*1e12:.2f} ps")
-            # print(f"  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)")
-            # print(f"  Image    : {self.n_x} × {self.n_y} px")
-            # print(f"  Records  : {self.n_records:,}")
+            print(f"  HW type  : {t.get('HW_Type','?')}")
+            print(f"  RecType  : 0x{self.rec_type:08X}  "f"({'PicoHarpT3' if self.rec_type==0x00010303 else 'other'})")
+            print(f"  TCSPC    : {self.n_bins} bins × {self.tcspc_res*1e12:.2f} ps")
+            print(f"  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)")
+            print(f"  Image    : {self.n_x} × {self.n_y} px")
+            print(f"  Records  : {self.n_records:,}")
             print(' ')
 
     def _load_records(self):
@@ -127,13 +125,6 @@ class PTUFile:
         nsync = records & 0xFFFF
         return ch, dtime, nsync
     
-    def _get_n_bins_from_records(self):
-        records = self._load_records()
-        ch, dtime, _ = self._decode_picoharp_t3(records)
-        # dtime values are 0..4095; find max among photon records (channel != 0xF)
-        max_dtime = dtime[ch != 0xF].max()
-        return int(max_dtime) + 1
-
     def summed_decay(self, channel=None):
         records = self._load_records()
         ch, dtime, _ = self._decode_picoharp_t3(records)

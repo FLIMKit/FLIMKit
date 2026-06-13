@@ -65,18 +65,12 @@ class ProgressWindowManager:
             window_id = self.counter
             self.counter += 1
         
-        # Create window on main thread
-        window_ref = [None]
-        event = threading.Event()
-        
         def create_window():
-            window_ref[0] = ProgressWindow(self.root, task_name=task_name)
+            window_ref = ProgressWindow(self.root, task_name=task_name)
             with self.lock:
-                self.windows[window_id] = window_ref[0]
-            event.set()
+                self.windows[window_id] = window_ref
         
         self.root.after(0, create_window)
-        event.wait(timeout=5)  # Wait up to 5 seconds for window to be created
         return window_id
     
     def update_progress(self, window_id, current, total):
@@ -85,7 +79,7 @@ class ProgressWindowManager:
                 try:
                     self.windows[window_id].set_progress(current, maximum=total)
                 except Exception:
-                    pass  # Window may have been closed
+                    pass  
         
         self.root.after(0, update)
     
