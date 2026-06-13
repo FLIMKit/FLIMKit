@@ -1,5 +1,5 @@
 # Testing Requirements
-pytest>=6.0
+pytest>=9.0.3
 numpy>=1.20
 scipy>=1.7
 

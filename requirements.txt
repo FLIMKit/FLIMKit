@@ -12,7 +12,7 @@ Pillow>=10.0.0
 phasorpy==0.11
 PyWavelets>=1.4.0
 ptufile==2026.1.14
-pytest==9.0.2
+pytest==9.0.3
 scipy==1.17.1
 tifffile
 tqdm==4.67.3
