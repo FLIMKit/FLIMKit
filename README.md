@@ -14,7 +14,7 @@ Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
 ## Installation
 
-Python ≥ 3.12 required.
+Python ≥ 3.12 required (3.14 recommended — official builds use 3.14).
 
 ```bash
 git clone https://github.com/alex1075/FLIMKit.git

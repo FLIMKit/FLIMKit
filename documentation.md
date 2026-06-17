@@ -47,7 +47,7 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 
 ### System Requirements
 
-- Python ≥ 3.12
+- Python ≥ 3.12 (3.14 recommended — official builds use 3.14)
 - macOS, Linux, or Windows
 
 ### Dependencies
