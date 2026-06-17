@@ -1,4 +1,5 @@
 import sys
+import warnings
 
 def get_backend(prefer='auto'):
     if prefer == 'auto':
@@ -34,6 +35,25 @@ def _try_mlx():
     from flimkit.GPU.mlx_backend import MLXBackend
     return MLXBackend()
 
+def _cuda_available():
+    try:
+        import torch
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+def _cuda_device_name():
+    try:
+        import torch
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return torch.cuda.get_device_name(0).lower()
+    except Exception:
+        return ''
+
 
 def _try_torch(name):
     try:
@@ -42,7 +62,7 @@ def _try_torch(name):
         return None
 
     if name == 'cuda':
-        if not torch.cuda.is_available():
+        if not _cuda_available():
             return None
         device = 'cuda'
     elif name == 'mps':
@@ -51,9 +71,9 @@ def _try_torch(name):
             return None
         device = 'mps'
     elif name == 'rocm':
-        if not torch.cuda.is_available():
+        if not _cuda_available():
             return None
-        name_str = torch.cuda.get_device_name(0).lower()
+        name_str = _cuda_device_name()
         if not any(k in name_str for k in ('amd', 'radeon', 'vega', 'navi', 'gfx')):
             return None
         device = 'cuda'
