@@ -6,10 +6,10 @@ from ..PTU import reader as ptufile
 
 def make_intensity_image(ptu_path, rotate_90_cw=True, save_image=False):
     ptu = ptufile.PTUFile(ptu_path, verbose=False)
-    stack = ptu.raw_pixel_stack(channel=ptu.photon_channel)  # (Y, X, H)
-    intensity = stack.sum(axis=-1)  # sum over histogram bins → (Y, X)
+    stack = ptu.raw_pixel_stack(channel=ptu.photon_channel)
+    intensity = stack.sum(axis=-1)
     if rotate_90_cw:
-        intensity = np.rot90(intensity, k=-1)  # 90° clockwise
+        intensity = np.rot90(intensity, k=-1)
         print('  Rotated 90° clockwise.')
     if save_image:
         out_path = Path(ptu_path).stem + '_intensity.png'
@@ -84,7 +84,7 @@ def apply_intensity_threshold(intensity_image, threshold):
 
 def pick_intensity_threshold(intensity_image, initial=None):
     import matplotlib
-    matplotlib.use('TkAgg')          # need an interactive backend
+    matplotlib.use('TkAgg')
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider, Button
 
@@ -151,7 +151,7 @@ def pick_intensity_threshold(intensity_image, initial=None):
         if event.key in ('enter', 'return'):
             plt.close(fig)
     fig.canvas.mpl_connect('key_press_event', _on_key)
-    plt.show()   # blocks until window is closed
+    plt.show()
     chosen = state['threshold']
     print(f"  Intensity threshold selected: {chosen} photons")
     return chosen

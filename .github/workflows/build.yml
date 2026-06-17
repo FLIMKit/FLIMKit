@@ -62,11 +62,20 @@ jobs:
           python -c "import sys; print('Python:', sys.version)"
           python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 'Python >= 3.12 required for phasorpy==0.9')"
 
-      - name: Install dependencies
+      - name: Install dependencies (non-Windows)
+        if: runner.os != 'Windows'
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Install dependencies (Windows — CUDA torch)
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install torch --index-url https://download.pytorch.org/whl/cu126
           pip install -r requirements.txt
 
       # tkinter is not bundled with the GitHub Actions Python on Ubuntu or macOS

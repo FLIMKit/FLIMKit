@@ -55,7 +55,7 @@ def calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy: str,
     else:
         tcspc_res_ns = None
 
-    signal_time_ns = signal.coords['H'].values        # (n_bins,) in ns
+    signal_time_ns = signal.coords['H'].values
     n_irf = len(irf_arr)
 
     if tcspc_res_ns is not None:

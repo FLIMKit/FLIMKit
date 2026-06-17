@@ -14,6 +14,7 @@ def make_lifetime_image(
     gamma=0.4,
     dpi=200,
     verbose=True,
+    tau_key='tau_mean_amp',
 ):
     import matplotlib
     import matplotlib.pyplot as plt
@@ -26,7 +27,7 @@ def make_lifetime_image(
     try:
         matplotlib.use('Agg', force=True)
     except Exception:
-        pass  # If backend switching fails, continue anyway
+        pass
 
     try:
         import tifffile as _tifffile
@@ -39,8 +40,9 @@ def make_lifetime_image(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    tau_map = np.asarray(canvas['tau_mean_amp'], dtype=float)
+    tau_map = np.asarray(canvas[tau_key], dtype=float)
     int_map = np.asarray(canvas['intensity'],    dtype=float)
+    _tau_label = {'tau_mean_amp': 'τ_amp', 'tau_mean_int': 'τ_int'}.get(tau_key, 'τ')
     valid   = np.isfinite(tau_map) & (int_map > 0)
 
     if smooth_sigma_px > 0:
@@ -118,7 +120,7 @@ def make_lifetime_image(
         gridspec_kw={'width_ratios': [1, 0.03]})
     ax.imshow(rgb, interpolation='nearest', aspect='equal')
     ax.set_title(
-        f"{roi_name}  τ_amp {tau_min_ns}-{tau_max_ns} ns  "
+        f"{roi_name}  {_tau_label} {tau_min_ns}-{tau_max_ns} ns  "
         f"σ={smooth_sigma_px} px  γ={gamma}",
         fontsize=10, color='black')
     ax.axis('off')
@@ -130,7 +132,7 @@ def make_lifetime_image(
         norm=mcolors.Normalize(tau_min_ns, tau_max_ns))
     sm.set_array([])
     cb = fig.colorbar(sm, cax=cax)
-    cb.set_label('τ_amp (ns)', fontsize=10, color='black')
+    cb.set_label(f'{_tau_label} (ns)', fontsize=10, color='black')
     plt.setp(cb.ax.yaxis.get_ticklabels(), color='black')
     plt.tight_layout(pad=0.3)
 

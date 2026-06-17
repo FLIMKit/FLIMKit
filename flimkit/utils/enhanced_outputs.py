@@ -141,7 +141,7 @@ def save_weighted_tau_images(
     # Save intensity image - scaled to full uint16 range like stitch-only
     if save_intensity:
         intensity_out = intensity.copy().astype(np.float64)
-        # Apply intensity display range (clip to boundaries, LAS X style)
+        # Apply intensity display range (clip to boundaries, FLIM microscope style)
         if intensity_display_min is not None:
             intensity_out = np.where(
                 intensity_out > 0,
@@ -187,7 +187,7 @@ def save_weighted_tau_images(
         tau_intensity_weighted[mask] /= intensity[mask]
         tau_intensity_weighted[~mask] = 0
         
-        # Apply lifetime display range (clip to boundaries, LAS X style)
+        # Apply lifetime display range (clip to boundaries, FLIM microscope style)
         if tau_display_min is not None or tau_display_max is not None:
             lo = tau_display_min if tau_display_min is not None else tau_intensity_weighted[mask].min() if mask.any() else 0
             hi = tau_display_max if tau_display_max is not None else tau_intensity_weighted[mask].max() if mask.any() else 0
@@ -228,7 +228,7 @@ def save_weighted_tau_images(
         tau_amplitude_weighted[mask] /= total_amplitude[mask]
         tau_amplitude_weighted[~mask] = 0
         
-        # Apply lifetime display range (clip to boundaries, LAS X style)
+        # Apply lifetime display range (clip to boundaries, FLIM microscope style)
         if tau_display_min is not None or tau_display_max is not None:
             lo = tau_display_min if tau_display_min is not None else tau_amplitude_weighted[mask].min() if mask.any() else 0
             hi = tau_display_max if tau_display_max is not None else tau_amplitude_weighted[mask].max() if mask.any() else 0

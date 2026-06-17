@@ -5,12 +5,12 @@ import numpy as np
 
 # Default color palette (6 colors, same as phasor panel)
 _COLORS = [
-    '#FF6B6B',  # red
-    '#4ECDC4',  # teal
-    '#FFE66D',  # yellow
-    '#95E1D3',  # mint
-    '#C7CEEA',  # lavender
-    '#FF8C42',  # orange
+    '#FF6B6B',
+    '#4ECDC4',
+    '#FFE66D',
+    '#95E1D3',
+    '#C7CEEA',
+    '#FF8C42',
 ]
 
 
@@ -358,12 +358,12 @@ def _ask_roi_fit_options(params: dict):
     import tkinter as tk
     from tkinter import ttk
 
-    result = {}  # filled on OK
+    result = {}
 
     dlg = tk.Toplevel()
     dlg.title('ROI Fit Options')
     dlg.resizable(False, False)
-    dlg.grab_set()           # modal
+    dlg.grab_set()
 
     pad = dict(padx=8, pady=4)
 
@@ -446,7 +446,7 @@ def _ask_roi_fit_options(params: dict):
     if not result.get('ok'):
         return None
 
-    merged = dict(params)          # shallow copy - preserve all other keys
+    merged = dict(params)
     merged['n_exp']         = result['n_exp']
     merged['tau_min']       = result['tau_min']
     merged['tau_max']       = result['tau_max']
@@ -473,7 +473,7 @@ class RoiAnalysisPanel:
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(2, weight=1)
         
-        self.fov_preview = fov_preview  # Set by caller
+        self.fov_preview = fov_preview
         self._current_mode = tk.StringVar(value='select')
         self._region_counter = 0
         # Maps tuple(sorted(region_ids)) → last fit result dict for that selection
@@ -625,7 +625,7 @@ class RoiAnalysisPanel:
             return
         
         item = selected[0]
-        region_id = int(item)  # Item ID is the region_id
+        region_id = int(item)
         
         if self.fov_preview:
             self.fov_preview._roi_manager.remove_region(region_id)
@@ -644,8 +644,8 @@ class RoiAnalysisPanel:
             return
         
         item = selected[0]
-        region_id = int(item)  # Item ID is the region_id
-        old_name = self._tree.item(item, 'values')[0]  # First value is now name
+        region_id = int(item)
+        old_name = self._tree.item(item, 'values')[0]
         
         new_name = simpledialog.askstring('Rename Region', 
                                          f"Enter new name for region:",
@@ -996,7 +996,7 @@ class RoiAnalysisPanel:
                     geom = feature.get('geometry', {})
                     
                     name = props.get('name', 'imported-region')
-                    tool_type = props.get('tool_type', 'freehand')  # Default to freehand
+                    tool_type = props.get('tool_type', 'freehand')
                     geom_type = geom.get('type', '')
                     coords_raw = geom.get('coordinates', [])
                     
@@ -1015,7 +1015,7 @@ class RoiAnalysisPanel:
                     elif geom_type == 'Polygon':
                         # For polygons, use first ring (outer boundary)
                         if coords_raw and len(coords_raw[0]) > 0:
-                            coords = coords_raw[0][:-1]  # Remove closing duplicate
+                            coords = coords_raw[0][:-1]
                     elif geom_type == 'MultiPoint':
                         coords = coords_raw
                     else:
@@ -1123,7 +1123,7 @@ class RoiAnalysisPanel:
                                     photon_count_val = int(intensity_in_region.sum())
                                     photon_stdev_val = float(np.std(intensity_in_region))
                                 else:
-                                    photon_count_val = int(valid.size)  # pixel count as fallback
+                                    photon_count_val = int(valid.size)
                                     photon_stdev_val = float(np.sqrt(photon_count_val))
 
                                 tau_mean = f"{tau_mean_val:.2f}"
@@ -1202,7 +1202,7 @@ class RoiAnalysisPanel:
                                        'Try refreshing the region list.')
                 return
 
-            region_id   = regions[0]['id']   # primary id for writeback
+            region_id   = regions[0]['id']
             region_name = (regions[0]['name'] if len(regions) == 1
                            else f"{len(regions)} regions (merged)")
 
@@ -1237,7 +1237,7 @@ class RoiAnalysisPanel:
         # per-ROI fit options dialog
         params = _ask_roi_fit_options(params)
         if params is None:
-            return   # user cancelled
+            return
 
         def task(progress_callback=None, cancel_event=None):
             from flimkit.PTU.reader import PTUFile
@@ -1252,7 +1252,7 @@ class RoiAnalysisPanel:
                 progress_callback(1, 4)
 
             # Build pixel stack and union mask across all selected regions
-            stack = ptu.pixel_stack(channel=channel, binning=1)  # (H, W, n_bins)
+            stack = ptu.pixel_stack(channel=channel, binning=1)
             img_shape = (stack.shape[0], stack.shape[1])
             union_mask = np.zeros(img_shape, dtype=bool)
             for r in regions:
@@ -1274,7 +1274,7 @@ class RoiAnalysisPanel:
             if irf_prompt is None or len(irf_prompt) != n_bins:
                 from flimkit.FLIM.irf_tools import gaussian_irf
                 decay_peak = int(np.argmax(roi_decay))
-                fwhm_bins  = max(1.0, 0.2e-9 / tcspc_res)   # ~200 ps FWHM
+                fwhm_bins  = max(1.0, 0.2e-9 / tcspc_res)
                 irf_prompt = gaussian_irf(n_bins, decay_peak, fwhm_bins)
                 irf_source = 'gaussian (no IRF cached)'
             else:

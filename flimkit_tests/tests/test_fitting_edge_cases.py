@@ -28,7 +28,7 @@ class TestFitSummedEdgeCases:
 
     def test_tau_min_greater_than_tau_max(self, basic_irf):
         decay = generate_synthetic_decay(n_bins=256, tau_ns=2.0, noise=False)
-        with pytest.raises(ValueError):  # accept any ValueError
+        with pytest.raises(ValueError):
             fit_summed(decay, MOCK_TCSPC_RES, 256, basic_irf,
                     has_tail=False, fit_bg=True, fit_sigma=False,
                     n_exp=1, tau_min_ns=5.0, tau_max_ns=1.0,
@@ -39,8 +39,8 @@ class TestPerPixelFitting:
     def test_min_photons_threshold(self):
         n_bins = 128
         stack = np.zeros((2, 2, n_bins))
-        stack[0, 0, 30:80] = 10  # ~500 photons → fits
-        stack[0, 1, 30:32] = 1   # 2 photons → below min_photons=10
+        stack[0, 0, 30:80] = 10
+        stack[0, 1, 30:32] = 1
         irf = gaussian_irf_from_fwhm(n_bins, 97e-12, 0.3, 50)
         global_popt = np.array([2e-9, 500.0, 0.0, 5.0])
         maps = fit_per_pixel(stack, 97e-12, n_bins, irf,
@@ -68,7 +68,7 @@ class TestPerPixelFitting:
         # Build a tiny 2×1 stack with known bi-exponential decays
         d1 = generate_synthetic_decay(n_bins, tcspc, tau_ns=0.5, noise=False, peak_counts=2000)
         d2 = generate_synthetic_decay(n_bins, tcspc, tau_ns=3.0, noise=False, peak_counts=2000)
-        stack = np.stack([[d1], [d2]])  # (2,1,n_bins)
+        stack = np.stack([[d1], [d2]])
 
         # global_popt: [tau1, tau2, amp1, amp2, shift]  (no bg, no sigma, no tail)
         global_popt = np.array([0.5e-9, 3.0e-9, 1000.0, 500.0, 0.0])
@@ -100,8 +100,8 @@ class TestPerPixelFitting:
         tcspc = 97e-12
         irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, 30)
         stack = np.zeros((2, 1, n_bins))
-        stack[0, 0, 30:80] = 50   # enough photons
-        stack[1, 0, :] = 0        # zero photons → skip
+        stack[0, 0, 30:80] = 50
+        stack[1, 0, :] = 0
 
         global_popt = np.array([0.5e-9, 3.0e-9, 500.0, 200.0, 0.0])
         maps = fit_per_pixel(
@@ -120,9 +120,9 @@ class TestPerPixelFitting:
         tcspc = 97e-12
         irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, MOCK_IRF_CENTER)
         d = generate_synthetic_decay(n_bins, tcspc, tau_ns=2.0, noise=False, peak_counts=1000)
-        stack = d[np.newaxis, np.newaxis, :]  # (1,1,n_bins)
+        stack = d[np.newaxis, np.newaxis, :]
 
-        global_popt = np.array([2e-9, 1000.0, 0.0, 5.0])  # shift=0, bg=5
+        global_popt = np.array([2e-9, 1000.0, 0.0, 5.0])
         maps = fit_per_pixel(
             stack, tcspc, n_bins, irf,
             has_tail=False, fit_bg=True, fit_sigma=False,

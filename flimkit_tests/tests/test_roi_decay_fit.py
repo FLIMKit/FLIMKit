@@ -236,7 +236,7 @@ class TestIRFFallback:
         mask = mgr.compute_region_mask(rid, (ptu.n_y, ptu.n_x))
         decay = _roi_decay_from_stack(stack, mask)
 
-        bad_irf = np.ones(ptu.n_bins // 2)   # wrong length
+        bad_irf = np.ones(ptu.n_bins // 2)
 
         # Reproduce the conditional from _fit_roi_decay
         if bad_irf is None or len(bad_irf) != ptu.n_bins:

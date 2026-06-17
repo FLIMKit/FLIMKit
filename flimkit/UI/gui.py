@@ -136,7 +136,7 @@ class _UIBuilder:
         self.root.update_idletasks()
         sw = max(1, int(self.root.winfo_screenwidth()))
         sh = max(1, int(self.root.winfo_screenheight()))
-        max_w = max(1200, sw - 40)  # Larger to accommodate preview panel
+        max_w = max(1200, sw - 40)
         max_h = max(700, sh - 40)
         req_w = int(self.root.winfo_reqwidth())
         req_h = int(self.root.winfo_reqheight())
@@ -657,7 +657,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _find_scroll_canvas(self, widget):
         w = widget
-        for _ in range(30):          # max depth
+        for _ in range(30):
             try:
                 if hasattr(w, '_canvas'):
                     return w._canvas
@@ -906,7 +906,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._build_machine_irf_tab()
 
         preview_frame = ttk.LabelFrame(self._main_paned, text='  FOV Preview  ', padding=4)
-        self._main_paned.add(preview_frame, weight=2)  # 40% of total
+        self._main_paned.add(preview_frame, weight=2)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
 
@@ -936,7 +936,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self.root.after_idle(self._fit_window_to_screen)
         self.root.after_idle(self._set_pane_positions)
         self._setup_global_scroll()
-        self.root.after(500, self._setup_global_dnd)  # deferred so all widgets exist before tree walk
+        self.root.after(500, self._setup_global_dnd)
         self.root.protocol('WM_DELETE_WINDOW', self._on_close)
         self._set_window_icon()
 
@@ -1383,7 +1383,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                                     linewidth=1.5, markersize=3, label='Measured', alpha=0.7)
                                     irf = session_data.get('irf_prompt')
                                     if irf is not None and isinstance(irf, np.ndarray) and irf.max() > 0:
-                                        self._fov_preview._irf_prompt = irf  # Cache for per-ROI fitting
+                                        self._fov_preview._irf_prompt = irf
                                         irf_scaled = (irf / irf.max()) * decay.max() * 0.2
                                         ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                                         color='orange', linewidth=2.0, label='IRF', alpha=0.8)
@@ -2190,7 +2190,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         from matplotlib.patches import FancyBboxPatch
 
         fov_um = img_w_px * pixel_size_um
-        target = fov_um * 0.20  # aim for ~20% of width
+        target = fov_um * 0.20
 
         nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
         bar_um = nice[0]
@@ -2201,7 +2201,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 break
 
         bar_px = bar_um / pixel_size_um
-        bar_h  = max(3, img_h_px * 0.015)  # bar thickness ≈ 1.5 % of height
+        bar_h  = max(3, img_h_px * 0.015)
 
         margin_x = img_w_px * 0.03
         margin_y = img_h_px * 0.03
@@ -2211,7 +2211,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         label = f"{bar_um} µm"
         fontsize = max(7, min(14, img_h_px * 0.035))
         pad_x = bar_px * 0.08
-        pad_y = fontsize * 1.8  # room for text above bar
+        pad_y = fontsize * 1.8
         bg = FancyBboxPatch(
             (x0 - pad_x, y0 - pad_y),
             bar_px + 2 * pad_x,
@@ -2351,7 +2351,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._btn_st.configure(text='▶  Run Stitch + Fit')
             self._btn_expert_st.pack(side='left', padx=4, before=self._btn_st)
             self._update_expert_banners()
-        else:  # tile_fit
+        else:
             self._fit_frame.grid()
             self._tile_extras_frame.grid()
             self._btn_st.configure(text='▶  Run Per-Tile Fit')
@@ -2477,6 +2477,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         thr     = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup  = self.bv_batch_correct_pileup.get()
         save_stack      = self.bv_batch_save_stack.get()
+        save_lifetime   = self.bv_batch_save_lifetime.get()
+        save_rgb        = self.bv_batch_save_rgb.get()
+        save_intensity  = self.bv_batch_save_intensity.get()
+        save_npy        = self.bv_batch_save_npy.get()
+        save_ind        = self.bv_batch_save_ind.get()
+        tau_lo          = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN']
+        tau_hi          = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX']
+        gamma           = float(self.sv_batch_gamma.get() or 0.4)
+        int_max         = _flt(self.sv_batch_int_max) or None
         pool_positions  = self.bv_tl_pool_positions.get()
         compute_bound_fraction = self.bv_tl_bound_fraction.get()
         expert_overrides = dict(self._expert_overrides)
@@ -2531,6 +2540,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 correct_pileup=correct_pileup,
                 cost_function='poisson',
                 save_stack=save_stack,
+                save_lifetime=save_lifetime,
+                save_rgb=save_rgb,
+                save_intensity=save_intensity,
+                save_npy=save_npy,
+                save_ind=save_ind,
+                tau_display_min=tau_lo,
+                tau_display_max=tau_hi,
+                gamma=gamma,
+                intensity_display_max=int_max,
                 no_plots=False,
                 intensity_threshold=thr,
             )
@@ -3162,7 +3180,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 from flimkit.interactive import _run_stitch_and_fit
                 return _run_stitch_and_fit(a, progress_callback=progress_callback,
                                            cancel_event=cancel_event)
-            else:  # tile_fit
+            else:
                 from flimkit.interactive import _run_tile_fit
                 return _run_tile_fit(a, progress_callback=progress_callback,
                                      cancel_event=cancel_event)

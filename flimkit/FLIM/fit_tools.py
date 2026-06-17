@@ -7,8 +7,8 @@ def coates_pileup_correction(decay: np.ndarray, n_sync: int) -> np.ndarray:
     m = np.asarray(decay, dtype=float)
     n_s = float(n_sync)
 
-    cumulative = np.concatenate([[0.0], np.cumsum(m[:-1])])  # C(t), length = len(m)
-    denom = n_s - cumulative                                  # N_s - C(t)
+    cumulative = np.concatenate([[0.0], np.cumsum(m[:-1])])
+    denom = n_s - cumulative
 
     # Argument of log: 1 - M(t)/(N_s - C(t))
     # Use np.errstate to suppress divide-by-zero/invalid warnings from np.where
@@ -74,7 +74,7 @@ def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins) -> int:
 def _build_bounds(n_exp, tau_min, tau_max, decay_peak,
                   has_tail, fit_bg, fit_sigma, bg_init=0.0, bg_upper=None,
                   sigma_max=3.0, irf_shift_bins=5):
-    lo = [tau_min] * n_exp + [0.0] * n_exp + [-float(irf_shift_bins)]   # τ, α, shift
+    lo = [tau_min] * n_exp + [0.0] * n_exp + [-float(irf_shift_bins)]
     hi = [tau_max] * n_exp + [10 * decay_peak] * n_exp + [float(irf_shift_bins)]
 
     if fit_sigma:
@@ -139,7 +139,7 @@ def _pack_p0(n_exp, tau_min, tau_max, decay_peak,
         taus0 = np.logspace(np.log10(tmin), np.log10(tmax), n_exp)
 
     amps0 = np.full(n_exp, decay_peak / n_exp)
-    base  = np.concatenate([taus0, amps0, [0.0]])   # τ, α, shift
+    base  = np.concatenate([taus0, amps0, [0.0]])
 
     if fit_sigma:
         base = np.concatenate([base, [0.3]])

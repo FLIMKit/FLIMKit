@@ -19,9 +19,9 @@ N_BINS = 128
 TCSPC_RES = MOCK_TCSPC_RES
 MIN_PHOTONS = 50
 
-AMP_TOL   = 0.08   # 8 % relative mean absolute error on amplitudes
-TAU_TOL   = 0.08   # 8 % relative mean absolute error on lifetimes
-TAU1_TOL  = 0.12   # 12 % for tau_mean_amp / tau_mean_int (more noise-sensitive)
+AMP_TOL   = 0.08
+TAU_TOL   = 0.08
+TAU1_TOL  = 0.12
 
 
 def _make_irf(n_bins=N_BINS, center=MOCK_IRF_CENTER, fwhm=MOCK_IRF_FWHM_BINS):
@@ -365,8 +365,8 @@ class TestCPUGPUParityDivergenceReport:
 # Free-τ GPU parity tests
 # Adam (GPU) vs LM/TRF (CPU): same forward model, different optimiser.
 # We expect agreement within looser tolerances than fixed-tau.
-FREE_TAU_TOL     = 0.08   # 8 % relative error on individual τ values
-FREE_TAU_CHI2_MULT = 3.0  # GPU χ²_r must be ≤ CPU χ²_r × this factor
+FREE_TAU_TOL     = 0.08
+FREE_TAU_CHI2_MULT = 3.0
 
 
 def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):

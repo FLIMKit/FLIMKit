@@ -113,7 +113,7 @@ def stitch_flim_tiles(
     # is closest - no blending of overlapping tiles, so overlaps stay sharp.
     _owner     = np.full((canvas_height, canvas_width), -1,     dtype=np.int32)
     _min_dist2 = np.full((canvas_height, canvas_width), np.inf, dtype=np.float64)
-    _hists     = []   # (ti, y0, x0, hist) deferred until ownership is known
+    _hists     = []
 
     if verbose:
         print(f"Stitching {len(tile_positions)} tiles...")
@@ -121,7 +121,7 @@ def stitch_flim_tiles(
 
     tiles_processed = tiles_skipped = 0
     total_tiles = len(tile_positions)
-    tile_results = []  # For registration: [{pixel_maps: {intensity}, pixel_y, pixel_x, tile_h, tile_w}, ...]
+    tile_results = []
 
     for i, t in enumerate(tqdm(tile_positions, desc='  Loading tiles', disable=True)):
         if cancel_event is not None and cancel_event.is_set():
@@ -751,9 +751,9 @@ def fit_flim_tiles(
     workers     = getattr(args, 'workers',       n_workers)
     binning     = getattr(args, 'binning',       binning_factor)
     min_photons       = getattr(args, 'min_photons',         MIN_PHOTONS_PERPIX)
-    intensity_thr     = getattr(args, 'intensity_threshold', None)  # photons/px; None = no background masking
-    register_tiles    = getattr(args, 'register_tiles',      True)   # phase-corr Y registration
-    reg_max_shift_px  = getattr(args, 'reg_max_shift_px',    120)    # max search range (px)
+    intensity_thr     = getattr(args, 'intensity_threshold', None)
+    register_tiles    = getattr(args, 'register_tiles',      True)
+    reg_max_shift_px  = getattr(args, 'reg_max_shift_px',    120)
     fit_bg      = MACHINE_IRF_FIT_BG
     fit_sigma   = MACHINE_IRF_FIT_SIGMA
     has_tail    = MACHINE_IRF_FIT_TAIL
@@ -823,7 +823,7 @@ def fit_flim_tiles(
         # glass/empty regions don't bias the consensus τ from fit_summed.
         if intensity_thr is not None:
             stack_p1 = ptu.raw_pixel_stack(channel=ptu.photon_channel)
-            px_int   = stack_p1.sum(axis=-1)            # (Y, X) photon count
+            px_int   = stack_p1.sum(axis=-1)
             mask_p1  = px_int >= intensity_thr
             stack_p1[~mask_p1] = 0
             decay = stack_p1.sum(axis=(0, 1))
@@ -917,7 +917,7 @@ def fit_flim_tiles(
 
         try:
             ptu = PTUFile(str(ptu_path), verbose=False)
-            ptu.summed_decay()                               # sets photon_channel
+            ptu.summed_decay()
             stack = ptu.raw_pixel_stack(
                 channel=ptu.photon_channel, binning=binning)
             if rotate_tiles:

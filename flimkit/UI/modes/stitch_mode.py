@@ -31,7 +31,7 @@ class StitchMode(BaseMode):
                   foreground='grey').grid(row=3, column=1, columnspan=2,
                                          sticky='w', padx=4)
         self.b.state.bv_rotate = tk.BooleanVar(value=True)
-        ttk.Checkbutton(ff, text='Rotate tiles 90° CW (recommended for Leica)',
+        ttk.Checkbutton(ff, text='Rotate tiles 90° CW (recommended for FLIM microscope)',
                         variable=self.b.bv_rotate).grid(
             row=4, column=0, columnspan=3, sticky='w', padx=4, pady=(4, 0))
 

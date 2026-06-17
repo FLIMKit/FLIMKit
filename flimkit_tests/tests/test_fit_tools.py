@@ -35,7 +35,7 @@ class TestFindIrfPeakBin:
         """Flat array has no rising edge - peak should be 0."""
         decay = np.ones(128) * 100
         peak = find_irf_peak_bin(decay)
-        assert peak == 0 or peak < 64  # Somewhere in first half
+        assert peak == 0 or peak < 64
 
     def test_noisy_decay(self):
         """Should still find a reasonable peak with Poisson noise."""
@@ -58,7 +58,7 @@ class TestEstimateBg:
     def test_zero_bg(self):
         """Decay with no pre-IRF counts should give bg ≈ 0."""
         decay = np.zeros(256)
-        decay[30:100] = np.arange(70, 0, -1)  # Peak at bin 30
+        decay[30:100] = np.arange(70, 0, -1)
         bg = estimate_bg(decay, peak_bin=30)
         assert bg == 0.0
 
@@ -87,7 +87,7 @@ class TestEstimateBgFromHistogram:
     def test_3d_stack(self):
         """Average over (Y, X) and first pre_bins bins."""
         stack = np.ones((4, 4, 128)) * 3.0
-        stack[..., 30:] += 50  # Actual signal after bin 30
+        stack[..., 30:] += 50
         bg = estimate_bg_from_histogram(stack, pre_bins=20)
         assert abs(bg - 3.0) < 0.1
 
@@ -145,8 +145,8 @@ class TestBuildBounds:
         # τ, α, shift = 3 parameters
         assert len(lo) == 3
         assert len(hi) == 3
-        assert lo[0] == 0.1 and hi[0] == 10.0  # tau bounds
-        assert lo[2] == -5.0 and hi[2] == 5.0  # shift bounds
+        assert lo[0] == 0.1 and hi[0] == 10.0
+        assert lo[2] == -5.0 and hi[2] == 5.0
 
     def test_two_exp_with_all_flags(self):
         lo, hi = _build_bounds(n_exp=2, tau_min=0.05, tau_max=15.0,

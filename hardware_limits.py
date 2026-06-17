@@ -20,8 +20,8 @@ PEAK_COUNTS      = 3_000
 TAU1_TRUE        = MOCK_TAU1_NS
 TAU2_TRUE        = MOCK_TAU2_NS
 MIN_PHOTONS      = 50
-TIME_BUDGET_S    = 60.0    # stop fixed-tau ramp if a single run exceeds this
-FREE_TAU_SAMPLE  = 128     # canvas size used to measure free-tau throughput
+TIME_BUDGET_S    = 60.0
+FREE_TAU_SAMPLE  = 128
 
 # Canvas sizes to step through (square tiles)
 SIZES = [64, 128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096]
@@ -65,12 +65,12 @@ def _make_stack(ny, nx):
     pixel = generate_synthetic_biexp_decay(
         N_BINS, TCSPC, tau1_ns=TAU1_TRUE, tau2_ns=TAU2_TRUE,
         a1=MOCK_AMP1, a2=MOCK_AMP2, bg=5.0,
-        peak_counts=PEAK_COUNTS, noise=False,   # no noise: consistent benchmark
+        peak_counts=PEAK_COUNTS, noise=False,
     ).astype(np.float32)
     return np.broadcast_to(pixel, (ny, nx, N_BINS)).copy()
 
 def _stack_ram_mb(ny, nx):
-    return ny * nx * N_BINS * 4 / 1e6   # float32 bytes → MB
+    return ny * nx * N_BINS * 4 / 1e6
 
 print(f"{'FIXED-τ GPU ramp':^65}")
 print(f"{'Size':>12}  {'Pixels':>10}  {'Stack MB':>9}  "
@@ -83,7 +83,7 @@ prev_pxs = None
 for sz in SIZES:
     ram_mb = _stack_ram_mb(sz, sz)
     available_mb = psutil.virtual_memory().available / 1e6
-    if ram_mb > available_mb * 0.7:   # leave 30% headroom
+    if ram_mb > available_mb * 0.7:
         print(f"  {sz:>4}×{sz:<4}  {sz*sz:>10,}  {ram_mb:>8.0f}M  "
               f"{'':>9}  {'':>10}  SKIP — would exceed available RAM")
         break

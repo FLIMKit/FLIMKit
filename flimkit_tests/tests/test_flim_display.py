@@ -21,7 +21,7 @@ class TestComputeIntensityWeightedLifetime:
         pixel_maps = {'tau_mean_amp': tau_map}
         intensity = np.ones((2, 2))
         result = compute_intensity_weighted_lifetime(pixel_maps, intensity)
-        assert np.isnan(result[0, 1])  # 0.0 → NaN
+        assert np.isnan(result[0, 1])
         assert result[0, 0] == pytest.approx(1.5)
 
     def test_component_weighted_average(self):

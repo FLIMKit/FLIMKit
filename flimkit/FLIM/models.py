@@ -59,7 +59,7 @@ class _DECostPoisson:
         self.fit_sigma  = fit_sigma
         self.fit_start  = fit_start
         self.fit_end    = fit_end
-        self.decay      = decay          # raw counts (not normalised)
+        self.decay      = decay
 
     def __call__(self, params):
         model = reconvolution_model(

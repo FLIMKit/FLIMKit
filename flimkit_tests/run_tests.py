@@ -54,9 +54,9 @@ def run_tests(
     
     # Add useful options
     cmd.extend([
-        "--tb=short",           # Short traceback format
-        "--strict-markers",     # Strict marker checking
-        "-ra",                  # Show summary of all test outcomes
+        "--tb=short",
+        "--strict-markers",
+        "-ra",
     ])
     
     print(f"Running: {' '.join(cmd)}")
@@ -64,7 +64,7 @@ def run_tests(
     
     # 👇 Ensure Python can find flimkit by setting PYTHONPATH
     env = os.environ.copy()
-    project_root = str(Path(__file__).parent.parent)  # goes up one level from flim_tests/
+    project_root = str(Path(__file__).parent.parent)
     env['PYTHONPATH'] = project_root + os.pathsep + env.get('PYTHONPATH', '')
     
     # Run tests
@@ -188,7 +188,7 @@ def main():
         exit_code = run_unit_tests(verbose=args.verbose)
     elif args.suite == "integration":
         exit_code = run_integration_tests(verbose=args.verbose)
-    else:  # all
+    else:
         exit_code = run_all_tests(
             verbose=args.verbose,
             coverage=args.coverage

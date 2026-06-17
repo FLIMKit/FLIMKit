@@ -411,7 +411,7 @@ def phasor_cursor_tool(
             state['fig'].savefig(path, dpi=300, bbox_inches='tight')
             print(f"Figure exported → {path}")
 
-    _peak_artists: list = []          # track markers for toggle/clear
+    _peak_artists: list = []
 
     def _on_peaks(_ignored=None):
         from .peaks import find_phasor_peaks, print_peaks, _annotate_peaks

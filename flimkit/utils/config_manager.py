@@ -14,7 +14,7 @@ _DEFAULTS = {
         'de_maxiter': 5000,
         'n_workers': -1,
         'cost_function': 'poisson',
-        'channels': '',
+        'channels': None,
         'min_photons': 10,
     },
     'preferences': {
@@ -31,8 +31,8 @@ _DEFAULTS = {
 class ConfigManager:
 
     def __init__(self):
-        self._global: dict = {}      # persisted to config.yaml
-        self._project: dict = {}     # transient, from project.json
+        self._global: dict = {}
+        self._project: dict = {}
         self._load()
 
 

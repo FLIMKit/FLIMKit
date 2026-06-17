@@ -15,8 +15,8 @@ def parse_xlif_tile_positions(xlif_path: Path, ptu_basename: str = 'R 2') -> Lis
     tile_positions = []
     for tile_elem in tile_scan_info.findall('Tile'):
         field_x = int(tile_elem.attrib.get('FieldX', 0))
-        pos_x = float(tile_elem.attrib.get('PosX', 0))   # meters (raw from XML)
-        pos_y = float(tile_elem.attrib.get('PosY', 0))   # meters (raw from XML)
+        pos_x = float(tile_elem.attrib.get('PosX', 0))
+        pos_y = float(tile_elem.attrib.get('PosY', 0))
         filename = f"{ptu_basename}_s{field_x + 1}.ptu"
         tile_positions.append({
             'file': filename,
@@ -36,7 +36,7 @@ def get_pixel_size_from_xlif(xlif_path: Path) -> Tuple[float, int]:
     if dim_desc is not None:
         n_pixels = int(dim_desc.attrib.get('NumberOfElements', 512))
         length_m = float(dim_desc.attrib.get('Length', 1.5377e-4))
-        pixel_size_m = length_m / n_pixels          # meters
+        pixel_size_m = length_m / n_pixels
         return pixel_size_m, n_pixels
     
     # Fallback defaults (meters)

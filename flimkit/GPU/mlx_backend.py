@@ -49,13 +49,13 @@ class MLXBackend(_BackendMixin):
                 dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
 
         A_mx      = mx.array(A.astype(np.float32))
-        A_pinv_mx = mx.linalg.pinv(A_mx)                   # (n_exp, n_bins)
-        dc_mx     = mx.array(dc_flat)                       # (N_pix, n_bins)
-        amps_raw  = dc_mx @ A_pinv_mx.T                     # (N_pix, n_exp)
-        amps_mx   = mx.maximum(amps_raw, 0.0)               # clamp negatives
-        mx.eval(amps_mx)                                    # force lazy eval
+        A_pinv_mx = mx.linalg.pinv(A_mx, stream=mx.cpu)
+        dc_mx     = mx.array(dc_flat)
+        amps_raw  = dc_mx @ A_pinv_mx.T
+        amps_mx   = mx.maximum(amps_raw, 0.0)
+        mx.eval(amps_mx)
 
-        amps_np = np.array(amps_mx)                         # zero-copy on Apple Silicon
+        amps_np = np.array(amps_mx)
 
         self._scatter_fixed_tau(
             maps,
@@ -107,18 +107,18 @@ class MLXBackend(_BackendMixin):
 
         dc_valid  = dc_flat[valid_idx]
 
-        basis_mx  = mx.array(basis_grid.astype(np.float32))   # (N_GRID, n_bins)
-        bb_mx     = mx.array(bb_grid.astype(np.float32))       # (N_GRID,)
-        dc_mx     = mx.array(dc_valid)                         # (N_valid, n_bins)
+        basis_mx  = mx.array(basis_grid.astype(np.float32))
+        bb_mx     = mx.array(bb_grid.astype(np.float32))
+        dc_mx     = mx.array(dc_valid)
 
-        bd_mx     = dc_mx @ basis_mx.T                         # (N_valid, N_GRID)
-        dc_sq_mx  = (dc_mx ** 2).sum(axis=1)                   # (N_valid,)
+        bd_mx     = dc_mx @ basis_mx.T
+        dc_sq_mx  = (dc_mx ** 2).sum(axis=1)
         # cost = ||d||^2 - max(d·b, 0)^2 / ||b||^2; argmin gives best τ per pixel
         costs_mx  = dc_sq_mx[:, None] - mx.maximum(bd_mx, 0.0) ** 2 / bb_mx[None, :]
         best_g_mx = costs_mx.argmin(axis=1)
-        mx.eval(best_g_mx, bd_mx)                              # force lazy eval
+        mx.eval(best_g_mx, bd_mx)
 
-        best_g    = np.array(best_g_mx)                        # (N_valid,)
+        best_g    = np.array(best_g_mx)
         bd_np     = np.array(bd_mx)
 
         tau_v     = tau_grid[best_g]
@@ -264,8 +264,8 @@ class MLXBackend(_BackendMixin):
             for idx in valid_idx:
                 dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
 
-        raw_valid = flat[valid_idx].astype(np.float32)         # (B, n_bins)
-        bg_valid  = bg_flat[valid_idx].astype(np.float32)      # (B,)
+        raw_valid = flat[valid_idx].astype(np.float32)
+        bg_valid  = bg_flat[valid_idx].astype(np.float32)
         B         = len(valid_idx)
 
         taus_out, amps_out, chi2r_out, _, valid_b = self._scipy_parallel_free_tau_fit(

@@ -109,7 +109,7 @@ def stitch_tiles_inquire():
     print(f"  Data will be saved in: {output_dir}")
     
     # Ask about rotation
-    rotate_q = yes_no_question('Apply 90° clockwise rotation to tiles? (Recommended for Leica data)')
+    rotate_q = yes_no_question('Apply 90° clockwise rotation to tiles? (Recommended for FLIM microscope data)')
     rotate_tiles = (rotate_q == 'y')
     
     # Build namespace
@@ -129,7 +129,7 @@ def stitch_and_fit_inquire():
     
     # First get stitching parameters
     print('\nStep 1: Tile Stitching Setup')
-    stitch_args = stitch_tiles_inquire()   # this already creates the ROI subdirectory
+    stitch_args = stitch_tiles_inquire()
     
     # Then get fitting parameters
     print('\nStep 2: FLIM Fitting Setup')
@@ -487,7 +487,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     
     print(f"\nBuilding IRF (method: {args.estimate_irf})...")
     
-    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL   # default; overridden by sigma variants
+    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     
     if args.irf is not None and Path(args.irf).exists():
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
@@ -497,7 +497,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_bg = True
 
     elif getattr(args, 'irf_xlsx', None) is not None:
-        print(f"  IRF: fitting Leica analytical model to: {args.irf_xlsx}")
+        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
             raise FileNotFoundError(f"IRF XLSX file not found: {args.irf_xlsx}")
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
@@ -701,7 +701,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_display_max=getattr(args, 'tau_display_max', None),
                 intensity_display_min=getattr(args, 'intensity_display_min', None),
                 intensity_display_max=getattr(args, 'intensity_display_max', None),
-                target_shape=(ny, nx),  # full stitched canvas size
+                target_shape=(ny, nx),
             )
         
         if getattr(args, 'save_individual', False):
@@ -930,15 +930,15 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f"\n[3] XLSX: {args.xlsx}")
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
-            print(f"    LAS X fit present, peak = {xlsx['fit_c'].max():.0f} cts")
+            print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
         elif xlsx['fit_t'] is not None:
-            print(f"    LAS X fit_t present but fit_c absent")
+            print(f"    FLIM microscope fit_t present but fit_c absent")
     else:
         print(f"\n[3] No XLSX provided or file not found")
 
     print(f"\n[4] Building IRF")
 
-    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL   # default; overridden by sigma variants
+    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
 
     if args.irf is not None:
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
@@ -948,7 +948,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         fit_bg     = True
 
     elif args.irf_xlsx is not None:
-        print(f"  IRF: fitting Leica analytical model to: {args.irf_xlsx}")
+        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
             raise FileNotFoundError(f"--irf-xlsx file not found: {args.irf_xlsx}")
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
@@ -1170,7 +1170,7 @@ def single_FOV_flim_fit(interactive=False):
         args = single_FOV_flim_fit_inquire()
     else:
         ap = argparse.ArgumentParser(
-            description='FLIM reconvolution fit, PTU + optional XLSX (Leica FALCON)'
+            description='FLIM reconvolution fit, PTU + optional XLSX (FLIM microscope)'
         )
         ap.add_argument('--ptu',   default=None, required=True)
         ap.add_argument('--xlsx',  default=None)
@@ -1368,7 +1368,7 @@ def tile_fit_inquire():
     args.output_dir   = stitch_args.output_dir
     args.ptu_basename = stitch_args.ptu_basename
     args.rotate_tiles    = stitch_args.rotate_tiles
-    args.register_tiles  = True    # phase-corr Y registration (recommended)
+    args.register_tiles  = True
     args.reg_max_shift_px = 120
 
     args.estimate_irf  = estimate_irf
@@ -1477,7 +1477,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     # Preserve fields from the consensus (pooled) fit before derive_global_tau
     # replaces global_summary.  'model' is needed by display_fit_results to draw
     # the fitted curve on the decay panel; the chi2 values go into the fit summary.
-    _consensus_summary = global_summary  # from fit_flim_tiles
+    _consensus_summary = global_summary
     global_summary = derive_global_tau(canvas, n_exp=args.nexp)
     for _key in ('model', 'reduced_chi2', 'reduced_chi2_tail',
                  'reduced_chi2_tail_pearson', 'reduced_chi2_pearson'):

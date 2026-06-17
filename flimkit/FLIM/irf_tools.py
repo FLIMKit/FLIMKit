@@ -222,7 +222,7 @@ def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
 
     t_pts = np.array(xlsx['irf_t'], dtype=float)
     c_pts = np.maximum(np.array(xlsx['irf_c'], dtype=float), 0.0)
-    mask  = c_pts > c_pts.max() * 1e-3   # only fit meaningful points
+    mask  = c_pts > c_pts.max() * 1e-3
     if mask.sum() < 3:
         raise ValueError('Fewer than 3 non-negligible IRF points in xlsx - '
                          'cannot fit analytical model.')
@@ -263,7 +263,7 @@ def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
     params = dict(t0_ns=t0, fwhm_ns=fwhm, tail_amp=tail_amp, tail_tau_ns=tail_tau)
 
     if verbose:
-        print(f"  Analytical IRF fit (Leica model):")
+        print(f"  Analytical IRF fit (FLIM microscope model):")
         print(f"    t0       = {t0:.4f} ns  (bin {t0/tcspc_ns:.2f})")
         print(f"    FWHM     = {fwhm*1000:.2f} ps")
         print(f"    tail_amp = {tail_amp:.4f}")
@@ -466,7 +466,7 @@ def _fwhm_ns(irf: np.ndarray, tcspc_res: float) -> float:
     # Sub-bin case: IRF is confined to 1 bin - estimate from integral/peak
     # For a Gaussian: FWHM = 2*sqrt(2*ln2)*sigma, integral/peak = sigma*sqrt(2pi)
     # So sigma ≈ integral/peak/sqrt(2pi), FWHM ≈ integral/peak * sqrt(4*ln2/pi) * tcspc_res
-    integral = irf.sum() * tcspc_res * 1e9   # in ns
+    integral = irf.sum() * tcspc_res * 1e9
     fwhm_est  = integral * np.sqrt(4 * np.log(2) / np.pi)
     return float(fwhm_est)
 
@@ -500,7 +500,7 @@ def compare_irfs(irf_estimated:  np.ndarray,
     # Peak position
     peak_est_bin = int(np.argmax(est))
     peak_ref_bin = int(np.argmax(ref))
-    shift_bins   = peak_est_bin - peak_ref_bin   # +ve: est is right of ref
+    shift_bins   = peak_est_bin - peak_ref_bin
 
     # Peak-aligned estimated IRF
     # shift_bins = est_peak - ref_peak.
@@ -584,7 +584,7 @@ def compare_irfs(irf_estimated:  np.ndarray,
                           'axes.titlecolor': 'black'})
 
     fig, axes = plt.subplots(2, 3, figsize=(15, 8))
-    fig.suptitle('IRF Comparison - Estimated vs LAS X xlsx',
+    fig.suptitle('IRF Comparison - Estimated vs FLIM microscope xlsx',
                  fontsize=11, fontweight='bold')
 
     # Restrict x to non-zero support ± 10 bins

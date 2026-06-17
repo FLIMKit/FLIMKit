@@ -32,14 +32,14 @@ def assemble_tile_maps(
         y1      = min(y0 + th, H)
         x1      = min(x0 + tw, W)
 
-        cy = y0 + th / 2.0   # tile centre row
-        cx = x0 + tw / 2.0   # tile centre col
+        cy = y0 + th / 2.0
+        cx = x0 + tw / 2.0
 
         rows = np.arange(y0, y1, dtype=np.float64)
         cols = np.arange(x0, x1, dtype=np.float64)
-        dy2  = (rows - cy) ** 2               # (dy,)
-        dx2  = (cols - cx) ** 2               # (dx,)
-        dist2 = dy2[:, np.newaxis] + dx2      # (dy, dx) broadcast
+        dy2  = (rows - cy) ** 2
+        dx2  = (cols - cx) ** 2
+        dist2 = dy2[:, np.newaxis] + dx2
 
         # Only take ownership where this tile is strictly closer
         region = min_dist2[y0:y1, x0:x1]
@@ -61,7 +61,7 @@ def assemble_tile_maps(
         x1 = min(x0 + tw, W)
         dy, dx = y1 - y0, x1 - x0
 
-        owned = (owner[y0:y1, x0:x1] == ti)   # (dy, dx) bool
+        owned = (owner[y0:y1, x0:x1] == ti)
 
         tile_int = np.asarray(
             pm.get('intensity', np.zeros((th, tw), dtype=np.float32)),
@@ -181,7 +181,7 @@ def save_assembled_maps(
     # 0     → tau_min (or 0 if auto)
     # 65535 → tau_max (or nanmax if auto)
     # 0     → unfitted pixels (NaN → 0 before cast)
-    # This matches the convention used by Leica LAS X FLIM exports.
+    # This matches the FLIM microscope export convention.
     tau_map = canvas['tau_mean_amp']
     finite  = np.isfinite(tau_map)
 
@@ -194,7 +194,7 @@ def save_assembled_maps(
     tau_u16 = np.where(
         finite,
         np.clip((tau_map - t_min) / (t_max - t_min) * 65535, 0, 65535),
-        0                            # unfitted → 0 (black), never NaN cast
+        0
     ).astype(np.uint16)
     tifffile.imwrite(str(output_dir / f"{roi_name}_tau_mean_amp.tif"), tau_u16)
     print(f"  tau_mean_amp display range: {t_min:.3f} - {t_max:.3f} ns  "

@@ -49,7 +49,7 @@ class TestSingleExpRecovery:
 
         n_bins = 256
         tcspc_res = MOCK_TCSPC_RES
-        irf_fwhm_ns = MOCK_IRF_FWHM_BINS * tcspc_res * 1e9  # ≈ 0.29 ns
+        irf_fwhm_ns = MOCK_IRF_FWHM_BINS * tcspc_res * 1e9
 
         decay = generate_synthetic_decay(
             n_bins=n_bins,
@@ -161,7 +161,7 @@ class TestBiExpRecovery:
         )
 
     def test_biexp_chi2_reasonable(self):
-        """Pearson reduced χ² (Leica convention: Σ(d-m)²/m) should be near 1."""
+        """Pearson reduced χ² (standard convention: Σ(d-m)²/m) should be near 1."""
         try:
             from flimkit.FLIM.fitters import fit_summed
         except ImportError:
@@ -182,17 +182,17 @@ class TestBiExpRecovery:
             optimizer="lm_multistart", n_restarts=2, workers=1,
         )
 
-        # Leica convention: Pearson χ² (weights = √model)
+        # Pearson χ² (weights = √model)
         rchi2_p = summary['reduced_chi2_pearson']
         assert 0.5 < rchi2_p < 3.0, (
-            f"Pearson reduced χ² (Leica) = {rchi2_p:.3f} - "
+            f"Pearson reduced χ² = {rchi2_p:.3f} - "
             f"expected 0.5-3.0 for correct model"
         )
 
         # Tail-only Pearson should be close to 1
         rchi2_tail = summary['reduced_chi2_tail_pearson']
         assert 0.3 < rchi2_tail < 3.0, (
-            f"Pearson tail χ² (Leica) = {rchi2_tail:.3f} - "
+            f"Pearson tail χ² = {rchi2_tail:.3f} - "
             f"expected 0.3-3.0 for correct model"
         )
 
@@ -265,10 +265,10 @@ class TestPhasorGroundTruth:
     def phasor_truth(self):
         """Generates phasor data for τ = 2.5 ns, freq = 40 MHz."""
         rng = np.random.default_rng(42)
-        shape = (128, 128)          # bigger → tighter histogram peak
+        shape = (128, 128)
         tau_ns = 2.5
-        frequency = 40.0            # MHz
-        omega = 2 * np.pi * frequency * 1e-3  # rad/ns
+        frequency = 40.0
+        omega = 2 * np.pi * frequency * 1e-3
         g = 1 / (1 + (omega * tau_ns) ** 2)
         s = omega * tau_ns / (1 + (omega * tau_ns) ** 2)
         return dict(

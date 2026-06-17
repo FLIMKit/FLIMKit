@@ -127,7 +127,7 @@ class TestGatedDecayExtraction:
         stack = ptu.pixel_stack(channel=1, binning=1)
         real, imag, mean = _fake_phasor(ptu.n_y, ptu.n_x)
         mask = _ellipse_mask(real, imag, 0.4, 0.35, radius=0.15)
-        mask &= (mean >= 1)   # validity gate
+        mask &= (mean >= 1)
         decay = stack[mask].sum(axis=0).astype(float)
         assert decay.shape == (ptu.n_bins,)
 
@@ -151,7 +151,7 @@ class TestGatedDecayExtraction:
         """When mask and stack spatial shapes differ a ValueError should be raised."""
         ptu = _make_ptu(n_y=32, n_x=32)
         stack = ptu.pixel_stack(channel=1, binning=1)
-        wrong_mask = np.ones((16, 16), dtype=bool)   # different shape
+        wrong_mask = np.ones((16, 16), dtype=bool)
         with pytest.raises((ValueError, IndexError)):
             _ = stack[wrong_mask].sum(axis=0)
 
@@ -243,7 +243,7 @@ class TestCursorFitIRFFallback:
         """An IRF with wrong length should not be used - a new one should be generated."""
         ptu   = _make_ptu()
         irf_ok   = _make_irf(ptu.n_bins)
-        irf_bad  = irf_ok[:ptu.n_bins // 2]   # wrong length
+        irf_bad  = irf_ok[:ptu.n_bins // 2]
         # The guard logic: if len(irf) != n_bins → regenerate
         assert len(irf_bad) != ptu.n_bins
         # After regeneration the new IRF should match

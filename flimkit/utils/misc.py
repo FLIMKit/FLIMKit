@@ -74,11 +74,11 @@ def print_summary(summary: dict, strategy: str, n_exp: int):
     print(f"  χ²_r = {s['reduced_chi2']:.4f}  "
           f"(χ²={s['chi2']:.1f}, DoF={s['dof']}{p_str})  [full window, Neyman]")
     print(f"  χ²_r = {s['reduced_chi2_pearson']:.4f}  "
-          f"[full window, Pearson/Leica]")
+          f"[full window, Pearson]")
     print(f"  χ²_r = {s['reduced_chi2_tail']:.4f}  "
           f"(tail only, t>{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Neyman]")
     print(f"  χ²_r = {s['reduced_chi2_tail_pearson']:.4f}  "
-          f"(tail only, t>{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Pearson/Leica]")
+          f"(tail only, t>{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Pearson]")
     if p_val is not None:
         flag = '' if 0.001 < p_val < 0.999 else ''
         print(f"  {flag} Optimizer: {s['optimizer_msg']}")

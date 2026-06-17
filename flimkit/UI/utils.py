@@ -124,12 +124,12 @@ class _Redirect:
     def __init__(self, widget: scrolledtext.ScrolledText, buf: list, root=None, is_stderr=False):
         self.widget = widget
         self.buf    = buf
-        self.root   = root  # For thread-safe GUI updates
+        self.root   = root
         self._is_stderr = is_stderr
-        self._batch = []  # Accumulate text before writing
-        self._batch_size = 5000  # characters, or time-based flush
+        self._batch = []
+        self._batch_size = 5000
         self._last_flush = time.time()
-        self._flush_interval = 0.5  # seconds
+        self._flush_interval = 0.5
 
     def write(self, text: str):
         if not text:
@@ -176,7 +176,7 @@ class _Redirect:
             self.widget.configure(state='disabled')
             self.widget.update_idletasks()
         except Exception:
-            pass  # Widget may have been destroyed
+            pass
         self._last_flush = time.time()
 
     def flush(self):
@@ -190,7 +190,7 @@ class _FileRedirect:
         self.buf = buf
         self._file = None
         try:
-            self._file = open(filepath, 'w', buffering=1)  # Line buffering
+            self._file = open(filepath, 'w', buffering=1)
         except Exception:
             pass
 

@@ -40,9 +40,9 @@ def filter_photons_with_mask(ptu_path, mask, channel=None, binning=1, verbose=Fa
     if mask.shape != (ny_out, nx_out):
         from scipy.ndimage import zoom
         zoom_factors = (ny_out / mask.shape[0], nx_out / mask.shape[1])
-        mask_resized = zoom(mask, zoom_factors, order=0) != 0   # True = keep
+        mask_resized = zoom(mask, zoom_factors, order=0) != 0
     else:
-        mask_resized = mask != 0   # True = keep
+        mask_resized = mask != 0
     
     stack = np.zeros((ny_out, nx_out, ptu.n_bins), dtype=np.uint32)
     
@@ -219,7 +219,7 @@ def signal_from_PTUFile(
         arr5d = PTUArray5D(ptu, binning=binning)
         # arr5d.array has shape (T, Y, X, C, H)  dtype uint32
         data = arr5d.array.copy()
-        _active_channels = arr5d.active_channels  # hardware IDs in array-index order
+        _active_channels = arr5d.active_channels
     else:
         # Point-mode: build (1, 1, 1, C, H) from summed decays per channel
         records = ptu._load_records()
@@ -230,14 +230,14 @@ def signal_from_PTUFile(
             hists.append(ptu.summed_decay(channel=int(c)))
         # stack to (C, H), then expand to (T=1, Y=1, X=1, C, H)
         data = np.stack(hists, axis=0)[np.newaxis, np.newaxis, np.newaxis, :, :]
-        _active_channels = active_chs  # hardware IDs in array-index order
+        _active_channels = active_chs
 
     #dtype 
     if dtype is None:
         dtype = np.uint16
     data = data.astype(dtype)
 
-    n_bins_full = data.shape[-1]  # H axis length before any trimming
+    n_bins_full = data.shape[-1]
 
     #dtime selection (H axis = -1) 
     if dtime is not None:

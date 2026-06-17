@@ -136,7 +136,7 @@ class TestFRETChannelData:
     def test_valid_mask_excludes_low_photons(self):
         g = np.ones((4, 4))
         mean = np.ones((4, 4))
-        mean[0, 0] = 0.0  # below default threshold
+        mean[0, 0] = 0.0
         d = FRETChannelData(real_cal=g, imag_cal=g.copy(), mean=mean, frequency=80.0)
         assert not d.valid_mask[0, 0]
         assert d.valid_mask[1, 1]
@@ -220,7 +220,7 @@ class TestFRETResult:
 
 class TestRequirePhasorpyFretApi:
     def test_passes_with_installed_phasorpy(self):
-        _require_phasorpy_fret_api()  # should not raise
+        _require_phasorpy_fret_api()
 
 
 class TestSingleLifetimePhasor:
@@ -344,7 +344,7 @@ class TestFitDonorFret:
 
     def test_low_photon_pixels_excluded(self):
         donor = generate_fret_donor_image(0.5, shape=(6, 6))
-        donor.mean[:] = 0.0  # all pixels below threshold
+        donor.mean[:] = 0.0
         params = FRETModelParameters(donor_lifetime=TAU_D)
         em = map_fret_efficiency(donor, params)
         # No valid pixels -> all NaN, no crash
@@ -380,7 +380,7 @@ class TestFitJointFret:
     def test_missing_acceptor_lifetime_raises(self):
         donor = generate_fret_donor_image(0.5)
         acceptor = generate_fret_acceptor_image(0.5)
-        params = FRETModelParameters(donor_lifetime=TAU_D)  # no acceptor_lifetime
+        params = FRETModelParameters(donor_lifetime=TAU_D)
         with pytest.raises(ValueError, match="acceptor_lifetime"):
             fit_joint_fret(donor, acceptor, params)
 
@@ -397,7 +397,7 @@ class TestFitJointFret:
             real_cal=np.ones((8, 8)),
             imag_cal=np.ones((8, 8)),
             mean=np.ones((8, 8)) * 100,
-            frequency=40.0,  # different
+            frequency=40.0,
         )
         params = FRETModelParameters(donor_lifetime=TAU_D, acceptor_lifetime=TAU_A)
         with pytest.raises(ValueError, match="frequency"):

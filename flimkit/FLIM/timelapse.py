@@ -11,11 +11,14 @@ from ..PTU.reader import PTUFile
 from ..FLIM.fitters import fit_summed, fit_per_pixel
 from ..FLIM.fit_tools import find_irf_peak_bin, estimate_bg
 from ..FLIM.irf_tools import gaussian_irf_from_fwhm, estimate_irf_from_decay_parametric
+from ..utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
+from ..utils.plotting import plot_summed
 from ..configs import (
     MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population, de_maxiter, n_workers,
     MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
     MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF,
     IRF_FWHM, IRF_BINS, IRF_FIT_WIDTH,
+    TAU_DISPLAY_MIN, TAU_DISPLAY_MAX,
 )
 
 _FILENAME_RE = re.compile(
@@ -165,6 +168,52 @@ def _save_timeseries_csv(time_series, path):
         vals = [str(t)] + [str(row.get(k, '')) for k in scalar_keys]
         lines.append(','.join(vals))
     Path(path).write_text('\n'.join(lines))
+
+def _resolve_tau_display_range(taus_ns, args):
+    tau_lo = getattr(args, 'tau_display_min', None)
+    tau_hi = getattr(args, 'tau_display_max', None)
+    if tau_lo is None:
+        tau_lo = TAU_DISPLAY_MIN
+    if tau_hi is None:
+        tau_hi = TAU_DISPLAY_MAX
+    if tau_lo is not None and tau_hi is not None:
+        return float(tau_lo), float(tau_hi)
+    taus_valid = [t for t in taus_ns if t == t]
+    if taus_valid:
+        pad = 0.25 * (max(taus_valid) - min(taus_valid) + 1e-9)
+        auto_lo = max(0.0, min(taus_valid) - pad)
+        auto_hi = max(taus_valid) + pad
+    else:
+        auto_lo = getattr(args, 'tau_min', 0.0)
+        auto_hi = getattr(args, 'tau_max', 5.0)
+    return (float(tau_lo) if tau_lo is not None else float(auto_lo),
+            float(tau_hi) if tau_hi is not None else float(auto_hi))
+
+def _save_tile_lifetime_txt(path, taus_ns, pixel_maps):
+    tau_map = pixel_maps.get('tau_mean_int')
+    valid   = (np.isfinite(tau_map) & (tau_map > 0)) if tau_map is not None else None
+    chi_map = pixel_maps.get('chi2_r')
+    chi_valid = (np.isfinite(chi_map) & (chi_map > 0)) if chi_map is not None else None
+    lines = ['Per-tile lifetime export']
+    for i, tau in enumerate(taus_ns):
+        lines.append(f'tau{i+1}_ns = {float(tau):.6f}')
+    if valid is not None and valid.any():
+        tau_vals = tau_map[valid]
+        lines.append(f'tau_mean_int_mean_ns = {float(np.mean(tau_vals)):.6f}')
+        lines.append(f'tau_mean_int_median_ns = {float(np.median(tau_vals)):.6f}')
+        lines.append(f'tau_mean_int_std_ns = {float(np.std(tau_vals)):.6f}')
+        n_pixels_fitted = int(valid.sum())
+    else:
+        lines.append('tau_mean_int_mean_ns = nan')
+        lines.append('tau_mean_int_median_ns = nan')
+        lines.append('tau_mean_int_std_ns = nan')
+        n_pixels_fitted = 0
+    lines.append(f'n_pixels_fitted = {n_pixels_fitted}')
+    if chi_valid is not None and chi_valid.any():
+        lines.append(f'chi2_r_mean = {float(np.mean(chi_map[chi_valid])):.6f}')
+    else:
+        lines.append('chi2_r_mean = nan')
+    Path(path).write_text('\n'.join(lines) + '\n')
 
 
 def _save_4d_stacks(frame_positions, group_dir, group_label):
@@ -357,6 +406,9 @@ def fit_timelapse(ptu_dir, output_dir, args,
             taus_ns = global_summary.get('taus_ns', global_popt[:args.nexp] * 1e9)
         for i, tau in enumerate(taus_ns):
             print(f'    τ{i+1} = {tau:.4f} ns  (locked for all frames)')
+        tau_disp_min, tau_disp_max = _resolve_tau_display_range(taus_ns, args)
+        print(f'    Lifetime display range (fixed for all timepoints): '
+              f'{tau_disp_min:.3f}-{tau_disp_max:.3f} ns')
         _save_json(group_dir / f'{group_label}_reference_fit.json', {
             'taus_ns': list(taus_ns),
             'nexp': args.nexp,
@@ -420,6 +472,76 @@ def fit_timelapse(ptu_dir, output_dir, args,
                                 pixel_maps[map_name].astype(np.float32))
                 for map_name, arr in redox.items():
                     np.save(str(pos_dir / f'{map_name}.npy'), arr)
+                roi_name = f'{group_label}_t{t:04d}_s{s}'
+                if getattr(args, 'save_lifetime', True):
+                    try:
+                        make_lifetime_image(
+                            canvas=pixel_maps, output_dir=pos_dir, roi_name=roi_name,
+                            tau_min_ns=tau_disp_min, tau_max_ns=tau_disp_max,
+                            intensity_percentile_hi=95, tau_key='tau_mean_int', verbose=False,
+                        )
+                    except Exception as exc:
+                        print(f'    Warning: lifetime image export failed for {roi_name}: {exc}')
+                    finally:
+                        plt.close('all')
+                    try:
+                        _save_tile_lifetime_txt(
+                            pos_dir / f'{roi_name}_lifetime.txt', taus_ns, pixel_maps)
+                    except Exception as exc:
+                        print(f'    Warning: lifetime .txt export failed for {roi_name}: {exc}')
+                    try:
+                        tile_decay = pixel_stack.sum(axis=(0, 1)).astype(np.float64)
+                        tile_popt, tile_summary = fit_summed(
+                            tile_decay, tcspc_res, n_bins,
+                            irf_prompt, has_tail, fit_bg, fit_sigma,
+                            args.nexp, args.tau_min, args.tau_max,
+                            optimizer=getattr(args, 'optimizer', 'de'),
+                            n_restarts=getattr(args, 'restarts', lm_restarts),
+                            de_popsize=getattr(args, 'de_population', de_population),
+                            de_maxiter=getattr(args, 'de_maxiter', de_maxiter),
+                            workers=getattr(args, 'workers', n_workers),
+                            polish=not getattr(args, 'no_polish', False),
+                            cost_function=getattr(args, 'cost_function', 'poisson'),
+                            sigma_max=sigma_max,
+                        )
+                        plot_summed(
+                            tile_decay, tile_summary, ptu, None,
+                            args.nexp, getattr(args, 'estimate_irf', 'gaussian'),
+                            str(pos_dir / roi_name), irf_prompt=irf_prompt,
+                        )
+                    except Exception as exc:
+                        print(f'    Warning: per-tile detail fit plot failed for {roi_name}: {exc}')
+                    finally:
+                        plt.close('all')
+                if getattr(args, 'save_rgb', True):
+                    try:
+                        make_component_rgb_tiff(
+                            canvas=pixel_maps, output_dir=pos_dir, roi_name=roi_name,
+                            n_exp=args.nexp, intensity_percentile_hi=95, verbose=False,
+                        )
+                    except Exception as exc:
+                        print(f'    Warning: component RGB TIFF export failed for {roi_name}: {exc}')
+                if getattr(args, 'save_intensity', True):
+                    try:
+                        import tifffile as _tifffile
+                        int_max_disp = getattr(args, 'intensity_display_max', None)
+                        i_max = float(int_max_disp) if int_max_disp is not None \
+                            else float(np.percentile(intensity[intensity > 0], 99.0)
+                                       if (intensity > 0).any() else 1.0)
+                        i_max = max(i_max, 1e-6)
+                        intensity_u16 = np.clip(
+                            intensity.astype(np.float64) / i_max * 65535, 0, 65535
+                        ).astype(np.uint16)
+                        _tifffile.imwrite(str(pos_dir / f'{roi_name}_intensity.tif'), intensity_u16)
+                    except Exception as exc:
+                        print(f'    Warning: intensity TIFF export failed for {roi_name}: {exc}')
+                if getattr(args, 'save_ind', False):
+                    try:
+                        from ..utils.enhanced_outputs import save_individual_tau_maps
+                        save_individual_tau_maps(
+                            pixel_maps, pos_dir, roi_name=roi_name, n_exp=args.nexp)
+                    except Exception as exc:
+                        print(f'    Warning: individual component map export failed for {roi_name}: {exc}')
                 stats = {'t': t, 's': s, 'path': str(ptu_path)}
                 tau_map = redox.get('tau_mean')
                 if tau_map is None:
@@ -464,6 +586,15 @@ def fit_timelapse(ptu_dir, output_dir, args,
         if getattr(args, 'save_stack', True):
             print(f'\n[4] Saving 4D stacks…')
             _save_4d_stacks(frame_positions, group_dir, group_label)
+        if not getattr(args, 'save_npy', True):
+            for t in frame_positions:
+                for s in frame_positions[t]:
+                    pos_dir = group_dir / f't{t:04d}' / f's{s}'
+                    for f_ in pos_dir.glob('*.npy'):
+                        try:
+                            f_.unlink(missing_ok=True)
+                        except Exception as exc:
+                            print(f'    Warning: could not remove {f_}: {exc}')
         if not getattr(args, 'no_plots', False):
             print(f'\n[5] Saving summary plot…')
             plot_timelapse_summary(

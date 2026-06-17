@@ -34,7 +34,7 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
 
         # Reuse an existing Tk root (e.g. when called from the FLIMkit GUI)
         # rather than creating a second conflicting root window.
-        existing = tk._default_root  # None if no root yet
+        existing = tk._default_root
         if existing is not None:
             parent = existing
             need_destroy = False
@@ -208,7 +208,7 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
     # Build a spatially-correct intensity image via raw_pixel_stack
     # (uses nsync timing → accurate pixel positions for the FOV overlay)
     ptu = PTUFile(str(ptu_path), verbose=False)
-    display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)  # (Y, X)
+    display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)
 
     if irf_path:
         from .phasor.signal import calibrate_signal_with_machine_irf
@@ -310,7 +310,7 @@ def launch_phasor(ptu_path=None,
     else:
         if irf_path is None and machine_irf_path is None:
             choices = [
-                'XLSX IRF (Leica analytical model)',
+                'XLSX IRF (analytical model)',
                 'Machine IRF (.npy pre-built)',
                 'No IRF (uncalibrated)',
             ]
@@ -329,7 +329,7 @@ def launch_phasor(ptu_path=None,
         data = _process_ptu(ptu_path, effective_irf, channel=channel,
                             phasor_filter=phasor_filter,
                             filter_kwargs=filter_kwargs)
-    _data = data          # capture for closure
+    _data = data
 
     def _save_callback(state, params):
         stem = Path(src_ptu).stem if src_ptu else 'phasor_session'
@@ -365,7 +365,7 @@ def launch_phasor(ptu_path=None,
 
 def phasor_inquire():
     print('\n Interactive Phasor Analysis')
-    return launch_phasor()   # all prompts happen inside
+    return launch_phasor()
 
 
 if __name__ == '__main__':

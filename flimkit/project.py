@@ -2,10 +2,10 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-#  Leica .sptw sub-folder names to search for tile PTUs 
+#  FLIM microscope .sptw sub-folder names to search for tile PTUs
 _SPTW_CANDIDATES = [
-    '{stem}.sptw',   # most common: scan-name.sptw
-    'PTU.sptw',      # older Leica export style
+    '{stem}.sptw',
+    'PTU.sptw',
     'FLIM.sptw',
 ]
 
@@ -16,8 +16,8 @@ DEFAULT_OUTPUT_SUBDIR = 'output'
 @dataclass
 class ScanRecord:
     stem:          str
-    scan_type:     str            # "fov" | "xlif"
-    source_path:   str            # absolute path to .ptu or .xlif
+    scan_type:     str
+    source_path:   str
     ptu_dir:       str | None = None
     out_st:        str | None = None
     output_prefix: str | None = None
@@ -34,7 +34,7 @@ class ScanRecord:
         if self.scan_type == 'fov':
             p = Path(self.source_path)
             candidate = p.parent / f"{p.stem}.roi_session.npz"
-        else:  # xlif
+        else:
             if not self.out_st:
                 return None
             candidate = Path(self.out_st) / self.roi_clean / 'roi_session.npz'
@@ -63,7 +63,7 @@ class ProjectFile:
         self.project_dir = Path(project_dir).resolve()
         self.output_base = self.project_dir / DEFAULT_OUTPUT_SUBDIR
         self.scans = {}
-        self.config = {}  # per-project config overrides
+        self.config = {}
 
     # persistence
 

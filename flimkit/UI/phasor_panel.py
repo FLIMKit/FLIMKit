@@ -42,49 +42,49 @@ class PhasorViewPanel:
 
     def __init__(self, parent, max_cursors=6):
         self.max_cursors = max_cursors
-        self.on_change = None   # optional callback(panel) after cursor/param changes
+        self.on_change = None
 
 
         self._real  = None
         self._imag  = None
-        self._real_raw = None   # unfiltered originals (for reset)
+        self._real_raw = None
         self._imag_raw = None
         self._mean  = None
-        self._disp  = None   # display/intensity image
-        self._freq  = 80.0                  # MHz
-        self._valid = None   # boolean (min-photons)
+        self._disp  = None
+        self._freq  = 80.0
+        self._valid = None
 
         self._filter_method = tk.StringVar(value='none')
         self._filter_sigma  = tk.DoubleVar(value=1.0)
         self._filter_size   = tk.IntVar(value=3)
 
 
-        self._cursors = []                    # {center_g, center_s, color}
+        self._cursors = []
         self._cursor_artists = []
 
-        self._fret_trajectory = None  # last overlaid FRET traj
-        self._peak_results    = None  # last find-peaks result
+        self._fret_trajectory = None
+        self._peak_results    = None
 
-        self._mode_var = tk.StringVar(value='ellipse')  # 'ellipse' | 'poly'
-        self._poly_pts = []                       # in-progress polygon vertices [(g,s)]
-        self._poly_line = None          # rubber-band artists
+        self._mode_var = tk.StringVar(value='ellipse')
+        self._poly_pts = []
+        self._poly_line = None
 
-        self._drag_idx  = None           # cursor index being dragged
-        self._drag_last = (0.0, 0.0)             # last (g, s) during drag
+        self._drag_idx  = None
+        self._drag_last = (0.0, 0.0)
 
-        self._ptu_path  = None   # set by FLIMKitApp after load
-        self._channel   = None   # set by FLIMKitApp after load
-        self._last_fit_result = None  # cached result for reopen
+        self._ptu_path  = None
+        self._channel   = None
+        self._last_fit_result = None
         self.run_with_progress = None
         self.get_fit_params    = None
 
 
         self._radius = tk.DoubleVar(value=0.05)
-        self._ratio  = tk.DoubleVar(value=0.60)    # radius_minor = ratio × radius
+        self._ratio  = tk.DoubleVar(value=0.60)
 
         self.frame = ttk.Frame(parent)
         self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(1, weight=1)        # row 1 = figure, expands
+        self.frame.rowconfigure(1, weight=1)
 
         self._build_controls()
         self._build_figure()
@@ -178,7 +178,7 @@ class PhasorViewPanel:
         ttk.Label(self._filt_size_frame, text='size:').pack(side='left')
         ttk.Spinbox(self._filt_size_frame, textvariable=self._filter_size,
                     from_=3, to=15, increment=2, width=4).pack(side='left', padx=(2, 6))
-        self._filt_size_frame.pack_forget()   # hidden until median/wavelet selected
+        self._filt_size_frame.pack_forget()
 
         ttk.Button(row_filt, text='Apply',
                    command=self._on_filter_apply).pack(side='left', padx=(0, 4))
@@ -559,7 +559,7 @@ class PhasorViewPanel:
                 if m.ndim > self._real.ndim:
                     m = m[0]
             mask_list.append(m & self._valid)
-        masks = np.stack(mask_list, axis=0)  # (n, Y, X)
+        masks = np.stack(mask_list, axis=0)
 
         self._redraw_image(masks)
 
@@ -604,7 +604,7 @@ class PhasorViewPanel:
         self._canvas.draw_idle()
 
     def _mask_from_polygon(self, vertices):
-        verts = np.asarray(vertices, dtype=float)  # (N, 2) - columns: G, S
+        verts = np.asarray(vertices, dtype=float)
         pts   = np.column_stack([self._real.ravel(), self._imag.ravel()])
         inside = MplPath(verts).contains_points(pts)
         return inside.reshape(self._real.shape)
@@ -658,7 +658,7 @@ class PhasorViewPanel:
             f"G={event.xdata:.4f}  S={event.ydata:.4f}")
 
     def _on_click_poly(self, event):
-        if event.button == 3:  # right-click → close or cancel
+        if event.button == 3:
             if len(self._poly_pts) >= 3:
                 self._commit_polygon()
             elif self._poly_pts:
@@ -888,7 +888,7 @@ class PhasorViewPanel:
 
         params = _ask_roi_fit_options(params)
         if params is None:
-            return   # cancelled
+            return
 
         ptu_path    = self._ptu_path
         channel     = self._channel
@@ -1016,7 +1016,7 @@ class PhasorViewPanel:
                 except Exception:
                     pass
             self._poly_line = None
-        self._redraw_phasor()          # also clears cursor artists
+        self._redraw_phasor()
         self._redraw_image(masks=None)
         self._canvas.draw_idle()
         self._notify_change()

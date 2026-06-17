@@ -129,7 +129,7 @@ class TestConfigManagerCorruptFile:
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_file = os.path.join(tmpdir, "config.json")
             with open(cfg_file, "w") as f:
-                json.dump([1, 2, 3], f)  # List, not dict
+                json.dump([1, 2, 3], f)
             with patch('flimkit.utils.config_manager._CONFIG_FILE', cfg_file), \
                  patch('flimkit.utils.config_manager._CONFIG_DIR', tmpdir):
                 cm = ConfigManager()

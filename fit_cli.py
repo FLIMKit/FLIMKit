@@ -22,11 +22,11 @@ warnings.filterwarnings("ignore")
 
 def single_FOV_flim_fit_cli():
     ap = argparse.ArgumentParser(
-        description="FLIM reconvolution fit — PTU + optional XLSX (Leica FALCON)"
+        description="FLIM reconvolution fit — PTU + optional XLSX (FLIM microscope)"
     )
     ap.add_argument("--ptu",   default=None, required=True, help="Path to PTU file")
     ap.add_argument("--xlsx",  default=None,
-                    help="LAS X export xlsx (overlay comparison and/or IRF source)")
+                    help="FLIM microscope export xlsx (overlay comparison and/or IRF source)")
     ap.add_argument("--no-xlsx-irf", action="store_true",
                     help="Load xlsx for comparison/overlay but do NOT use its IRF "
                          "for fitting. Falls through to Gaussian/estimated IRF instead.")
@@ -36,7 +36,7 @@ def single_FOV_flim_fit_cli():
     ap.add_argument("--irf",   default=None,
                     help="Scatter PTU for measured IRF (highest priority)")
     ap.add_argument("--irf-xlsx", default=None,
-                    help="Path to a reference xlsx exported from LAS X, used ONLY "
+                    help="Path to a reference xlsx exported from FLIM microscope software, used ONLY "
                          "to extract the IRF shape for fitting. The IRF is "
                          "system-specific (not FOV-specific) so export once per "
                          "session and reuse across all PTU files. Independent of "
@@ -83,16 +83,16 @@ def single_FOV_flim_fit_cli():
                          "with a slider on the intensity image.")
     ap.add_argument("--tau-display-min", type=float, default=TAU_DISPLAY_MIN,
                     help="Min lifetime (ns) for exported tau images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--tau-display-max", type=float, default=TAU_DISPLAY_MAX,
                     help="Max lifetime (ns) for exported tau images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--intensity-display-min", type=float, default=INTENSITY_DISPLAY_MIN,
                     help="Min intensity for exported intensity images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--intensity-display-max", type=float, default=INTENSITY_DISPLAY_MAX,
                     help="Max intensity for exported intensity images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--correct-pileup", action="store_true",
                     help="Apply Coates (1968) pile-up correction to the decay before "
                          "fitting. Recommended when count rate > 5%% of sync rate.")
@@ -181,14 +181,14 @@ def single_FOV_flim_fit_cli():
         print(f"\n[3] XLSX: {args.xlsx}")
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
-            print(f"    LAS X fit present, peak = {xlsx['fit_c'].max():.0f} cts")
+            print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
     else:
         print(f"\n[3] No XLSX provided or file not found")
 
     #  Build IRF — sets has_tail, fit_sigma, fit_bg per path 
     print(f"\n[4] Building IRF")
 
-    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL   # default; overridden by sigma variants
+    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
 
 
     if args.irf is not None:
@@ -200,7 +200,7 @@ def single_FOV_flim_fit_cli():
         fit_bg     = True
 
     elif args.irf_xlsx is not None:
-        print(f"  IRF: fitting Leica analytical model to: {args.irf_xlsx}")
+        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
             raise FileNotFoundError(f"--irf-xlsx file not found: {args.irf_xlsx}")
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
@@ -282,17 +282,17 @@ def single_FOV_flim_fit_cli():
 
     else:
         # Gaussian (paper equation): FWHM known, σ fixed at 0.
-        # has_tail=True — real HyD/SPAD IRF is asymmetric (fast rise, slower
+        # has_tail=True — real hybrid-detector/SPAD IRF is asymmetric (fast rise, slower
         # fall). A pure symmetric Gaussian cannot fit this. The exponential
         # tail captures detector afterpulsing / slow component.
-        # Peak position: Leica places its synthetic IRF at the decay maximum,
+        # Peak position: the FLIM microscope places its synthetic IRF at the decay maximum,
         # not at the steepest rise. np.argmax(decay) is correct here.
         # find_irf_peak_bin() is only useful for measured scatter PTU IRFs.
         irf_prompt = gaussian_irf_from_fwhm(
             ptu.n_bins, ptu.tcspc_res, fwhm_ns, decay_peak_bin)
-        has_tail  = True    # asymmetric tail needed for real detector IRF
-        fit_sigma = False   # FWHM is known — no extra broadening
-        fit_bg    = True    # bg free — matches Leica "Tail Offset"
+        has_tail  = True
+        fit_sigma = False
+        fit_bg    = True
         strategy  = (f"gaussian_paper FWHM={fwhm_ns*1000:.1f}ps "
                      f"peak_bin={decay_peak_bin} (decay maximum)")
         print(f"  IRF: {strategy}")
@@ -397,11 +397,11 @@ def single_FOV_flim_fit_cli():
     print("\nDone.\n")
 
     ap = argparse.ArgumentParser(
-        description="FLIM reconvolution fit — PTU + optional XLSX (Leica FALCON)"
+        description="FLIM reconvolution fit — PTU + optional XLSX (FLIM microscope)"
     )
     ap.add_argument("--ptu",   default=None, required=True, help="Path to PTU file")
     ap.add_argument("--xlsx",  default=None,
-                    help="LAS X export xlsx (overlay comparison and/or IRF source)")
+                    help="FLIM microscope export xlsx (overlay comparison and/or IRF source)")
     ap.add_argument("--no-xlsx-irf", action="store_true",
                     help="Load xlsx for comparison/overlay but do NOT use its IRF "
                          "for fitting. Falls through to Gaussian/estimated IRF instead.")
@@ -411,7 +411,7 @@ def single_FOV_flim_fit_cli():
     ap.add_argument("--irf",   default=None,
                     help="Scatter PTU for measured IRF (highest priority)")
     ap.add_argument("--irf-xlsx", default=None,
-                    help="Path to a reference xlsx exported from LAS X, used ONLY "
+                    help="Path to a reference xlsx exported from FLIM microscope software, used ONLY "
                          "to extract the IRF shape for fitting. The IRF is "
                          "system-specific (not FOV-specific) so export once per "
                          "session and reuse across all PTU files. Independent of "
@@ -458,16 +458,16 @@ def single_FOV_flim_fit_cli():
                          "with a slider on the intensity image.")
     ap.add_argument("--tau-display-min", type=float, default=TAU_DISPLAY_MIN,
                     help="Min lifetime (ns) for exported tau images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--tau-display-max", type=float, default=TAU_DISPLAY_MAX,
                     help="Max lifetime (ns) for exported tau images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--intensity-display-min", type=float, default=INTENSITY_DISPLAY_MIN,
                     help="Min intensity for exported intensity images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--intensity-display-max", type=float, default=INTENSITY_DISPLAY_MAX,
                     help="Max intensity for exported intensity images. "
-                         "Out-of-range pixels are clipped to this value (LAS X style).")
+                         "Out-of-range pixels are clipped to this value (FLIM microscope style).")
     ap.add_argument("--correct-pileup", action="store_true",
                     help="Apply Coates (1968) pile-up correction to the decay before "
                          "fitting. Recommended when count rate > 5%% of sync rate.")
@@ -556,14 +556,14 @@ def single_FOV_flim_fit_cli():
         print(f"\n[3] XLSX: {args.xlsx}")
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
-            print(f"    LAS X fit present, peak = {xlsx['fit_c'].max():.0f} cts")
+            print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
     else:
         print(f"\n[3] No XLSX provided or file not found")
 
     #  Build IRF — sets has_tail, fit_sigma, fit_bg per path 
     print(f"\n[4] Building IRF")
 
-    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL   # default; overridden by sigma variants
+    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
 
 
     if args.irf is not None:
@@ -575,7 +575,7 @@ def single_FOV_flim_fit_cli():
         fit_bg     = True
 
     elif args.irf_xlsx is not None:
-        print(f"  IRF: fitting Leica analytical model to: {args.irf_xlsx}")
+        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
             raise FileNotFoundError(f"--irf-xlsx file not found: {args.irf_xlsx}")
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
@@ -657,17 +657,17 @@ def single_FOV_flim_fit_cli():
 
     else:
         # Gaussian (paper equation): FWHM known, σ fixed at 0.
-        # has_tail=True — real HyD/SPAD IRF is asymmetric (fast rise, slower
+        # has_tail=True — real hybrid-detector/SPAD IRF is asymmetric (fast rise, slower
         # fall). A pure symmetric Gaussian cannot fit this. The exponential
         # tail captures detector afterpulsing / slow component.
-        # Peak position: Leica places its synthetic IRF at the decay maximum,
+        # Peak position: the FLIM microscope places its synthetic IRF at the decay maximum,
         # not at the steepest rise. np.argmax(decay) is correct here.
         # find_irf_peak_bin() is only useful for measured scatter PTU IRFs.
         irf_prompt = gaussian_irf_from_fwhm(
             ptu.n_bins, ptu.tcspc_res, fwhm_ns, decay_peak_bin)
-        has_tail  = True    # asymmetric tail needed for real detector IRF
-        fit_sigma = False   # FWHM is known — no extra broadening
-        fit_bg    = True    # bg free — matches Leica "Tail Offset"
+        has_tail  = True
+        fit_sigma = False
+        fit_bg    = True
         strategy  = (f"gaussian_paper FWHM={fwhm_ns*1000:.1f}ps "
                      f"peak_bin={decay_peak_bin} (decay maximum)")
         print(f"  IRF: {strategy}")

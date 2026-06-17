@@ -50,13 +50,13 @@ def _detect_gpu():
         rocm      — AMD ROCm (Linux)
         cpu       — no GPU or unrecognised
     """
-    os_name = sys.platform          # "darwin", "linux", "win32"
-    machine = platform.machine()    # "arm64", "x86_64", "AMD64"
+    os_name = sys.platform
+    machine = platform.machine()
 
     if os_name == "darwin":
         if machine == "arm64":
-            return "mlx"            # Apple Silicon: MLX + MPS both available
-        return "mps"                # Intel Mac: only CPU torch, no MPS
+            return "mlx"
+        return "mps"
 
     if shutil.which("nvidia-smi"):
         try:
@@ -121,7 +121,7 @@ def _install_gpu(token, dry_run):
         ok = _pip("torch", "--index-url", index, dry_run=dry_run)
         if ok:
             _ok(f"torch ({token}) installed")
-    else:  # cpu
+    else:
         _info("No GPU detected — installing CPU-only PyTorch…")
         ok = _pip("torch", "--index-url", _TORCH_INDEX["cpu"], dry_run=dry_run)
         if ok:

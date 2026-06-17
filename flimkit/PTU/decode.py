@@ -42,7 +42,7 @@ def get_flim_histogram_from_ptufile(
     return stack, metadata
 
 def get_raw_flim_histogram(ptu_path, rotate_cw=True):
-    ptu = PTUFile(str(ptu_path), verbose=False)  # or True for debugging
+    ptu = PTUFile(str(ptu_path), verbose=False)
     stack = ptu.raw_pixel_stack(channel=None, binning=1)
     if rotate_cw:
         stack = np.rot90(stack, k=-1, axes=(0, 1))
@@ -57,11 +57,11 @@ def get_raw_flim_histogram(ptu_path, rotate_cw=True):
 def get_raw_flim_histogram2(ptu_path, rotate_cw=True):
     import ptufile
     ptu = ptufile.PtuFile(str(ptu_path))
-    data = ptu[:].squeeze()          # (Y, X, H) or (T, Y, X, C, H)
+    data = ptu[:].squeeze()
     if data.ndim != 3:
         # If there are extra dims (e.g., T, C), sum over them
         # For simplicity, assume H is last and others are singletons or to be summed
-        # This matches typical Leica data: (T, Y, X, C, H) with T=1, C=1
+        # This matches typical FLIM microscope data: (T, Y, X, C, H) with T=1, C=1
         data = data.reshape((data.shape[0], data.shape[1], -1))
     if rotate_cw:
         data = np.rot90(data, k=-1, axes=(0, 1))

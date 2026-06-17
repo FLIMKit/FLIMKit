@@ -10,9 +10,9 @@ class GPUBackend:
 
     def batch_fixed_tau(
         self,
-        stack,                      # (ny, nx, n_bins) float
-        A,                          # (n_bins, n_exp) - IRF-convolved basis
-        taus_fixed,                 # (n_exp,) seconds
+        stack,
+        A,
+        taus_fixed,
         min_photons,
         correct_pileup,
         n_sync_px,
@@ -22,10 +22,10 @@ class GPUBackend:
 
     def batch_grid_scan_1exp(
         self,
-        stack,                      # (ny, nx, n_bins)
-        basis_grid,                 # (N_GRID, n_bins)
-        bb_grid,                    # (N_GRID,) - ||basis[j]||^2
-        tau_grid,                   # (N_GRID,) seconds
+        stack,
+        basis_grid,
+        bb_grid,
+        tau_grid,
         min_photons,
         correct_pileup,
         n_sync_px,
@@ -35,12 +35,12 @@ class GPUBackend:
 
     def batch_free_tau_fit(
         self,
-        stack,                      # (ny, nx, n_bins) float
-        irf_array,                  # (n_bins,) real - time-domain IRF (normalised)
-        tcspc_res,                  # seconds per bin
-        taus_init,                  # (n_exp,) seconds - initial guess from global fit
-        tau_min_s,                  # float
-        tau_max_s,                  # float
+        stack,
+        irf_array,
+        tcspc_res,
+        taus_init,
+        tau_min_s,
+        tau_max_s,
         n_exp,
         min_photons,
         correct_pileup,
@@ -82,41 +82,41 @@ class _BackendMixin:
                 np.full((ny, nx), np.nan) if (n_exp == 1 or free_tau)
                 else np.full((ny, nx), taus_fixed_ns[i])
             )
-            maps[f"a{i+1}"] = maps[f"alpha_{i+1}"]   # alias
+            maps[f"a{i+1}"] = maps[f"alpha_{i+1}"]
         return maps
 
     @staticmethod
     def _scatter_fixed_tau(
         maps,
-        valid_idx,                  # (N_valid,) flat pixel indices
-        amps,                       # (N_valid, n_exp) non-negative
-        bg,                         # (N_valid,)
-        decay_valid,                # (N_valid, n_bins) raw counts
-        A,                          # (n_bins, n_exp)
-        taus_ns,                    # (n_exp,)
+        valid_idx,
+        amps,
+        bg,
+        decay_valid,
+        A,
+        taus_ns,
         ny, nx,
     ):
         n_exp = A.shape[1]
         n_bins = A.shape[0]
 
-        amp_sum = amps.sum(axis=1)                      # (N_valid,)
+        amp_sum = amps.sum(axis=1)
         good    = amp_sum > 0
         if not good.any():
             return
 
         fracs    = np.where(good[:, None], amps / np.maximum(amp_sum[:, None], 1e-30), 0.0)
         taus_ns2 = taus_ns ** 2
-        tau_amp  = (fracs * taus_ns[None, :]).sum(axis=1)   # (N_valid,)
+        tau_amp  = (fracs * taus_ns[None, :]).sum(axis=1)
         denom    = (amps * taus_ns[None, :]).sum(axis=1)
         tau_int  = np.where(denom > 0,
                             (amps * taus_ns2[None, :]).sum(axis=1) / np.maximum(denom, 1e-30),
                             np.nan)
 
-        model    = decay_valid.copy()                    # allocate
+        model    = decay_valid.copy()
         for j in range(n_exp):
-            model = amps[:, j:j+1] * A[:, j][None, :]  # placeholder
+            model = amps[:, j:j+1] * A[:, j][None, :]
         # Recompute properly: model = amps @ A.T + bg
-        model    = amps @ A.T + bg[:, None]             # (N_valid, n_bins)
+        model    = amps @ A.T + bg[:, None]
         resid    = decay_valid - model
         chi2     = (resid ** 2 / np.maximum(model, 1.0)).sum(axis=1)
         dof      = max(n_bins - n_exp, 1)
@@ -133,12 +133,12 @@ class _BackendMixin:
     @staticmethod
     def _scatter_1exp(
         maps,
-        valid_idx,                  # (N_valid,) flat pixel indices
-        tau_v,                      # (N_valid,) seconds
-        amp_v,                      # (N_valid,)
-        bg_v,                       # (N_valid,)
-        decay_valid,                # (N_valid, n_bins)
-        basis_best,                 # (N_valid, n_bins)
+        valid_idx,
+        tau_v,
+        amp_v,
+        bg_v,
+        decay_valid,
+        basis_best,
         ny, nx,
         n_bins,
     ):
@@ -159,21 +159,21 @@ class _BackendMixin:
     @staticmethod
     def _scatter_free_tau(
         maps,
-        valid_idx,                  # (N_valid,) flat pixel indices
-        taus_s,                     # (N_valid, n_exp) seconds, sorted ascending
-        amps,                       # (N_valid, n_exp) non-negative
-        chi2_r,                     # (N_valid,)
+        valid_idx,
+        taus_s,
+        amps,
+        chi2_r,
         ny, nx,
         n_exp,
     ):
-        amp_sum = amps.sum(axis=1)                          # (N_valid,)
+        amp_sum = amps.sum(axis=1)
         good    = amp_sum > 0
         if not good.any():
             return
 
         fracs   = np.where(good[:, None], amps / np.maximum(amp_sum[:, None], 1e-30), 0.0)
-        taus_ns = taus_s * 1e9                              # (N_valid, n_exp)
-        tau_amp = (fracs * taus_ns).sum(axis=1)             # (N_valid,)
+        taus_ns = taus_s * 1e9
+        tau_amp = (fracs * taus_ns).sum(axis=1)
         denom   = (amps  * taus_ns).sum(axis=1)
         tau_int = np.where(
             denom > 0,
@@ -192,13 +192,13 @@ class _BackendMixin:
 
     @staticmethod
     def _scipy_parallel_free_tau_fit(
-        raw_valid,      # (B, n_bins) float32
-        bg_valid,       # (B,)        float32
-        irf_array,      # (n_bins,)   float64-compatible
-        tcspc_res,      # float
-        taus_init,      # (n_exp,)    seconds - initial guess
-        tau_min_s,      # float
-        tau_max_s,      # float
+        raw_valid,
+        bg_valid,
+        irf_array,
+        tcspc_res,
+        taus_init,
+        tau_min_s,
+        tau_max_s,
         n_exp,
         n_bins,
     ):

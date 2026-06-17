@@ -19,6 +19,17 @@ _TAG_TYPES = {
     0xFFFFFFFF: ('BinaryBlob',  'blob'),
 }
 
+def _norm_channel(channel):
+    if not isinstance(channel, str):
+        return channel
+    channel = channel.strip()
+    if channel == '':
+        return None
+    if channel.isdigit():
+        return int(channel)
+    return None
+
+
 def _read_ptu_header(path):
     tags = {}
     data_offset = 0
@@ -97,8 +108,8 @@ class PTUFile:
         self.photon_channel = None
         self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
         self._total_photons = None
-        pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)   # in ms? check units
-        self.pixel_time = pixel_time_ms * 1e-3                      # convert to seconds
+        pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)
+        self.pixel_time = pixel_time_ms * 1e-3
         if self.pixel_time <= 0:
             line_time = self.global_line_time * self.global_resolution
             self.pixel_time = line_time / self.n_x
@@ -126,6 +137,7 @@ class PTUFile:
         return ch, dtime, nsync
     
     def summed_decay(self, channel=None):
+        channel = _norm_channel(channel)
         records = self._load_records()
         ch, dtime, _ = self._decode_picoharp_t3(records)
         special = ch == 0xF
@@ -152,6 +164,7 @@ class PTUFile:
         return self._total_photons / self.n_records
 
     def raw_pixel_stack(self, channel=None, binning=1):
+        channel = _norm_channel(channel)
         if self.photon_channel is None:
             self.summed_decay(channel=channel)
         ch_use = channel if channel is not None else self.photon_channel
@@ -230,6 +243,7 @@ class PTUFile:
 
     def pixel_stack(self, channel=None,
                     binning=1):
+        channel = _norm_channel(channel)
         if self.photon_channel is None:
             self.summed_decay(channel=channel)
         ch_use = channel if channel is not None else self.photon_channel
@@ -346,7 +360,7 @@ class PTUFile:
 
         # Encode TTTR records 
         records     = []
-        nsync_floor = 0   # running overflow baseline
+        nsync_floor = 0
 
         def _advance(target):
             nonlocal nsync_floor
@@ -537,8 +551,8 @@ def read_ptu(path, binning=1, channel=None,
     data = ptu.pixel_stack(channel=channel, binning=binning)
     
     metadata = {
-        'frequency': ptu.sync_rate,  # Laser repetition rate in Hz
-        'tcspc_resolution': ptu.tcspc_res,  # TCSPC resolution in seconds
+        'frequency': ptu.sync_rate,
+        'tcspc_resolution': ptu.tcspc_res,
         'shape': data.shape,
         'dims': ('Y', 'X', 'H'),
         'tags': ptu.tags,
@@ -709,7 +723,7 @@ def get_flim_histogram_from_ptufile(
     except Exception as e:
         # Fallback to ptufile 
         # print(f"Custom PTUFile failed for {ptu_path.name}: {e}. Falling back to ptufile.")
-        from .decode import get_raw_flim_histogram   # avoid circular import
+        from .decode import get_raw_flim_histogram
         stack, meta = get_raw_flim_histogram(ptu_path, rotate_cw=rotate_cw)
         # If binning requested, bin the full-resolution stack
         if binning > 1:

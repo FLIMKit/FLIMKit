@@ -10,7 +10,7 @@ class IRFWidget:
     _AUTO_FILL = object()
 
     CHOICES = [
-        ('Leica analytical model (XLSX)',                'irf_xlsx'),
+        ('Analytical model (XLSX)',                      'irf_xlsx'),
         ('Machine IRF (.npy pre-built)',                 'machine_irf'),
         ('Machine IRF + full σ broadening',               'machine_irf_sigma_full'),
         ('Machine IRF + half σ broadening (σ≤0.5)',       'machine_irf_sigma_half'),

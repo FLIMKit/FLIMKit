@@ -19,7 +19,7 @@ from flimkit.UI import flim_display
 class ResultsPanel:
     def __init__(self, parent, root=None):
         self.parent = parent
-        self.root = root  # Reference to main window for dialogs
+        self.root = root
         self.frame = ttk.Frame(parent)
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(0, weight=1)
@@ -140,7 +140,7 @@ class ResultsPanel:
             rows = []
             for item in self._tv.get_children():
                 values = self._tv.item(item)['values']
-                rows.append(values)  # (Parameter, Value, Unit)
+                rows.append(values)
             
             if not rows:
                 messagebox.showwarning('No Data', 'No summary data to export.')

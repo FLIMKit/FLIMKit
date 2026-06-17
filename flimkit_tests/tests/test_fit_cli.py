@@ -11,7 +11,7 @@ def _get_parser():
     # Patch sys.argv to provide required --ptu arg, then import and call.
     import importlib
     import fit_cli as cli_mod
-    importlib.reload(cli_mod)  # Ensure fresh import
+    importlib.reload(cli_mod)
 
     # Build a parser the same way the CLI does, by reading the source
     # We'll test via sys.argv patching instead
@@ -33,7 +33,7 @@ class TestCliArgParsing:
                 try:
                     cli.single_FOV_flim_fit_cli()
                 except SystemExit:
-                    pass  # argparse may exit on --print-config
+                    pass
 
     def test_invalid_estimate_irf_rejected(self):
         """Invalid --estimate-irf value raises SystemExit."""
@@ -73,7 +73,7 @@ class TestIrfStrategyBranching:
         import numpy as np
         t = np.arange(256) * 97e-12
         decay = np.exp(-t / 2e-9) * 1000
-        decay[:20] = 5  # flat bg
+        decay[:20] = 5
         ptu.summed_decay.return_value = decay
         return ptu
 

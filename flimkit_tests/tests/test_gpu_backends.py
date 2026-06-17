@@ -25,7 +25,7 @@ def _build_basis(taus_s, irf, n_bins, tcspc_res):
     for tau in taus_s:
         k = np.exp(-t / max(tau, 1e-15))
         cols.append(np.real(np.fft.ifft(np.fft.fft(k) * irf_fft)))
-    return np.stack(cols, axis=1)  # (n_bins, n_exp)
+    return np.stack(cols, axis=1)
 
 def _make_irf(n_bins, center=MOCK_IRF_CENTER,
               fwhm=MOCK_IRF_FWHM_BINS):
@@ -245,7 +245,7 @@ class TestBatchGrid1ExpCPUParity:
     @pytest.fixture()
     def problem(self):
         n_bins    = 128
-        tau_true  = 2.0       # ns
+        tau_true  = 2.0
         irf       = _make_irf(n_bins)
         irf_fft   = np.fft.fft(irf)
         t_axis    = np.arange(n_bins, dtype=float) * MOCK_TCSPC_RES
@@ -300,7 +300,7 @@ class TestGPUFitPerPixelIntegration:
         """Minimal inputs that allow fit_per_pixel() to run."""
         n_bins    = 128
         tcspc_res = MOCK_TCSPC_RES
-        tau_true  = [2.0e-9]   # single exp
+        tau_true  = [2.0e-9]
 
         irf_prompt = _make_irf(n_bins)
         stack      = _small_stack(ny=4, nx=4, n_bins=n_bins, tau_ns=2.0)
@@ -328,7 +328,7 @@ class TestGPUFitPerPixelIntegration:
         maps = fit_per_pixel(
             **fit_inputs,
             use_gpu=True,
-            gpu_backend=None,   # will call get_backend(); may or may not find one
+            gpu_backend=None,
         )
         assert "intensity"    in maps
         assert "tau_mean_int" in maps

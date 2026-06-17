@@ -25,15 +25,15 @@ class FOVPreviewPanel:
 
         from matplotlib.gridspec import GridSpec
         self._fig = Figure(figsize=(10, 8), dpi=100, facecolor='black')
-        self._decay_visible = True  # Track decay panel visibility
-        self._display_mode = 'flim'  # "flim" or "intensity" - which image gets the main slot
+        self._decay_visible = True
+        self._display_mode = 'flim'
         gs = GridSpec(3, 3, figure=self._fig, height_ratios=[1, 0.6, 0.3], width_ratios=[1, 1, 0.05], hspace=0.38, wspace=0.15)
         
-        self._ax_img = self._fig.add_subplot(gs[0, 0])    # Intensity (top-left)
-        self._ax_flim = self._fig.add_subplot(gs[0, 1])   # FLIM (top-right)
-        self._ax_cbar = self._fig.add_subplot(gs[0, 2])   # Colorbar (top-right, narrow)
-        self._ax_decay = self._fig.add_subplot(gs[1, :])  # Decay (full width)
-        self._ax_resid = self._fig.add_subplot(gs[2, :], sharex=self._ax_decay)  # Residuals (full width)
+        self._ax_img = self._fig.add_subplot(gs[0, 0])
+        self._ax_flim = self._fig.add_subplot(gs[0, 1])
+        self._ax_cbar = self._fig.add_subplot(gs[0, 2])
+        self._ax_decay = self._fig.add_subplot(gs[1, :])
+        self._ax_resid = self._fig.add_subplot(gs[2, :], sharex=self._ax_decay)
         for _ax in (self._ax_img, self._ax_flim):
             _ax.set_facecolor('black')
         self._ax_decay.set_facecolor('white')
@@ -58,7 +58,7 @@ class FOVPreviewPanel:
         ctrl_frame = ttk.LabelFrame(self.frame, text='FLIM Color Scale', padding=4)
         ctrl_frame.grid(row=2, column=0, sticky='ew', padx=4, pady=(0, 4))
         ctrl_frame.columnconfigure(1, weight=1)
-        ctrl_frame.grid_remove()  # Hide initially for faster startup
+        ctrl_frame.grid_remove()
         self._ctrl_frame = ctrl_frame
         
         ttk.Label(ctrl_frame, text='τ range (ns):').grid(row=0, column=0, sticky='w')
@@ -148,13 +148,13 @@ class FOVPreviewPanel:
             self._ax_img.clear()
             intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
             self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
-            self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold')
+            self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
 
             self._ax_flim.clear()
             self._ax_flim.text(0.5, 0.5, 'Waiting for fit...', ha='center', va='center',
-                              transform=self._ax_flim.transAxes, fontsize=9, color='#888')
-            self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold')
+                              transform=self._ax_flim.transAxes, fontsize=9, color='white')
+            self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold', color='white')
 
             self._ax_decay.clear()
             self._ax_decay.set_facecolor('white')
@@ -191,7 +191,7 @@ class FOVPreviewPanel:
             global_popt = fit_result.get('global_popt')
             irf_prompt = fit_result.get('irf_prompt')
             if irf_prompt is not None:
-                self._irf_prompt = irf_prompt  # Cache for per-ROI fitting
+                self._irf_prompt = irf_prompt
             time_ns_from_result = fit_result.get('time_ns')
             decay_from_result = fit_result.get('decay')
             canvas = fit_result.get('canvas')
@@ -221,11 +221,11 @@ class FOVPreviewPanel:
                 intensity = stack.sum(axis=2)
             
             if intensity is None:
-                intensity = np.ones((512, 512), dtype=np.float32)  # Placeholder
+                intensity = np.ones((512, 512), dtype=np.float32)
             
             from flimkit.UI.flim_display import compute_intensity_weighted_lifetime
             
-            pixel_maps = fit_result.get('pixel_maps')  # For single-FOV fits
+            pixel_maps = fit_result.get('pixel_maps')
             if pixel_maps is None and canvas is not None:
                 # For tile fits, extract pixel_maps from canvas
                 pixel_maps = {k: v for k, v in canvas.items() 
@@ -281,7 +281,7 @@ class FOVPreviewPanel:
             self._ax_img.clear()
             intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
             self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
-            self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold')
+            self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
 
             self._ax_flim.clear()
@@ -297,7 +297,7 @@ class FOVPreviewPanel:
                 cmap = flim_display.get_colormap(self._flim_color_scale['cmap'])
                 cmap.set_bad(color='black')
                 im = self._ax_flim.imshow(scaled, cmap=cmap, origin='upper', vmin=0, vmax=1)
-                self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold')
+                self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold', color='white')
                 self._strip_image_axes(self._ax_flim)
                 valid_data = self._lifetime_map[~np.isnan(self._lifetime_map)]
                 if valid_data.size > 0:
@@ -305,22 +305,23 @@ class FOVPreviewPanel:
                     data_max = np.max(valid_data)
                     self._ax_cbar.clear()
                     cbar = self._fig.colorbar(im, cax=self._ax_cbar)
-                    cbar.set_label(f"τ (ns)", fontsize=8)
+                    cbar.set_label(f"τ (ns)", fontsize=8, color='white')
                     self._flim_cbar = cbar
-                    
+
                     n_ticks = 5
                     tick_positions = np.linspace(0, 1, n_ticks)
                     tick_values = data_min + tick_positions * (data_max - data_min)
                     cbar.set_ticks(tick_positions)
-                    cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7)
+                    cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7, color='white')
+                    cbar.ax.tick_params(colors='white')
                 else:
                     self._ax_cbar.clear()
             else:
                 self._ax_flim.text(0.5, 0.6, 'No FLIM data', ha='center', va='center',
-                                  transform=self._ax_flim.transAxes, fontsize=9, color='#888')
+                                  transform=self._ax_flim.transAxes, fontsize=9, color='white')
                 self._ax_flim.text(0.5, 0.35, '(enable per-pixel fitting)', ha='center', va='center',
-                                  transform=self._ax_flim.transAxes, fontsize=8, color='#666', style='italic')
-                self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold')
+                                  transform=self._ax_flim.transAxes, fontsize=8, color='white', style='italic')
+                self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold', color='white')
             
             self._redraw_region_overlays()
 
@@ -439,7 +440,7 @@ class FOVPreviewPanel:
             self._ax_img.clear()
             intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
             self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
-            self._ax_img.set_title('Stitched ROI', fontsize=9, fontweight='bold')
+            self._ax_img.set_title('Stitched ROI', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
             
             lifetime_data = None
@@ -482,8 +483,8 @@ class FOVPreviewPanel:
                 lifetime_norm = np.clip((lifetime_data - lifetime_min) / (lifetime_max - lifetime_min), 0, 1)
                 
                 im = self._ax_flim.imshow(lifetime_norm, cmap='viridis', origin='upper', vmin=0, vmax=1)
-                self._ax_flim.set_title(f"FLIM Lifetime ({lifetime_min:.2f}-{lifetime_max:.2f} ns)", 
-                                       fontsize=9, fontweight='bold')
+                self._ax_flim.set_title(f"FLIM Lifetime ({lifetime_min:.2f}-{lifetime_max:.2f} ns)",
+                                       fontsize=9, fontweight='bold', color='white')
                 self._strip_image_axes(self._ax_flim)
                 
                 self._ax_cbar.clear()
@@ -497,8 +498,8 @@ class FOVPreviewPanel:
             else:
                 self._ax_flim.clear()
                 self._ax_flim.text(0.5, 0.5, 'Lifetime map not available', ha='center', va='center',
-                                  transform=self._ax_flim.transAxes, fontsize=9, color='#888')
-                self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold')
+                                  transform=self._ax_flim.transAxes, fontsize=9, color='white')
+                self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold', color='white')
             
             self._ax_decay.clear()
             self._ax_decay.set_facecolor('white')
@@ -523,12 +524,12 @@ class FOVPreviewPanel:
         self._ax_decay.set_facecolor('white')
         self._ax_cbar.clear()
         self._flim_cbar = None
-        self._ax_img.set_title('No FOV loaded')
-        self._ax_flim.set_title('FLIM Lifetime')
+        self._ax_img.set_title('No FOV loaded', color='white')
+        self._ax_flim.set_title('FLIM Lifetime', color='white')
         self._ax_decay.text(0.5, 0.5, 'Load a PTU file →', 
                            ha='center', va='center', transform=self._ax_decay.transAxes,
                            fontsize=10, color='#888')
-        self._ctrl_frame.grid_remove()  # Hide controls when clearing
+        self._ctrl_frame.grid_remove()
         self._canvas_mpl.draw_idle()
 
     def _auto_detect_scale(self):
@@ -585,7 +586,7 @@ class FOVPreviewPanel:
             cmap.set_bad(color='black')
             
             im = self._ax_flim.imshow(scaled, cmap=cmap, origin='upper', vmin=0, vmax=1)
-            self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold')
+            self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_flim)
             
             valid_data = self._lifetime_map[~np.isnan(self._lifetime_map)]
@@ -594,14 +595,15 @@ class FOVPreviewPanel:
                 data_max = vmax if vmax is not None else np.max(valid_data)
                 self._ax_cbar.clear()
                 cbar = self._fig.colorbar(im, cax=self._ax_cbar)
-                cbar.set_label('τ (ns)', fontsize=8)
+                cbar.set_label('τ (ns)', fontsize=8, color='white')
                 self._flim_cbar = cbar
-                
+
                 n_ticks = 5
                 tick_positions = np.linspace(0, 1, n_ticks)
                 tick_values = data_min + tick_positions * (data_max - data_min)
                 cbar.set_ticks(tick_positions)
-                cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7)
+                cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7, color='white')
+                cbar.ax.tick_params(colors='white')
             else:
                 self._ax_cbar.clear()
             
@@ -766,7 +768,7 @@ class FOVPreviewPanel:
 
     def _on_pan_press(self, event):
         if event.button == 1 and self._drawing_mode.get() != 'select':
-            return  # Left-click reserved for drawing in non-select modes
+            return
         ax = event.inaxes
         if ax is None or ax not in self._active_image_axes():
             return
@@ -931,10 +933,10 @@ class FOVPreviewPanel:
             intensity_clipped = np.clip(self._intensity_map, 0,
                                         np.percentile(self._intensity_map, 99))
             self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
-            self._ax_img.set_title(img_title, fontsize=9, fontweight='bold')
+            self._ax_img.set_title(img_title, fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
         elif self._ax_img.get_visible():
-            self._ax_img.set_title(img_title, fontsize=9, fontweight='bold')
+            self._ax_img.set_title(img_title, fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
 
         if self._ax_flim.get_visible():
@@ -959,14 +961,15 @@ class FOVPreviewPanel:
                         d_min = cs['vmin'] if cs['vmin'] is not None else float(np.min(valid))
                         d_max = cs['vmax'] if cs['vmax'] is not None else float(np.max(valid))
                         cbar = self._fig.colorbar(im, cax=self._ax_cbar)
-                        cbar.set_label('τ (ns)', fontsize=8)
+                        cbar.set_label('τ (ns)', fontsize=8, color='white')
                         self._flim_cbar = cbar
                         n_ticks = 5
                         tp = np.linspace(0, 1, n_ticks)
                         tv = d_min + tp * (d_max - d_min)
                         cbar.set_ticks(tp)
-                        cbar.set_ticklabels([f"{v:.2f}" for v in tv], fontsize=7)
-            self._ax_flim.set_title(flim_title, fontsize=9, fontweight='bold')
+                        cbar.set_ticklabels([f"{v:.2f}" for v in tv], fontsize=7, color='white')
+                        cbar.ax.tick_params(colors='white')
+            self._ax_flim.set_title(flim_title, fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_flim)
 
         if self._decay_visible and decay_lines:
@@ -1016,13 +1019,13 @@ class FOVPreviewPanel:
 
     def _on_draw_press(self, event):
         if event.button != 1:
-            return  # Only left-click starts drawing; right-click is for ROI drag/pan
+            return
         if not event.inaxes or event.inaxes not in self._active_image_axes():
             return
         
         mode = self._drawing_mode.get()
         if mode == 'select':
-            return  # No drawing in select mode
+            return
         
         self._is_drawing = True
         self._draw_coords = [[event.xdata, event.ydata]]

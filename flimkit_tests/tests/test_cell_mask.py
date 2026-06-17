@@ -10,8 +10,8 @@ from flimkit.image.tools import make_cell_mask
 def _blank_intensity(h=64, w=64):
     # two bright square blobs on a black background
     img = np.zeros((h, w), dtype=np.float32)
-    img[10:24, 10:24] = 120.0   # blob 1
-    img[40:54, 40:54] = 120.0   # blob 2
+    img[10:24, 10:24] = 120.0
+    img[40:54, 40:54] = 120.0
     return img
 
 
@@ -45,9 +45,9 @@ class TestMakeCellMask:
 
         mask = make_cell_mask(img, gpu=False)
 
-        assert mask[16, 16]      # centre of blob 1
-        assert mask[47, 47]      # centre of blob 2
-        assert not mask[0, 0]    # background corner
+        assert mask[16, 16]
+        assert mask[47, 47]
+        assert not mask[0, 0]
 
     @patch('cellpose.models.CellposeModel')
     def test_no_cells_returns_all_false(self, mock_cls):

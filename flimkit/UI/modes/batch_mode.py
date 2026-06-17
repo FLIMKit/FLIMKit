@@ -79,7 +79,7 @@ class BatchMode(BaseMode):
             beside_fr, textvariable=self.b.sv_batch_save_beside_preview,
             foreground='#5c9bd6')
         self.b._batch_beside_preview_lbl.pack(side='left', padx=2)
-        self.b._batch_beside_preview_lbl.pack_forget()  # hidden until checkbox ticked
+        self.b._batch_beside_preview_lbl.pack_forget()
 
         self.b._batch_io_help = ttk.Label(
             ff, text='One sub-folder per ROI created inside the output base dir.',
@@ -151,7 +151,7 @@ class BatchMode(BaseMode):
 
         freg = _section(tab, 'Tile Registration')
         freg.grid(row=4, column=0, sticky='ew', pady=(0, 6))
-        self.b._batch_freg = freg  # reference for show/hide on mode change
+        self.b._batch_freg = freg
         self.b.state.bv_batch_register = tk.BooleanVar(value=True)
         ttk.Checkbutton(freg, text='Phase-correlation registration (fixes stage Y/X drift)',
                         variable=self.b.bv_batch_register).grid(

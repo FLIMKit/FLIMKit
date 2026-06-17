@@ -46,7 +46,7 @@ class TestRoiManager:
     def test_compute_rectangle_mask(self, manager):
         manager.add_region("Rect", "rect", [[2,3],[5,7]])
         mask = manager.compute_region_mask(0, (10,10))
-        assert mask[3,2]      # numpy bool works in boolean context
+        assert mask[3,2]
 
     def test_compute_ellipse_mask(self, manager):
         manager.add_region("Ellipse", "ellipse", [[2,3],[6,7]])

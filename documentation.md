@@ -31,7 +31,7 @@
 
 ## Overview
 
-FLIMKit handles FLIM data from Leica SP8/FALCON systems (or any PTU-based setup). It's designed as a replacement for Leica LAS X FLIM analysis, with two main workflows:
+FLIMKit handles FLIM data from FLIM microscope systems (or any PTU-based setup). It's designed as a replacement for FLIM microscope software, with two main workflows:
 
 | Workflow | Description |
 |---|---|
@@ -65,7 +65,7 @@ Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or t
 | `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
 | `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |
 | `opencv-python` | Image I/O, resizing, and general image processing |
-| `openpyxl` | Excel XLSX parsing for LAS X IRF extraction |
+| `openpyxl` | Excel XLSX parsing for FLIM microscope software IRF extraction |
 | `pandas` | Excel/XLSX IRF file parsing |
 | `tifffile` | TIFF image I/O |
 | `tqdm` | Progress bars |
@@ -137,8 +137,8 @@ Open the GUI and select **Single FOV Fit**.
 
 Go to **Fit settings** and fill in:
 
-- **PTU path**: your `.ptu` file. To get this from Leica LAS X, open the lif/lof, go to the FLIM window, and export raw data.
-- **IRF method**: Machine IRF is recommended if you've built one. IRF XLSX works if you have a LAS X export for that specific PTU (right-click the summed/tail decay in the FLIM window → Export to Excel). Scatter PTU if you measured one directly. If none of those are available, use "Estimate from decay" and set FWHM to roughly 0.3-0.5 ns.
+- **PTU path**: your `.ptu` file. To get this from FLIM microscope software, open the lif/lof, go to the FLIM window, and export raw data.
+- **IRF method**: Machine IRF is recommended if you've built one. IRF XLSX works if you have a FLIM microscope software export for that specific PTU (right-click the summed/tail decay in the FLIM window → Export to Excel). Scatter PTU if you measured one directly. If none of those are available, use "Estimate from decay" and set FWHM to roughly 0.3-0.5 ns.
 - **Number of exponentials**: 1, 2, or 3. Beyond 3 the math gets shaky and the biology harder to interpret, so that's the cap. 
 - **Lifetime bounds**: 0.145-45 ns by default. Adjust if you're working with unusually short or long lifetimes.
 - **Fitting mode**: Full runs both summed and per-pixel fitting and is needed to generate the FLIM image in the UI. If you just want global lifetime values for the whole FOV, use FAST. Per-pixel fitting is slow, especially with more exponentials.
@@ -155,7 +155,7 @@ Expert fit settings (optimiser type, cost function, DE parameters) are under the
 
 Open **Tile Stitch / Fit**.
 
-You need the XLIF metadata file and the directory with the PTU tiles. The XLIF is in the Metadata folder of your LAS X project and contains stage coordinates and tile layout. If the directory has tiles from multiple scans mixed together, it should sort them out as long as the naming is consistent.
+You need the XLIF metadata file and the directory with the PTU tiles. The XLIF is in the Metadata folder of your FLIM microscope software project and contains stage coordinates and tile layout. If the directory has tiles from multiple scans mixed together, it should sort them out as long as the naming is consistent.
 
 **Pipeline modes:**
 
@@ -163,7 +163,7 @@ You need the XLIF metadata file and the directory with the PTU tiles. The XLIF i
 - **Stitch then fit full ROI** stitches everything into a single mosaic and fits it. Not recommended unless you have a capable machine and a small tile count, fitting a full mosaic requires a lot of RAM (tens of GBs) and is slow.
 - **Per-tile fit** the recommended option for most cases. Builds a global decay from all tiles, runs an initial fit to get the lifetime components, then fits each tile separately using those fixed lifetimes. Results are stitched back together at the end. Same quality as fitting the mosaic directly, but far more memory-efficient.
 
-Fitting parameters are the same as for single FOV. For tile work, the machine IRF is strongly recommended, per-tile XLSX IRFs from LAS X can vary across tiles and cause inconsistencies.
+Fitting parameters are the same as for single FOV. For tile work, the machine IRF is strongly recommended, per-tile XLSX IRFs from FLIM microscope software can vary across tiles and cause inconsistencies.
 
 **Per-pixel exports** (when enabled):
 
@@ -331,8 +331,8 @@ python fit_cli.py [OPTIONS]
 |---|---|
 | `--machine-irf PATH` | Pre-built machine IRF `.npy` file (recommended) |
 | `--irf PATH` | Scatter PTU for a directly measured IRF |
-| `--irf-xlsx PATH` | LAS X Excel export for analytical IRF fitting |
-| `--xlsx PATH` | LAS X export XLSX for comparison |
+| `--irf-xlsx PATH` | FLIM microscope software Excel export for analytical IRF fitting |
+| `--xlsx PATH` | FLIM microscope software export XLSX for comparison |
 | `--no-xlsx-irf` | Use XLSX for comparison only; don't use its IRF |
 | `--estimate-irf {raw,parametric,none}` | Estimate IRF from decay rising edge (default: `none`) |
 | `--irf-fwhm FLOAT` | IRF FWHM in ns |
@@ -624,7 +624,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 
 #### `irf_tools.py`
 - **`build_machine_irf_from_folder(folder, align_anchor, reducer, ...)`** - build machine IRF from paired PTU/XLSX files. Aligns to decay peak, aggregates by median, saves as `.npy` + `_meta.json`.
-- **`irf_from_xlsx_analytical(xlsx, ...)`** - fit the Leica analytical IRF model (Gaussian + exponential tail)
+- **`irf_from_xlsx_analytical(xlsx, ...)`** - fit the analytical IRF model (Gaussian + exponential tail)
 - **`gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, peak_bin)`** - generate Gaussian IRF from FWHM
 
 ---
@@ -633,7 +633,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 
 #### `signal.py`
 - **`return_phasor_from_PTUFile(ptu_file)`** - compute phasor coordinates from a PTU file
-- **`get_phasor_irf(irf_xlsx)`** - read IRF from LAS X Excel export
+- **`get_phasor_irf(irf_xlsx)`** - read IRF from FLIM microscope software Excel export
 - **`calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequency)`** - phase/modulation correction via IRF phasor
 - **`calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy, frequency)`** - calibrate using a machine IRF `.npy`. Reads companion `_meta.json` for time resolution; interpolates onto the signal time axis.
 
@@ -701,7 +701,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 - **`make_lifetime_image(canvas, output_dir, roi_name, tau_min_ns, tau_max_ns, ...)`** - colourised lifetime image with NaN-aware smoothing and gamma correction
 
 #### `xlsx_tools.py`
-- **`load_xlsx(path, debug=False)`** - parse a LAS X FLIM export XLSX. Auto-detects column layout; returns `decay_t/c`, `irf_t/c`, `fit_t/c`, `res_t/c`.
+- **`load_xlsx(path, debug=False)`** - parse a FLIM microscope FLIM export XLSX. Auto-detects column layout; returns `decay_t/c`, `irf_t/c`, `fit_t/c`, `res_t/c`.
 
 #### `xml_utils.py`
 - **`parse_xlif_tile_positions(xlif_path, ptu_basename)`** - tile positions from XLIF (microns)
@@ -758,7 +758,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │       ├── plotting.py            # Decay + pixel map plots
 │       ├── enhanced_outputs.py    # TIFF exports, summary text
 │       ├── lifetime_image.py      # Colourised lifetime images
-│       ├── xlsx_tools.py          # LAS X Excel parsing
+│       ├── xlsx_tools.py          # FLIM microscope software Excel parsing
 │       ├── xml_utils.py           # XLIF tile-position parsing
 │       ├── misc.py                # Logging helpers
 │       └── fancy.py               # Terminal banners
@@ -880,10 +880,10 @@ Check that the max drift setting isn't too restrictive. If registration looks fi
 Known limitation... Only the outer boundary is imported. Donut-shaped ROIs with holes lose the hole geometry on import.
 
 **Phasor calibration looks off**  
-Make sure the IRF file is from the same acquisition session. XLSX-based IRFs from LAS X can vary between sessions, which is why the machine IRF exists.
+Make sure the IRF file is from the same acquisition session. XLSX-based IRFs from FLIM microscope software can vary between sessions, which is why the machine IRF exists.
 
-**Lifetimes are slightly higher than LAS X for the same data**  
-This is expected and systematic. FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how LAS X places the IRF. The offset is consistent across acquisitions and does not indicate a fitting problem.
+**Lifetimes are slightly higher than FLIM microscope software for the same data**  
+This is expected and systematic. FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how FLIM microscope software places the IRF. The offset is consistent across acquisitions and does not indicate a fitting problem.
 
 ---
 

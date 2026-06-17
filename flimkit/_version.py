@@ -1,4 +1,4 @@
-__version__ = '0.9.13'
+__version__ = '0.9.14'
 fitter_version = '17'
 
 roadmap = '''Flim program roadmap:
@@ -28,5 +28,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.11 -> updated PhasorPy calls to match latest version (0.10.0) and added phasor filtering options
 0.9.12 -> changed masking to use cellpose-SAM
 0.9.13 -> added Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2)
+0.9.14 -> bug fixes galore
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

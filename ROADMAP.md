@@ -29,7 +29,7 @@ Automatic boundary detection for regions of interest based on intensity or lifet
 
 **Medium Priority:**
 - Batch FOV analysis
-- Tested full IRF support (6 methods: Leica XLSX, Machine IRF, Scatter PTU, Estimate raw, Estimate parametric, Gaussian)
+- Tested full IRF support (6 methods: FLIM microscope XLSX, Machine IRF, Scatter PTU, Estimate raw, Estimate parametric, Gaussian)
 - Keyboard shortcuts (Undo/redo, zoom, menu accelerators)
 - Better error messages (Extensive throughout codebase)
 

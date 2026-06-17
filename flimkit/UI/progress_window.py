@@ -56,7 +56,7 @@ class ProgressWindowManager:
     
     def __init__(self, root):
         self.root = root
-        self.windows = {}  # task_id -> ProgressWindow
+        self.windows = {}
         self.counter = 0
         self.lock = threading.Lock()
     

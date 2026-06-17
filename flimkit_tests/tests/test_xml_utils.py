@@ -80,7 +80,7 @@ class TestXMLUtils:
         assert n_pixels > 0
         
         # Check expected values
-        assert abs(pixel_size_m - 3e-7) < 1e-9  # Within tolerance
+        assert abs(pixel_size_m - 3e-7) < 1e-9
         assert n_pixels == 512
     
     def test_compute_tile_pixel_positions(self, mock_xlif_2x2):
@@ -99,7 +99,7 @@ class TestXMLUtils:
         )
         
         # Check canvas size (2x2 tiles, 512x512 each)
-        assert canvas_width == 1024  # 2 tiles * 512
+        assert canvas_width == 1024
         assert canvas_height == 1024
         
         # Check all tiles have pixel positions

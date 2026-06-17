@@ -15,8 +15,8 @@ INTENSITY_THRESHOLD = None
 
 
 # General fitting settings:
-Tau_min = 0.145 # ns - set to 0.145 ns to avoid fitting to the IRF peak (which is typically around 0.1-0.12 ns for a system with 97 ps bins). Adjust as needed for other systems.
-Tau_max = 45.0 # ns - set to 45 ns to allow fitting of long lifetimes. Can always manually override when running the code.
+Tau_min = 0.145
+Tau_max = 45.0
 
 # Set default fitting mode. Options are "summed", "perPixel", and "both". Override with --mode when running the code.
 D_mode = 'both'
@@ -35,13 +35,13 @@ lm_restarts = 8
 # Default settings for DE optimizer:
 de_population = 30
 de_maxiter = 5000
-n_workers = -1 # Use all available CPU cores for DE optimization. Override with --workers when running the code.
+n_workers = -1
 
 # IRF settings:
-IRF_FWHM = None # Set to None to use the default of 1 bin width from the PTU file (e.g. 0.097 ns for 97 ps bins). Override with --irf-fwhm when running the code.
-IRF_FIT_WIDTH = 1.5 # ns - width of the region around time zero to use for fitting the IRF. Adjust as needed for other systems.
-IRF_BINS = 21 # Number of bins to use for the IRF when fitting with the "summed" mode. Adjust as needed for other systems and bin widths. Should be an odd number to have a bin centered on time zero.
-Estimate_IRF = 'none' # Options are "raw", "parametric", and "none". Set to "raw" to use the raw IRF from the data, "parametric" to fit a parametric function to the IRF, or "none" to not estimate the IRF (e.g. if you have a separate IRF file or are using a system with a very narrow IRF that doesn't need to be accounted for). Override with --estimate-irf when running the code.
+IRF_FWHM = None
+IRF_FIT_WIDTH = 1.5
+IRF_BINS = 21
+Estimate_IRF = 'none'
 
 # Machine IRF defaults (spreadsheet-free workflow)
 
@@ -68,14 +68,14 @@ MACHINE_IRF_DEFAULT_PATH = (
     if _is_frozen
     else _BUNDLED_MACHINE_IRF_DIR / 'machine_irf_default.npy'
 )
-MACHINE_IRF_ALIGN_ANCHOR = 'peak'   # learned Leica-style placement anchor
-MACHINE_IRF_REDUCER = 'median'      # aggregation across paired IRFs
-MACHINE_IRF_FIT_STRATEGY = 'fixed'  # notebook-chosen default: fixed machine IRF
+MACHINE_IRF_ALIGN_ANCHOR = 'peak'
+MACHINE_IRF_REDUCER = 'median'
+MACHINE_IRF_FIT_STRATEGY = 'fixed'
 MACHINE_IRF_FIT_BG = True
 MACHINE_IRF_FIT_SIGMA = False
 MACHINE_IRF_FIT_TAIL = False
-MACHINE_IRF_SIGMA_MAX_FULL = 3.0    # σ upper bound for "full sigma" mode (bins)
-MACHINE_IRF_SIGMA_MAX_HALF = 0.5    # σ upper bound for "half sigma" mode (bins)
+MACHINE_IRF_SIGMA_MAX_FULL = 3.0
+MACHINE_IRF_SIGMA_MAX_HALF = 0.5
 MACHINE_IRF_DE_POPULATION = 30
 MACHINE_IRF_DE_MAXITER = 5000
 
@@ -84,28 +84,28 @@ MACHINE_IRF_DE_MAXITER = 5000
 # "chi2" normalises by peak and uses Neyman weights - underweights the tail.
 Cost_function = 'poisson'
 
-# Display range for exported tau images (Leica LAS X-style clipping).
-# Out-of-range pixels are clipped to the nearest boundary, matching LAS X behaviour.
+# Display range for exported tau images (FLIM microscope clipping).
+# Out-of-range pixels are clipped to the nearest boundary, matching FLIM microscope software behaviour.
 # Set to None to keep the full fitted range (no clipping).
-TAU_DISPLAY_MIN = None   # ns - minimum lifetime for weighted-tau images
-TAU_DISPLAY_MAX = None   # ns - maximum lifetime for weighted-tau images
+TAU_DISPLAY_MIN = None
+TAU_DISPLAY_MAX = None
 
 # Display range for exported intensity images (same clipping behaviour).
 # Set to None to keep the full range.
-INTENSITY_DISPLAY_MIN = None  # photon counts - minimum intensity
-INTENSITY_DISPLAY_MAX = None  # photon counts - maximum intensity
+INTENSITY_DISPLAY_MIN = None
+INTENSITY_DISPLAY_MAX = None
 
 # Phasor-domain spatial filtering applied after calibration.
 # Set to None to disable.  Options: None, 'gaussian', 'median', 'wavelet'.
-PHASOR_FILTER = None          # filter method
-PHASOR_FILTER_SIGMA = 1.0     # Gaussian sigma (pixels)
-PHASOR_FILTER_SIZE = 3        # median kernel size (pixels)
-PHASOR_FILTER_WAVELET = 'db4' # wavelet family for wavelet denoising
-PHASOR_FILTER_LEVEL = 1       # wavelet decomposition level
+PHASOR_FILTER = None
+PHASOR_FILTER_SIGMA = 1.0
+PHASOR_FILTER_SIZE = 3
+PHASOR_FILTER_WAVELET = 'db4'
+PHASOR_FILTER_LEVEL = 1
 
 # Other specific settings:
-channels = None # Set to None to fit all channels in the PTU file. Override with --channel when running the code.
-OUT_NAME = 'flim_out' # Default output directory name. Override with --out when running the code.
+channels = None
+OUT_NAME = 'flim_out'
 
 
 config_message = f"""Default settings:

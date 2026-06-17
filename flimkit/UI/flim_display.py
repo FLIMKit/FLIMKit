@@ -23,7 +23,7 @@ def compute_intensity_weighted_lifetime(
         # Amplitude-weighted mean tau already computed per-pixel (tile_fit / assemble path)
         arr = np.asarray(pixel_maps['tau_mean_amp'], dtype=np.float32)
         arr = arr.copy()
-        arr[arr == 0] = np.nan  # zero-filled background → NaN (shows as black)
+        arr[arr == 0] = np.nan
         return arr
 
     shape = intensity.shape
@@ -32,7 +32,7 @@ def compute_intensity_weighted_lifetime(
 
     # Sum amplitude-weighted lifetimes - key format is 'tau1', 'tau2', ... (no underscore)
     for i in range(1, n_exp + 1):
-        tau_key = f'tau{i}'   # was incorrectly f'tau_{i}'
+        tau_key = f'tau{i}'
         amp_key = f'a{i}'
 
         if tau_key in pixel_maps and amp_key in pixel_maps:
@@ -136,8 +136,8 @@ def mask_to_rgba(
     alpha=0.3,
 ):
     rgba = np.zeros((*mask.shape, 4), dtype=np.float32)
-    rgba[mask, 0] = color[0]  # R
-    rgba[mask, 1] = color[1]  # G
-    rgba[mask, 2] = color[2]  # B
-    rgba[mask, 3] = alpha     # A
+    rgba[mask, 0] = color[0]
+    rgba[mask, 1] = color[1]
+    rgba[mask, 2] = color[2]
+    rgba[mask, 3] = alpha
     return rgba

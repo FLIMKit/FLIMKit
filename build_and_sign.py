@@ -77,7 +77,7 @@ def prepare_icon(source_png):
             print("Warning: Pillow not installed; cannot create ICO. Using PNG (may not work).")
             return source_png
 
-    else:  # Linux
+    else:
         return source_png
 
 
@@ -145,7 +145,7 @@ def build_app():
         sys.executable,
         "-m",
         "PyInstaller",
-        "--noconfirm",   # skip the interactive "will be REMOVED" prompt
+        "--noconfirm",
         "--name", APP_NAME,
         "--windowed",
         "--copy-metadata", "readchar",
@@ -154,8 +154,8 @@ def build_app():
         "--copy-metadata", "tkinterdnd2",
         "--copy-metadata", "TKinterModernThemes",
         "--collect-data", "TKinterModernThemes",
-        "--collect-data", "scipy",   # bundles .npz data files (sobol etc.)
-        "--collect-data", "numpy",   # bundles numpy data files
+        "--collect-data", "scipy",
+        "--collect-data", "numpy",
         "--hidden-import", "tkinter",
         "--hidden-import", "tkinter.ttk",
         "--hidden-import", "PIL",
@@ -202,7 +202,7 @@ def build_app():
             "--hidden-import", "torch.nn.functional",
             "--hidden-import", "torch.linalg",
         ]
-        if system == "Linux" and torch.cuda.is_available():
+        if system in ("Linux", "Windows") and torch.cuda.is_available():
             try:
                 import nvidia
                 cmd += ["--collect-binaries", "nvidia"]
@@ -215,7 +215,7 @@ def build_app():
                 pass
             print(f"  CUDA detected ({torch.cuda.get_device_name(0)}) — bundling CUDA torch")
         else:
-            print("  torch detected — bundling CPU torch for cellpose")
+            print("  torch detected — bundling CPU/MPS torch")
     except ImportError:
         print("  torch not found — cellpose will not work in frozen app")
 

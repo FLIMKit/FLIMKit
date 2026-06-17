@@ -11,7 +11,7 @@ from mock_data import (
     generate_test_project,
     generate_synthetic_decay,
     MockPTUFile,
-    MOCK_IRF_CENTER,   # IRF peak bin used by MockPTUFile (= 30)
+    MOCK_IRF_CENTER,
 )
 
 
@@ -73,7 +73,7 @@ class TestCompleteStitchingPipeline:
             assert result['metadata_path'].exists()
             
             # Verify dimensions
-            assert result['canvas_shape'] == (128, 128)  # 2x2 * 512
+            assert result['canvas_shape'] == (128, 128)
             assert result['n_time_bins'] == 128
             assert result['tiles_processed'] == 4
             
@@ -98,7 +98,7 @@ class TestCompleteStitchingPipeline:
             )
             
             # Verify 3x3 dimensions
-            assert result['canvas_shape'] == (192, 192)  # 3x3 * 512
+            assert result['canvas_shape'] == (192, 192)
             assert result['tiles_processed'] == 9
             
         except ImportError:
@@ -197,7 +197,7 @@ class TestCompleteFittingPipeline:
                     n_tiles=4,
                     layout="2x2",
                     mean_photons=500,
-                    n_bins=256)  # 24.8 ns window; wrap ~0.025%
+                    n_bins=256)
                 
                 output_dir = project['base_dir'] / "stitched"
                 
@@ -236,7 +236,7 @@ class TestCompleteFittingPipeline:
                 n_bins=n_bins,
                 tcspc_res=tcspc_res,
                 fwhm_ns=0.3,
-                peak_bin=MOCK_IRF_CENTER   # must match MockPTUFile (bin 30)
+                peak_bin=MOCK_IRF_CENTER
             )
             
             # Fit (using simple settings for speed).
@@ -248,7 +248,7 @@ class TestCompleteFittingPipeline:
                 has_tail=False,
                 fit_bg=True,
                 fit_sigma=False,
-                n_exp=2,  # Bi-exp to match mock data
+                n_exp=2,
                 tau_min_ns=0.1,
                 tau_max_ns=10.0,
                 optimizer="de",
@@ -267,7 +267,7 @@ class TestCompleteFittingPipeline:
             
             # Check chi2r is reasonable
             chi2r = summary['reduced_chi2_tail']
-            assert 0.5 < chi2r < 10.0  # Reasonable fit quality (bi-exp)
+            assert 0.5 < chi2r < 10.0
             
         except ImportError as e:
             pytest.skip(f"Required module not available: {e}")
@@ -374,8 +374,8 @@ class TestInteractiveFunctions:
             args.nexp = 1
             args.tau_min = 0.1
             args.tau_max = 10.0
-            args.mode = "summed"  # Faster
-            args.binning = 2  # Faster
+            args.mode = "summed"
+            args.binning = 2
             args.min_photons = 50
             args.optimizer = "lm_multistart"
             args.restarts = 2
@@ -387,7 +387,7 @@ class TestInteractiveFunctions:
             args.irf_fwhm = 0.3
             args.irf_bins = 50
             args.irf_fit_width = 1.5
-            args.no_plots = True  # Skip plotting for tests
+            args.no_plots = True
             
             # Run complete workflow
             _run_stitch_and_fit(args)
@@ -624,8 +624,8 @@ class TestPerTileFitPipeline:
     """
 
     N_BINS  = 256
-    TCSPC   = 97e-12   # seconds per bin
-    TILE_H  = 64       # small tiles for speed
+    TCSPC   = 97e-12
+    TILE_H  = 64
     TILE_W  = 64
 
     #  helpers 
@@ -688,18 +688,18 @@ class TestPerTileFitPipeline:
         
         # Create synthetic pooled decay (1024 bins)
         pooled_decay = np.random.exponential(scale=100, size=1024).astype(np.float32)
-        pooled_decay = np.maximum(pooled_decay, 1.0)  # Ensure positivity
+        pooled_decay = np.maximum(pooled_decay, 1.0)
         
         # Create synthetic pooled IRF
         pooled_irf = np.random.exponential(scale=10, size=1024).astype(np.float32)
-        pooled_irf = pooled_irf / pooled_irf.sum()  # Normalize to probability
+        pooled_irf = pooled_irf / pooled_irf.sum()
         
         # Use standard TCSPC resolution (~50 ps/bin)
-        tcspc_ref = 50e-12  # 50 ps in seconds
+        tcspc_ref = 50e-12
         
         # Create synthetic global_popt (number of params varies with n_exp)
         # Standard exponential fit: tau + amplitude + bg + sigma + irf_shift
-        n_params = 2 * n_exp + 3  # taus + amplitudes + bg + sigma + irf_shift
+        n_params = 2 * n_exp + 3
         global_popt = np.random.uniform(0.5, 5.0, n_params).astype(np.float32)
         
         # Use global_summary from first tile result

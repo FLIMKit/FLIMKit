@@ -30,7 +30,7 @@ class TestDecode:
         from flimkit.PTU.decode import create_time_axis
         
         n_bins = 256
-        tcspc_res = 97e-12  # 97 ps
+        tcspc_res = 97e-12
         
         time_axis = create_time_axis(n_bins, tcspc_res)
         
@@ -39,8 +39,8 @@ class TestDecode:
         
         # Check values
         assert time_axis[0] == 0.0
-        assert abs(time_axis[1] - 0.097) < 0.001  # 97 ps in ns
-        assert abs(time_axis[-1] - 24.7) < 0.1    # ~25 ns total
+        assert abs(time_axis[1] - 0.097) < 0.001
+        assert abs(time_axis[-1] - 24.7) < 0.1
         
         # Check monotonic increasing
         assert np.all(np.diff(time_axis) > 0)
@@ -77,8 +77,8 @@ class TestDecode:
         assert np.sum(decay) > 0
         
         # Check decay shape (should have a peak and decay)
-        assert np.argmax(decay) > 0  # Peak not at first bin
-        assert np.argmax(decay) < len(decay) - 1  # Peak not at last bin
+        assert np.argmax(decay) > 0
+        assert np.argmax(decay) < len(decay) - 1
     
     def test_pixel_stack(self, mock_ptu):
         """Test pixel stack extraction."""
@@ -108,7 +108,7 @@ class TestDecode:
         
         # Check total photons are conserved
         stack_full = mock_ptu.pixel_stack(binning=1)
-        assert abs(stack.sum() - stack_full.sum()) < 1  # Within rounding
+        assert abs(stack.sum() - stack_full.sum()) < 1
     
     def test_histogram_properties(self, mock_ptu):
         """Test that histogram has realistic FLIM properties."""
@@ -125,7 +125,7 @@ class TestDecode:
         tail = decay[peak_idx:]
         # Check that values generally decrease (allowing some noise)
         decreasing_ratio = np.sum(np.diff(tail) < 0) / len(np.diff(tail))
-        assert decreasing_ratio > 0.7  # Most bins should decrease
+        assert decreasing_ratio > 0.7
 
 
 class TestDecodeIntegration:
@@ -196,7 +196,7 @@ def test_estimate_bg_from_histogram():
     from flimkit.FLIM.fit_tools import estimate_bg_from_histogram
     
     # Create synthetic histogram with known background
-    hist = np.random.poisson(5, size=(512, 512, 256))  # bg=5
+    hist = np.random.poisson(5, size=(512, 512, 256))
     
     # Add decay on top
     hist[:, :, 50:150] += np.random.poisson(100, size=(512, 512, 100))
@@ -204,7 +204,7 @@ def test_estimate_bg_from_histogram():
     bg = estimate_bg_from_histogram(hist, pre_bins=20)
     
     # Should be close to 5
-    assert 3 < bg < 7  # Allow some variation due to Poisson
+    assert 3 < bg < 7
 
 
 if __name__ == "__main__":
@@ -223,7 +223,7 @@ class TestPTUWriteRead:
         ny, nx, nb = 8, 8, 64
         histogram = np.random.poisson(10, size=(ny, nx, nb)).astype(np.uint32)
         tcspc_res = 97e-12
-        frequency = 19.5e6
+        frequency = 1.0 / ((nb - 0.5) * tcspc_res)
 
         ptu_path = tmp_path / "test.ptu"
         n_records = PTUFile.write(ptu_path, histogram, tcspc_res, frequency, channel=1)
@@ -257,7 +257,7 @@ class TestPTUWriteRead:
         ny, nx, nb = 8, 8, 64
         histogram = np.random.poisson(10, size=(ny, nx, nb)).astype(np.uint32)
         tcspc_res = 97e-12
-        frequency = 19.5e6
+        frequency = 1.0 / ((nb - 0.5) * tcspc_res)
 
         ptu_path = tmp_path / "test.ptu"
         n_records = PTUFile.write(ptu_path, histogram, tcspc_res, frequency, channel=1)

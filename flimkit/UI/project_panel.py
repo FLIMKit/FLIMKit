@@ -3,12 +3,12 @@ from tkinter import ttk, filedialog
 from pathlib import Path
 
 
-_ICON_FIT_ONLY    = '●'   # fit session only
-_ICON_PHASOR_ONLY = '◐'   # phasor session only
-_ICON_BOTH        = '◉'   # both fit + phasor
-_ICON_NOSESSION   = '○'   # no session yet
+_ICON_FIT_ONLY    = '●'
+_ICON_PHASOR_ONLY = '◐'
+_ICON_BOTH        = '◉'
+_ICON_NOSESSION   = '○'
 _ICON_FOV  = 'F'
-_ICON_XLIF = 'T'       # T for Tiled
+_ICON_XLIF = 'T'
 
 
 class ProjectBrowserPanel:
@@ -30,12 +30,12 @@ class ProjectBrowserPanel:
         self._width = width
 
         self._project = None
-        self._stems   = []   # parallel to Listbox rows
+        self._stems   = []
 
         self.frame = ttk.Frame(parent, width=width)
         self.frame.grid_propagate(False)
         self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(1, weight=1)   # listbox expands
+        self.frame.rowconfigure(1, weight=1)
 
         hdr = ttk.Frame(self.frame)
         hdr.grid(row=0, column=0, sticky='ew', padx=4, pady=(6, 2))
@@ -126,7 +126,7 @@ class ProjectBrowserPanel:
             return
         from flimkit.project import ProjectFile
         self._project = ProjectFile.load_or_create(Path(folder))
-        self._project.save()   # write project.json immediately
+        self._project.save()
         if self._project.config:
             from flimkit.utils.config_manager import cfg
             cfg.load_project_overrides(self._project.config)

@@ -367,8 +367,8 @@ def test_complete_workflow():
                 )
 
                 assert summary is not None, "Fit failed"
-                taus   = summary['taus_ns']        # sorted descending
-                chi2_r = summary['reduced_chi2_tail_pearson']  # Leica X2
+                taus   = summary['taus_ns']
+                chi2_r = summary['reduced_chi2_tail_pearson']
 
                 # Ground-truth comparison (15 % for realistic photon count)
                 rel_long  = abs(taus[0] - MOCK_TAU2_NS) / MOCK_TAU2_NS
@@ -406,8 +406,8 @@ def test_phasor_pipeline():
         shape = (64, 64)
         # Single-exponential → point ON the semicircle
         tau_ns = 2.5
-        frequency = 40.0  # MHz
-        omega = 2 * np.pi * frequency * 1e-3  # rad/ns
+        frequency = 40.0
+        omega = 2 * np.pi * frequency * 1e-3
         g_true = 1 / (1 + (omega * tau_ns) ** 2)
         s_true = omega * tau_ns / (1 + (omega * tau_ns) ** 2)
 
@@ -494,7 +494,7 @@ def check_gpu_backend():
         if backend is None:
             print_warning("No GPU backend available — GPU path will not be used")
             print_warning("Install mlx (Apple Silicon) or torch (CUDA) for GPU support")
-            return True  # not a hard failure
+            return True
 
         backend_name = type(backend).__name__
         print_success(f"GPU backend detected: {backend_name}")
@@ -516,7 +516,7 @@ def check_gpu_backend():
         irf = gaussian_irf_from_fwhm(N_BINS, TCSPC, irf_fwhm_ns, MOCK_IRF_CENTER)
 
         pixel = generate_synthetic_biexp_decay(N_BINS, TCSPC, peak_counts=5_000, noise=True)
-        stack = np.broadcast_to(pixel, (NY, NX, N_BINS)).copy()   # (NY, NX, N_BINS)
+        stack = np.broadcast_to(pixel, (NY, NX, N_BINS)).copy()
 
         # Approximate global fit result: [tau1, tau2, amp1, amp2, shift]
         TAU1_S = 0.5e-9; TAU2_S = 3.0e-9

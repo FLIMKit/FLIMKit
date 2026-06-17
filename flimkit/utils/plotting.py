@@ -10,7 +10,7 @@ from flimkit.configs import FLIM_CMAP
 try:
     matplotlib.use('Agg', force=True)
 except Exception:
-    pass  # If backend switching fails, continue anyway
+    pass
 
 
 # rcParams for file exports - overrides any dark-theme globals set by the GUI
@@ -48,7 +48,7 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
     if irf_prompt is not None:
         scale      = decay.max() * 0.1 / irf_prompt.max()
         irf_scaled = irf_prompt * scale
-        irf_mask   = irf_scaled > irf_scaled.max() * 1e-3   # only plot non-negligible
+        irf_mask   = irf_scaled > irf_scaled.max() * 1e-3
         t_irf_plot = t_ns[irf_mask]
         v_irf_plot = irf_scaled[irf_mask]
         ax1.semilogy(t_irf_plot, v_irf_plot,
@@ -57,7 +57,7 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
 
     if xlsx is not None and xlsx.get('fit_t') is not None and xlsx.get('fit_c') is not None:
         ax1.semilogy(xlsx['fit_t'], np.clip(xlsx['fit_c'], 1, None),
-                     'b-', lw=1.1, alpha=0.55, label='LAS X fit')
+                     'b-', lw=1.1, alpha=0.55, label='FLIM microscope fit')
     ax1.semilogy(t_ns, np.clip(s['model'], 1, None), 'r-', lw=2,
                  label=f"{n_exp}-exp reconv.")
     ax1.set_xlim(0, min(t_ns[-1], 22))
@@ -85,8 +85,8 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
 
     p_val = s.get('p_val')
     p_line = f"p    = {p_val:.4f}" if p_val is not None else ""
-    lines = [f"χ²_r = {s['reduced_chi2_pearson']:.4f}  (Leica)",
-             f"χ²_r(tail) = {s['reduced_chi2_tail_pearson']:.4f}  (Leica)",
+    lines = [f"χ²_r = {s['reduced_chi2_pearson']:.4f}  (Pearson)",
+             f"χ²_r(tail) = {s['reduced_chi2_tail_pearson']:.4f}  (Pearson)",
              p_line,
              f"bg   = {s['bg_fit']:.1f} cts/bin",
              f"τ_mean(int) = {s['tau_mean_int_ns']:.4f} ns",
@@ -104,7 +104,7 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
              va='top', fontsize=9, family='monospace',
              bbox=dict(boxstyle='round,pad=0.4', fc='#f7f7f7', alpha=0.9))
 
-    plt.suptitle('FLIM Reconvolution Fit - Leica FALCON / PicoHarp',
+    plt.suptitle('FLIM Reconvolution Fit - FLIM microscope / PicoHarp',
                  fontsize=12, fontweight='bold')
     out = f"{out_prefix}_summed_{n_exp}exp.png"
     plt.savefig(out, dpi=150, bbox_inches='tight')

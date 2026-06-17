@@ -27,7 +27,8 @@ def _try_mlx():
     try:
         import mlx.core as mx  # noqa: F401
         gpu = mx.Device(mx.gpu)
-        mx.eval(mx.array([1.0], device=gpu))  # confirm Metal is actually usable
+        with mx.stream(gpu):
+            mx.eval(mx.array([1.0]) + 1)  
     except Exception:
         return None
     from flimkit.GPU.mlx_backend import MLXBackend
@@ -50,7 +51,6 @@ def _try_torch(name):
             return None
         device = 'mps'
     elif name == 'rocm':
-        # ROCm uses the same CUDA API in PyTorch; tell them apart by device name
         if not torch.cuda.is_available():
             return None
         name_str = torch.cuda.get_device_name(0).lower()

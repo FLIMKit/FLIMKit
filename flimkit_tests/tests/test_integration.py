@@ -88,11 +88,11 @@ class TestFittingWorkflow:
         
         # Check it has a peak
         peak_idx = np.argmax(synthetic_decay)
-        assert 10 < peak_idx < 50  # IRF delay region
+        assert 10 < peak_idx < 50
         
         # Check it decays after peak
         tail = synthetic_decay[peak_idx:]
-        assert tail[-1] < tail[0]  # Decreases
+        assert tail[-1] < tail[0]
     
     def test_synthetic_decay_multiexp(self):
         """Test generating multi-exponential decays."""
@@ -158,8 +158,8 @@ class TestMemoryEfficiency:
             # Check file exists and has reasonable size
             assert memmap_file.exists()
             file_size_mb = memmap_file.stat().st_size / (128 * 128)
-            expected_size_mb = (np.prod(large_shape) * 4) / (128 * 128)  # 4 bytes per uint32
-            assert abs(file_size_mb - expected_size_mb) < 1  # Within 1 MB
+            expected_size_mb = (np.prod(large_shape) * 4) / (128 * 128)
+            assert abs(file_size_mb - expected_size_mb) < 1
 
 
 class TestEndToEnd:
@@ -237,17 +237,17 @@ class TestErrorHandling:
         # This would test the tiles_skipped counter
         # When PTU files are missing, stitching should continue
         # and report skipped tiles
-        pass  # Implement based on actual stitch_flim_tiles
+        pass
     
     def test_time_bin_mismatch(self):
         """Test handling of tiles with different time bins."""
         # Should pad/crop to match first tile
-        pass  # Implement based on actual stitch_flim_tiles
+        pass
     
     def test_zero_photon_fitting(self):
         """Test fitting with zero photon pixels."""
         # Should skip pixels with < min_photons
-        pass  # Implement based on actual fit_per_pixel
+        pass
 
 
 class TestPerformance:
@@ -267,7 +267,7 @@ class TestPerformance:
                 temp_path / "test.xlif",
                 n_tiles=4,
                 layout="2x2",
-                tile_size=32          # 32×32 pixels
+                tile_size=32
             )
     
             # Create PTU directory with 4 tiny tiles
@@ -278,8 +278,8 @@ class TestPerformance:
                 ptu_basename="R 2",
                 n_tiles=4,
                 tile_shape=(32, 32),
-                n_bins=64,            # only 64 time bins
-                mean_photons=50       # low photon count (needs mock_data change)
+                n_bins=64,
+                mean_photons=50
             )
     
             output_dir = temp_path / "output"
@@ -453,7 +453,7 @@ class TestMemoryEfficiency:
             roi_name="R 2",
             n_tiles=16,
             layout="4x4",
-            tile_shape=(128, 128),  # 128x128 per tile → 512x512 canvas
+            tile_shape=(128, 128),
             n_bins=256,
             mean_photons=100,
         )
@@ -466,7 +466,7 @@ class TestMemoryEfficiency:
 
         # Measure memory before
         gc.collect()
-        mem_before = psutil.Process().memory_info().rss / 1024**2  # MB
+        mem_before = psutil.Process().memory_info().rss / 1024**2
 
         # Stitch with memmap
         result = stitch_flim_tiles(
@@ -495,7 +495,7 @@ class TestMemoryEfficiency:
         _ = flim[300:400, 300:400, :].mean()
 
         # Ensure the memmap file is correctly sized
-        expected_size = 512 * 512 * 256 * 4  # uint32 = 4 bytes
+        expected_size = 512 * 512 * 256 * 4
         actual_size = Path(flim_path).stat().st_size
         assert actual_size == expected_size
 

@@ -5,15 +5,15 @@ import xml.etree.ElementTree as ET
 
 
 # Ground-truth constants (also used by MockPTUFile._generate_synthetic_data)
-MOCK_TAU1_NS       = 0.5     # Short component lifetime (ns)
-MOCK_TAU2_NS       = 3.0     # Long component lifetime (ns)
-MOCK_AMP1          = 0.6     # Amplitude fraction of τ₁
-MOCK_AMP2          = 0.4     # Amplitude fraction of τ₂
-MOCK_IRF_CENTER    = 30      # IRF peak (bin index)
-MOCK_IRF_FWHM_BINS = 3.0    # IRF FWHM in bins
-MOCK_TCSPC_RES     = 97e-12  # Default TCSPC resolution (s)
-MOCK_FREQUENCY     = 19.5e6  # Default laser repetition rate (Hz)
-MOCK_MEAN_PHOTONS  = 500     # Mean photons per pixel
+MOCK_TAU1_NS       = 0.5
+MOCK_TAU2_NS       = 3.0
+MOCK_AMP1          = 0.6
+MOCK_AMP2          = 0.4
+MOCK_IRF_CENTER    = 30
+MOCK_IRF_FWHM_BINS = 3.0
+MOCK_TCSPC_RES     = 97e-12
+MOCK_FREQUENCY     = 19.5e6
+MOCK_MEAN_PHOTONS  = 500
 
 
 class MockPTUFile:
@@ -34,7 +34,7 @@ class MockPTUFile:
             self.n_bins = data['stack'].shape[2]
             self.tcspc_res = data['tcspc_res']
             self.frequency = data['frequency']
-            self.sync_rate = data['frequency']       # alias used by decode
+            self.sync_rate = data['frequency']
             self.time_ns = np.arange(self.n_bins) * self.tcspc_res * 1e9
             self.photon_channel = 1
             self._stack = data['stack'].astype(np.float32)
@@ -44,9 +44,9 @@ class MockPTUFile:
             self.n_x = kwargs.get('n_x', 512)
             self.n_bins = kwargs.get('n_bins', 256)
             self.tcspc_res = kwargs.get('tcspc_res', 97e-12)
-            self.frequency = kwargs.get('frequency', 19.5e6)
+            self.frequency = kwargs.get('frequency', 1.0 / ((self.n_bins - 0.5) * self.tcspc_res))
             self.mean_photons = kwargs.get('mean_photons', 500)
-            self.sync_rate = self.frequency              # alias used by decode
+            self.sync_rate = self.frequency
             self.time_ns = np.arange(self.n_bins) * self.tcspc_res * 1e9
             self.photon_channel = 1
             self._generate_synthetic_data()
@@ -451,9 +451,9 @@ def load_mock_ptu_file(ptu_path: Path):
 
 
 # Ground-truth FRET parameters used throughout the FRET test suite.
-MOCK_FRET_FREQ   = 80.0   # MHz  - laser repetition rate
-MOCK_FRET_TAU_D  = 4.0    # ns   - unquenched donor lifetime
-MOCK_FRET_TAU_A  = 3.0    # ns   - acceptor lifetime
+MOCK_FRET_FREQ   = 80.0
+MOCK_FRET_TAU_D  = 4.0
+MOCK_FRET_TAU_A  = 3.0
 
 
 def fret_donor_phasor_truth(efficiency):

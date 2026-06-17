@@ -74,10 +74,10 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     bg_fixed = bg_init if not fit_bg else 0.0
 
     fit_end   = find_fit_end(decay_work, peak_bin, tau_max, tcspc_res, n_bins)
-    fit_start = 1    # match Leica: skip bin 0
+    fit_start = 1
 
-    leica_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
-    fit_end = min(fit_end, leica_fit_end)
+    standard_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
+    fit_end = min(fit_end, standard_fit_end)
 
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
 
@@ -106,7 +106,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             return (model_vals[fit_start:fit_end]
                     - decay_work[fit_start:fit_end]) / weights
 
-    else:  # poisson
+    else:
         def residuals(params):
             model_vals = reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
@@ -402,7 +402,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 np.fft.fft(np.exp(-t_axis / max(tau, 1e-15))) * _irf_fft_g))
             for tau in tau_grid
         ])  
-        bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)  # (N_GRID,)
+        bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)
 
         for yi in tqdm(range(ny), desc='  Per-pixel rows', disable=True):
             if progress_callback is not None:
@@ -611,8 +611,8 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     bg_fixed  = bg_init if not fit_bg else 0.0
     fit_end   = find_fit_end(decay_work, peak_bin, tau_max, tcspc_res, n_bins)
     fit_start = 1
-    leica_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
-    fit_end = min(fit_end, leica_fit_end)
+    standard_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
+    fit_end = min(fit_end, standard_fit_end)
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
     print(f"  Cost function: {cost_function}")
     print(f"  bg initial guess = {bg_init:.3f} cts/bin, upper bound = {bg_upper:.3f} "
