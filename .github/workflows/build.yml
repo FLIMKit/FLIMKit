@@ -57,8 +57,6 @@ jobs:
           python -c "import sys; print('Python:', sys.version)"
           python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 'Python >= 3.12 required for phasorpy==0.9')"
 
-      # CPU-only torch on every platform — keeps the bundled binaries small and
-      # avoids the multi-GB CUDA build (which blew past the zip/release size limits).
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -66,7 +64,6 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      # tkinter is not bundled with the GitHub Actions Python on Ubuntu or macOS
       - name: Install tkinter + libGL (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y python3-tk libgl1
@@ -75,38 +72,23 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install python-tk@3.14
 
-      # build_and_sign.py handles:
-      #   - mpl-cache generation (generate_mpl_cache)
-      #   - icon conversion (prepare_icon)
-      #   - PyInstaller invocation with all flags (build_app)
-      #     including --onedir on macOS and --onefile on Linux/Windows
-      #   - self-signed codesign on macOS (sign_macos)
-      #   - GPG signing on Linux if GPG_KEY_ID is set (sign_linux)
-      #   - signtool signing on Windows if certs are set (sign_windows)
       - name: Build and sign
         run: python build_and_sign.py
         env:
-          # Force UTF-8 output on Windows runners (default is cp1252, which
-          # can't encode the unicode characters used in print statements)
+
           PYTHONUTF8: "1"
-          # macOS signing (optional — only needed for Developer ID / notarization)
           APPLE_TEAM_ID:       ${{ secrets.APPLE_TEAM_ID }}
           APPLE_DEVELOPER_ID:  ${{ secrets.APPLE_DEVELOPER_ID }}
           APPLE_ID:            ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD:  ${{ secrets.APPLE_APP_PASSWORD }}
-          # Windows signing (optional — build succeeds without these)
           WINDOWS_CERT_PATH:     ${{ secrets.WINDOWS_CERT_PATH }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-          # Linux GPG signing (optional — build succeeds without this)
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
 
-      #  Packaging 
-      # macOS: PyInstaller produces a .app bundle (--onedir); zip it for upload
       - name: Package macOS app bundle
         if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent dist/FLIMKit.app dist/FLIMKit-macos.zip
 
-      # Linux / Windows: --onefile produces a single binary; zip for consistency
       - name: Package Linux binary
         if: runner.os == 'Linux'
         run: zip -j dist/FLIMKit-linux.zip dist/FLIMKit
