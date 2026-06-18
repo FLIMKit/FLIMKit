@@ -2,42 +2,35 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 
-
-def coates_pileup_correction(decay: np.ndarray, n_sync: int) -> np.ndarray:
+def coates_pileup_correction(decay: np.ndarray, n_sync: int):
     m = np.asarray(decay, dtype=float)
     n_s = float(n_sync)
-
     cumulative = np.concatenate([[0.0], np.cumsum(m[:-1])])
     denom = n_s - cumulative
-
     # Argument of log: 1 - M(t)/(N_s - C(t))
-    # Use np.errstate to suppress divide-by-zero/invalid warnings from np.where
-    # evaluating both branches eagerly - guarded values are replaced by 0.0 anyway.
     with np.errstate(divide='ignore', invalid='ignore'):
         ratio = np.where(denom > 0, m / denom, 0.0)
-        arg   = 1.0 - ratio
-        safe  = arg > 0.0
+        arg = 1.0 - ratio
+        safe = arg > 0.0
         corrected = np.where(safe, -n_s * np.log(arg), 0.0)
     return corrected
 
-def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5) -> int:
-    smoothed  = gaussian_filter1d(decay.astype(float), sigma=smooth_sigma)
-    deriv     = np.gradient(smoothed)
+def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5):
+    smoothed = gaussian_filter1d(decay.astype(float), sigma=smooth_sigma)
+    deriv = np.gradient(smoothed)
     # Only search in the first half of the histogram (rising edge region)
-    half      = len(decay) // 2
-    peak_bin  = int(np.argmax(deriv[:half]))
+    half = len(decay) // 2
+    peak_bin = int(np.argmax(deriv[:half]))
     return peak_bin
 
-
-def estimate_bg(decay: np.ndarray, peak_bin: int, pre_gap: int = 5) -> float:
-    end    = max(0, peak_bin - pre_gap)
+def estimate_bg(decay: np.ndarray, peak_bin: int, pre_gap: int = 5):
+    end = max(0, peak_bin - pre_gap)
     region = decay[:end]
     if len(region) >= 5:
         return max(float(np.median(region)), 0.0)
     return max(float(np.median(decay[-30:])), 0.0)
 
 def estimate_bg_from_histogram(hist, pre_bins=20):
-    # Average over all pixels and the first pre_bins bins
     if hist.ndim == 3:
         bg_region = hist[..., :pre_bins].mean()
     else:
@@ -45,23 +38,23 @@ def estimate_bg_from_histogram(hist, pre_bins=20):
     return float(bg_region)
 
 def find_fit_start(decay: np.ndarray, irf_prompt: np.ndarray,
-                   tcspc_res: float, pre_bins: int = 5) -> int:
-    threshold    = irf_prompt.max() * 1e-3
-    onset_bins   = np.where(irf_prompt >= threshold)[0]
+                   tcspc_res: float, pre_bins: int = 5):
+    threshold = irf_prompt.max() * 1e-3
+    onset_bins = np.where(irf_prompt >= threshold)[0]
     if len(onset_bins) == 0:
         return 0
-    onset        = int(onset_bins[0])
-    fit_start    = max(0, onset - pre_bins)
+    onset = int(onset_bins[0])
+    fit_start = max(0, onset - pre_bins)
     return fit_start
 
 
-def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins) -> int:
-    candidate    = min(n_bins, peak_bin + int(6.0 * tau_max_s / tcspc_res))
+def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins):
+    candidate = min(n_bins, peak_bin + int(6.0 * tau_max_s / tcspc_res))
     search_start = int(0.82 * n_bins)
-    tail         = gaussian_filter1d(decay[search_start:].astype(float), sigma=2)
-    deriv        = np.gradient(tail)
-    thresh       = 3.0 * np.std(deriv[:max(1, len(deriv)//2)])
-    spikes       = np.where(deriv > thresh)[0]
+    tail = gaussian_filter1d(decay[search_start:].astype(float), sigma=2)
+    deriv = np.gradient(tail)
+    thresh = 3.0 * np.std(deriv[:max(1, len(deriv)//2)])
+    spikes = np.where(deriv > thresh)[0]
     if len(spikes) > 0:
         spike_abs = search_start + spikes[0]
         if spike_abs < candidate:
@@ -70,84 +63,78 @@ def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins) -> int:
             candidate = spike_abs
     return candidate
 
-
 def _build_bounds(n_exp, tau_min, tau_max, decay_peak,
                   has_tail, fit_bg, fit_sigma, bg_init=0.0, bg_upper=None,
-                  sigma_max=3.0, irf_shift_bins=5):
+                  sigma_max=3.0, irf_shift_bins=5,
+                  fit_tvb=False, tvb_init=0.0, tvb_upper=None):
     lo = [tau_min] * n_exp + [0.0] * n_exp + [-float(irf_shift_bins)]
     hi = [tau_max] * n_exp + [10 * decay_peak] * n_exp + [float(irf_shift_bins)]
-
     if fit_sigma:
         lo += [0.0];  hi += [sigma_max]
-
     if fit_bg:
         _bg_hi = bg_upper if bg_upper is not None else bg_init * 1.5 + 10
         lo += [0.0];  hi += [_bg_hi]
-
+    if fit_tvb:
+        _tvb_hi = tvb_upper if tvb_upper is not None else tvb_init * 1.5 + 10
+        lo += [0.0];  hi += [_tvb_hi]
     if has_tail:
         lo += [0.0,   1.0]
         hi += [5.0, 200.0]
-
     return lo, hi
-
 
 def _build_bounds_dist(n_components, tau_min, tau_max, decay_peak,
                        fit_bg, fit_sigma, bg_init=0.0, bg_upper=None,
-                       sigma_max=3.0, irf_shift_bins=5):
+                       sigma_max=3.0, irf_shift_bins=5,
+                       fit_tvb=False, tvb_init=0.0, tvb_upper=None):
     width_max = (tau_max - tau_min) / 2.0
     width_min = tau_min / 20.0
-
-    lo = [tau_min]   * n_components + [width_min]      * n_components + [0.0]              * n_components + [-float(irf_shift_bins)]
-    hi = [tau_max]   * n_components + [width_max]      * n_components + [10 * decay_peak]  * n_components + [float(irf_shift_bins)]
-
+    lo = [tau_min] * n_components + [width_min] * n_components + [0.0] * n_components + [-float(irf_shift_bins)]
+    hi = [tau_max] * n_components + [width_max] * n_components + [10 * decay_peak] * n_components + [float(irf_shift_bins)]
     if fit_sigma:
         lo += [0.0];  hi += [sigma_max]
-
     if fit_bg:
         _bg_hi = bg_upper if bg_upper is not None else bg_init * 1.5 + 10
         lo += [0.0];  hi += [_bg_hi]
-
+    if fit_tvb:
+        _tvb_hi = tvb_upper if tvb_upper is not None else tvb_init * 1.5 + 10
+        lo += [0.0];  hi += [_tvb_hi]
     return lo, hi
 
 
 def _pack_p0_dist(n_components, tau_min, tau_max, decay_peak,
-                  fit_bg, fit_sigma, bg_init):
-    tmin   = max(tau_min, 1e-14) * 1.001
-    tmax   = tau_max * 0.999
-    tau0   = np.logspace(np.log10(tmin), np.log10(tmax), n_components)
+                  fit_bg, fit_sigma, bg_init, fit_tvb=False, tvb_init=0.0):
+    tmin = max(tau_min, 1e-14) * 1.001
+    tmax = tau_max * 0.999
+    tau0 = np.logspace(np.log10(tmin), np.log10(tmax), n_components)
     width0 = tau0 * 0.2
-    amp0   = np.full(n_components, decay_peak / n_components)
-    base   = np.concatenate([tau0, width0, amp0, [0.0]])
-
+    amp0 = np.full(n_components, decay_peak / n_components)
+    base = np.concatenate([tau0, width0, amp0, [0.0]])
     if fit_sigma:
         base = np.concatenate([base, [0.3]])
-
     if fit_bg:
         base = np.concatenate([base, [bg_init]])
-
+    if fit_tvb:
+        base = np.concatenate([base, [tvb_init]])
     return base
 
 
 def _pack_p0(n_exp, tau_min, tau_max, decay_peak,
              has_tail, fit_bg, fit_sigma, bg_init,
-             tau_override=None):
+             tau_override=None, fit_tvb=False, tvb_init=0.0):
     if tau_override is not None:
         taus0 = np.asarray(tau_override)
     else:
-        tmin  = max(tau_min, 1e-14) * 1.001
-        tmax  = tau_max * 0.999
+        tmin = max(tau_min, 1e-14) * 1.001
+        tmax = tau_max * 0.999
         taus0 = np.logspace(np.log10(tmin), np.log10(tmax), n_exp)
-
     amps0 = np.full(n_exp, decay_peak / n_exp)
-    base  = np.concatenate([taus0, amps0, [0.0]])
-
+    base = np.concatenate([taus0, amps0, [0.0]])
     if fit_sigma:
         base = np.concatenate([base, [0.3]])
-
     if fit_bg:
         base = np.concatenate([base, [bg_init]])
-
+    if fit_tvb:
+        base = np.concatenate([base, [tvb_init]])
     if has_tail:
         base = np.concatenate([base, [0.5, 20.0]])
-
     return base
