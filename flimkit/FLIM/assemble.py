@@ -12,7 +12,7 @@ def assemble_tile_maps(
 ) -> Dict[str, np.ndarray]:
     H, W = canvas_height, canvas_width
 
-    keys_scalar = ['tau_mean_amp', 'chi2']
+    keys_scalar = ['tau_mean_amp', 'tau_mean_int', 'chi2']
     keys_tau    = [f'tau{k}' for k in range(1, n_exp + 1)]
     keys_amp    = [f'a{k}'   for k in range(1, n_exp + 1)]
     keys_all    = keys_scalar + keys_tau + keys_amp
@@ -149,12 +149,20 @@ def save_assembled_maps(
     tau_display_max: Optional[float] = None,
     intensity_display_min: Optional[float] = None,
     intensity_display_max: Optional[float] = None,
+    tau_weighting: str = 'amp',
 ):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Raw .npy maps are saved for every canvas key (both tau_mean_amp and
+    # tau_mean_int), unclipped. tau_weighting only selects which one becomes
+    # the display tau TIFF below.
     for key, arr in canvas.items():
         np.save(str(output_dir / f"{roi_name}_{key}.npy"), arr)
+
+    tau_key = 'tau_mean_int' if tau_weighting == 'int' else 'tau_mean_amp'
+    if tau_key not in canvas:
+        tau_key = 'tau_mean_amp'
 
     # Use percentile-based clipping so a handful of very bright pixels (cell
     # clusters, tile-overlap edges) do not compress the bulk of tissue to
@@ -182,7 +190,7 @@ def save_assembled_maps(
     # 65535 → tau_max (or nanmax if auto)
     # 0     → unfitted pixels (NaN → 0 before cast)
     # This matches the FLIM microscope export convention.
-    tau_map = canvas['tau_mean_amp']
+    tau_map = canvas[tau_key]
     finite  = np.isfinite(tau_map)
 
     t_min = float(tau_display_min) if tau_display_min is not None \
@@ -196,8 +204,8 @@ def save_assembled_maps(
         np.clip((tau_map - t_min) / (t_max - t_min) * 65535, 0, 65535),
         0
     ).astype(np.uint16)
-    tifffile.imwrite(str(output_dir / f"{roi_name}_tau_mean_amp.tif"), tau_u16)
-    print(f"  tau_mean_amp display range: {t_min:.3f} - {t_max:.3f} ns  "
+    tifffile.imwrite(str(output_dir / f"{roi_name}_{tau_key}.tif"), tau_u16)
+    print(f"  {tau_key} display range: {t_min:.3f} - {t_max:.3f} ns  "
           f"→  0 - 65535")
 
     # Global summary text 

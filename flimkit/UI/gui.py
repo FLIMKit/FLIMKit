@@ -2730,6 +2730,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         save_ind      = self.bv_batch_save_ind.get()
         gamma         = float(self.sv_batch_gamma.get() or 0.4)
         int_max       = _flt(self.sv_batch_int_max) or None
+        tau_weighting = self.sv_batch_tau_weighting.get()
+        tau_key       = 'tau_mean_int' if tau_weighting == 'intensity' else 'tau_mean_amp'
         register  = self.bv_batch_register.get()
         reg_shift = int(self.sv_batch_reg_shift.get() or 120)
         thr       = _thresh(self.bv_batch_thr, self.sv_batch_thr)
@@ -2808,12 +2810,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             output_dir=roi_out, roi_name=roi_clean, n_exp=n_exp,
                             tau_display_min=tau_lo, tau_display_max=tau_hi,
                             intensity_display_max=int_max,
+                            tau_weighting=('int' if tau_weighting == 'intensity' else 'amp'),
                         )
                         if save_lifetime:
                             make_lifetime_image(
                                 canvas=canvas, output_dir=roi_out, roi_name=roi_clean,
                                 tau_min_ns=tau_lo, tau_max_ns=tau_hi,
                                 smooth_sigma_px=0.0, gamma=gamma, verbose=False,
+                                tau_key=tau_key,
                             )
                         if save_rgb:
                             make_component_rgb_tiff(

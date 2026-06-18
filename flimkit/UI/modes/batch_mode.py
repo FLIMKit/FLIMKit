@@ -215,6 +215,13 @@ class BatchMode(BaseMode):
         ttk.Label(fexp, text='(blank = auto 99th percentile)',
                   foreground='grey').grid(row=5, column=2, columnspan=3, sticky='w')
 
+        ttk.Label(fexp, text='Lifetime weighting:').grid(row=6, column=0, sticky='w', **PAD)
+        self.b.state.sv_batch_tau_weighting = tk.StringVar(value='amplitude')
+        ttk.Combobox(fexp, textvariable=self.b.sv_batch_tau_weighting, state='readonly',
+                     values=['amplitude', 'intensity'], width=11).grid(row=6, column=1, sticky='w', padx=4)
+        ttk.Label(fexp, text='(τ map / lifetime image; both raw .npy saved either way)',
+                  foreground='grey').grid(row=6, column=2, columnspan=3, sticky='w')
+
         ftl = _section(tab, 'Timelapse — Reference Lifetimes')
         ftl.grid(row=7, column=0, sticky='ew', pady=(0, 6))
         self.b._batch_tl_fr = ftl

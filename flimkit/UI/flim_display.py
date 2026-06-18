@@ -12,41 +12,43 @@ COLORMAPS = {
 }
 
 
-def compute_intensity_weighted_lifetime(
+def compute_weighted_lifetime(
     pixel_maps,
     intensity,
     n_exp=2,
+    weighting='amplitude',
 ) -> np.ndarray:
-    if 'tau_mean_int' in pixel_maps:
-        return np.asarray(pixel_maps['tau_mean_int'], dtype=np.float32)
-    if 'tau_mean_amp' in pixel_maps:
-        # Amplitude-weighted mean tau already computed per-pixel (tile_fit / assemble path)
-        arr = np.asarray(pixel_maps['tau_mean_amp'], dtype=np.float32)
-        arr = arr.copy()
-        arr[arr == 0] = np.nan
-        return arr
+    # weighting='amplitude' → Σ(aᵢτᵢ)/Σ(aᵢ);  'intensity' → Σ(aᵢτᵢ²)/Σ(aᵢτᵢ)
+    primary  = 'tau_mean_int' if weighting == 'intensity' else 'tau_mean_amp'
+    fallback = 'tau_mean_amp' if weighting == 'intensity' else 'tau_mean_int'
+    for key in (primary, fallback):
+        if key in pixel_maps:
+            arr = np.asarray(pixel_maps[key], dtype=np.float32).copy()
+            arr[arr == 0] = np.nan
+            return arr
 
+    # No precomputed mean map — derive the requested weighting from components.
+    # Key format is 'tau1', 'tau2', ... and 'a1', 'a2', ... (no underscore)
     shape = intensity.shape
-    amp_sum = np.zeros(shape, dtype=np.float64)
-    tau_weighted = np.zeros(shape, dtype=np.float64)
-
-    # Sum amplitude-weighted lifetimes - key format is 'tau1', 'tau2', ... (no underscore)
+    num = np.zeros(shape, dtype=np.float64)
+    den = np.zeros(shape, dtype=np.float64)
     for i in range(1, n_exp + 1):
         tau_key = f'tau{i}'
         amp_key = f'a{i}'
-
         if tau_key in pixel_maps and amp_key in pixel_maps:
             tau = np.asarray(pixel_maps[tau_key], dtype=np.float64)
             amp = np.asarray(pixel_maps[amp_key], dtype=np.float64)
             valid = np.isfinite(tau) & np.isfinite(amp)
-            tau_weighted[valid] += tau[valid] * amp[valid]
-            amp_sum[valid]      += amp[valid]
+            if weighting == 'intensity':
+                num[valid] += amp[valid] * tau[valid] ** 2
+                den[valid] += amp[valid] * tau[valid]
+            else:
+                num[valid] += amp[valid] * tau[valid]
+                den[valid] += amp[valid]
 
-    # Amplitude-weighted mean: Σ(τᵢ·aᵢ) / Σ(aᵢ); unfitted pixels → NaN
     result = np.full(shape, np.nan, dtype=np.float32)
-    mask = amp_sum > 0
-    result[mask] = (tau_weighted[mask] / amp_sum[mask]).astype(np.float32)
-
+    mask = den > 0
+    result[mask] = (num[mask] / den[mask]).astype(np.float32)
     return result
 
 

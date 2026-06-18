@@ -99,8 +99,18 @@ class FOVPreviewPanel:
         ttk.Radiobutton(dm_frame, text='Intensity', variable=self._sv_display_mode,
                         value='intensity', command=self._on_display_mode_changed).pack(side='left')
 
+        self._sv_tau_weighting = tk.StringVar(value='amplitude')
+        wt_frame = ttk.Frame(ctrl_frame)
+        wt_frame.grid(row=3, column=0, columnspan=6, sticky='w', pady=(4, 0))
+        ttk.Label(wt_frame, text='τ weighting:').pack(side='left', padx=(0, 4))
+        ttk.Radiobutton(wt_frame, text='Amplitude', variable=self._sv_tau_weighting,
+                        value='amplitude', command=self._on_weighting_changed).pack(side='left')
+        ttk.Radiobutton(wt_frame, text='Intensity', variable=self._sv_tau_weighting,
+                        value='intensity', command=self._on_weighting_changed).pack(side='left')
+
         self._ptu_path = None
         self._lifetime_map = None
+        self._pixel_maps = None
         self._intensity_map = None
         self._flim_cbar = None
         self._flim_color_scale = {
@@ -223,7 +233,7 @@ class FOVPreviewPanel:
             if intensity is None:
                 intensity = np.ones((512, 512), dtype=np.float32)
             
-            from flimkit.UI.flim_display import compute_intensity_weighted_lifetime
+            from flimkit.UI.flim_display import compute_weighted_lifetime
             
             pixel_maps = fit_result.get('pixel_maps')
             if pixel_maps is None and canvas is not None:
@@ -240,8 +250,9 @@ class FOVPreviewPanel:
             
             if pixel_maps and nexp > 0:
                 try:
-                    lifetime_map = compute_intensity_weighted_lifetime(
-                        pixel_maps, intensity, n_exp=nexp
+                    lifetime_map = compute_weighted_lifetime(
+                        pixel_maps, intensity, n_exp=nexp,
+                        weighting=self._sv_tau_weighting.get(),
                     )
                 except Exception as e:
                     print(f"  - Warning: Could not compute lifetime map: {e}")
@@ -261,6 +272,7 @@ class FOVPreviewPanel:
                     print(f"  - Could not upsample lifetime_map: {_upe}")
 
             self._lifetime_map = lifetime_map
+            self._pixel_maps = pixel_maps
             self._intensity_map = intensity
             self._n_exp = nexp
 
@@ -532,9 +544,34 @@ class FOVPreviewPanel:
         self._ctrl_frame.grid_remove()
         self._canvas_mpl.draw_idle()
 
+    def _on_weighting_changed(self):
+        import numpy as np
+        if self._pixel_maps is None or self._intensity_map is None:
+            return
+        from flimkit.UI.flim_display import compute_weighted_lifetime
+        try:
+            lifetime_map = compute_weighted_lifetime(
+                self._pixel_maps, self._intensity_map, n_exp=self._n_exp,
+                weighting=self._sv_tau_weighting.get(),
+            )
+        except Exception as e:
+            print(f"  - Could not recompute lifetime map: {e}")
+            return
+        if (lifetime_map is not None
+                and lifetime_map.shape != self._intensity_map.shape[:2]):
+            try:
+                import cv2 as _cv2
+                th, tw = self._intensity_map.shape[:2]
+                lifetime_map = _cv2.resize(lifetime_map.astype(np.float32), (tw, th),
+                                           interpolation=_cv2.INTER_NEAREST)
+            except Exception:
+                pass
+        self._lifetime_map = lifetime_map
+        self._update_flim_display()
+
     def _auto_detect_scale(self):
         import numpy as np
-        
+
         if self._lifetime_map is None:
             return
         valid_data = self._lifetime_map[~np.isnan(self._lifetime_map)]
