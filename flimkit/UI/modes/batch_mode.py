@@ -179,6 +179,18 @@ class BatchMode(BaseMode):
                         variable=self.b.bv_batch_correct_pileup).grid(
             row=1, column=0, columnspan=3, sticky='w', **PAD)
 
+        ttk.Label(fm, text='Time-varying background PTU:').grid(row=2, column=0, sticky='w', **PAD)
+        self.b.state.sv_batch_tvb_ptu = tk.StringVar()
+        ttk.Entry(fm, textvariable=self.b.sv_batch_tvb_ptu, width=24).grid(
+            row=2, column=1, sticky='ew', padx=4)
+        ttk.Button(fm, text='Browse...',
+                   command=lambda: _browse_file(self.b.sv_batch_tvb_ptu,
+                                                'Background reference PTU',
+                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+            row=2, column=2, sticky='w', padx=4)
+        ttk.Label(fm, text='(optional — applied to every FOV in the batch)',
+                  foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)
+
         fexp = _section(tab, 'Image Export')
         fexp.grid(row=6, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_batch_save_lifetime  = tk.BooleanVar(value=True)

@@ -181,7 +181,17 @@ class StitchMode(BaseMode):
         ttk.Checkbutton(fm, text='Apply Coates pile-up correction (recommended if pile-up > 5%)',
                         variable=self.b.bv_correct_pileup_st).grid(
             row=1, column=0, columnspan=3, sticky='w', **PAD)
-
+        ttk.Label(fm, text='Time-varying background PTU:').grid(row=2, column=0, sticky='w', **PAD)
+        self.b.state.sv_tvb_ptu_st = tk.StringVar()
+        ttk.Entry(fm, textvariable=self.b.sv_tvb_ptu_st, width=24).grid(
+            row=2, column=1, sticky='ew', padx=4)
+        ttk.Button(fm, text='Browse...',
+                   command=lambda: _browse_file(self.b.sv_tvb_ptu_st,
+                                                'Background reference PTU',
+                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+            row=2, column=2, sticky='w', padx=4)
+        ttk.Label(fm, text='(optional — measured background, aligned per tile)',
+                  foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)
         freg = _section(parent, 'Tile Registration')
         freg.grid(row=3, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_register = tk.BooleanVar(value=True)

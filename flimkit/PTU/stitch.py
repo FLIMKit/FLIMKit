@@ -726,6 +726,7 @@ def fit_flim_tiles(
 ):
     from ..PTU.reader import PTUFile
     from ..FLIM.fitters import fit_summed, fit_per_pixel
+    from ..FLIM.bg_tools import tvb_from_decay
     from ..configs import (
         MACHINE_IRF_DEFAULT_PATH,
         MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
@@ -768,6 +769,20 @@ def fit_flim_tiles(
     mach_path   = getattr(args, 'machine_irf',  str(MACHINE_IRF_DEFAULT_PATH))
 
     machine_irf, pi_machine = _load_machine_irf(mach_path)
+
+    _tvb_ptu_path = getattr(args, 'tvb_ptu', None)
+    _tvb_bg_raw = None
+    _tvb_bg_res = None
+    if _tvb_ptu_path:
+        _tvb_ref = PTUFile(str(_tvb_ptu_path), verbose=False)
+        _tvb_chan = getattr(args, 'tvb_channel', None)
+        if _tvb_chan is None:
+            _tvb_chan = getattr(args, 'channel', None)
+        _tvb_bg_raw = _tvb_ref.summed_decay(channel=_tvb_chan)
+        _tvb_bg_res = _tvb_ref.tcspc_res
+        if verbose:
+            print(f"  TVB background from: {_tvb_ptu_path} ({float(_tvb_bg_raw.sum()):,.0f} photons)")
+    _fit_tvb = _tvb_bg_raw is not None
 
     #  Parse tile positions ─
     tile_positions = parse_xlif_tile_positions(xlif_path, ptu_basename)
@@ -860,6 +875,9 @@ def fit_flim_tiles(
               f"{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}")
         print('\n  Running consensus fit_summed on pooled decay...')
 
+    _tvb_pooled = (tvb_from_decay(_tvb_bg_raw, n_bins_ref,
+                                  src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc_ref)
+                   if _fit_tvb else None)
     global_popt, global_summary = fit_summed(
         pooled_decay, tcspc_ref, n_bins_ref, pooled_irf,
         has_tail      = has_tail,
@@ -873,6 +891,8 @@ def fit_flim_tiles(
         n_restarts    = restarts,
         workers       = workers,
         sigma_max     = sigma_max,
+        tvb_profile   = _tvb_pooled,
+        fit_tvb       = _fit_tvb,
     )
     consensus_taus_ns = global_summary['taus_ns']
 
@@ -933,6 +953,9 @@ def fit_flim_tiles(
                 stack[px_int < intensity_thr] = 0
                 del px_int
 
+            _tvb_tile = (tvb_from_decay(_tvb_bg_raw, n_bins,
+                                        src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc)
+                         if _fit_tvb else None)
             pixel_maps_raw = fit_per_pixel(
                 stack.astype(float),
                 tcspc, n_bins, irf_tile,
@@ -947,6 +970,8 @@ def fit_flim_tiles(
                 correct_pileup = getattr(args, 'correct_pileup', False),
                 n_sync      = ptu.n_records,
                 free_tau    = getattr(args, 'free_tau_perpixel', False),
+                tvb_profile = _tvb_tile,
+                fit_tvb     = _fit_tvb,
             )
             del stack
 

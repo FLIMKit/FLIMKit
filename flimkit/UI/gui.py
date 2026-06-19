@@ -2605,6 +2605,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         save_npy = self.bv_batch_save_npy.get()
         thr      = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
+        tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
 
         from flimkit.interactive import _run_flim_fit
@@ -2661,6 +2662,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         intensity_threshold=thr,
                         irf_align=expert_overrides.get('irf_align', 'steepest_rise'),
                         irf_shift_bins=expert_overrides.get('irf_shift_bins', 2),
+                        tvb_ptu=tvb_ptu_batch,
+                        tvb_channel=None,
                     )
                     result  = _run_flim_fit(a)
                     summary = result.get('global_summary', {})
@@ -2736,6 +2739,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         reg_shift = int(self.sv_batch_reg_shift.get() or 120)
         thr       = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
+        tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
 
         from flimkit.PTU.stitch    import fit_flim_tiles
@@ -2793,6 +2797,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         irf=None, irf_xlsx=None,
                         estimate_irf='machine_irf',
                         no_xlsx_irf=True,
+                        tvb_ptu=tvb_ptu_batch,
+                        tvb_channel=None,
                     )
                     (tile_results, canvas_h, canvas_w, _, _, _, _, _, _) = fit_flim_tiles(
                         xlif_path=xlif_path, ptu_dir=Path(ptu_dir),

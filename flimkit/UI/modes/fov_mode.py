@@ -119,8 +119,17 @@ class FovMode(BaseMode):
         ttk.Checkbutton(fm, text='Apply Coates pile-up correction (recommended if pile-up > 5%)',
                         variable=self.b.bv_correct_pileup).grid(
             row=2, column=0, columnspan=3, sticky='w', **PAD)
-
-        # Expert settings banner (hidden until expert settings are confirmed)
+        ttk.Label(fm, text='Time-varying background PTU:').grid(row=3, column=0, sticky='w', **PAD)
+        self.b.state.sv_tvb_ptu_fov = tk.StringVar()
+        ttk.Entry(fm, textvariable=self.b.sv_tvb_ptu_fov, width=24).grid(
+            row=3, column=1, sticky='ew', padx=4)
+        ttk.Button(fm, text='Browse...',
+                   command=lambda: _browse_file(self.b.sv_tvb_ptu_fov,
+                                                'Background reference PTU',
+                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+            row=3, column=2, sticky='w', padx=4)
+        ttk.Label(fm, text='(optional — fits a measured fluorophore-free background decay, FLIMfit-style)',
+                  foreground='grey').grid(row=4, column=0, columnspan=3, sticky='w', padx=8)
         self.b._expert_banner_fov = ttk.Label(
             tab, text='⚙  Custom expert settings active',
             foreground='#e8a838', font=('TkDefaultFont', 9, 'bold'))

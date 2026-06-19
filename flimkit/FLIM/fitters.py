@@ -397,6 +397,11 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             for tau in tau_grid
         ])  
         bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)
+        if tvb_on:
+            _tvb_U = np.column_stack([np.asarray(tvb_profile, dtype=float), np.ones(n_bins)])
+            _tvb_Up = np.linalg.pinv(_tvb_U)
+            _basis_perp = basis_grid - (basis_grid @ _tvb_Up.T) @ _tvb_U.T
+            _bb_perp = np.maximum((_basis_perp ** 2).sum(axis=1), 1e-20)
         for yi in tqdm(range(ny), desc='  Per-pixel rows', disable=True):
             if progress_callback is not None:
                 progress_callback(yi, ny)
@@ -405,6 +410,39 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             valid_xi = np.where(ph_counts >= min_photons)[0]
             skipped += nx - len(valid_xi)
             if len(valid_xi) == 0:
+                continue
+            if tvb_on:
+                dvf = decay_row[valid_xi].astype(float)
+                if correct_pileup and _n_sync_px > 0:
+                    dvf = np.array([coates_pileup_correction(dvf[k], _n_sync_px)
+                                    for k in range(len(valid_xi))])
+                d_perp = dvf - (dvf @ _tvb_Up.T) @ _tvb_U.T
+                bd_p = d_perp @ _basis_perp.T
+                d_sq = (d_perp ** 2).sum(axis=1)
+                costs_p = d_sq[:, np.newaxis] - np.maximum(bd_p, 0.0) ** 2 / _bb_perp
+                best_g = np.argmin(costs_p, axis=1)
+                amp_v = np.maximum(bd_p[np.arange(len(valid_xi)), best_g] / _bb_perp[best_g], 0.0)
+                resid_after = dvf - amp_v[:, np.newaxis] * basis_grid[best_g]
+                vz = resid_after @ _tvb_Up.T
+                tvb_v = np.maximum(vz[:, 0], 0.0)
+                bg_z = vz[:, 1]
+                tau_v = tau_grid[best_g]
+                for k, xi in enumerate(valid_xi):
+                    if amp_v[k] <= 0:
+                        skipped += 1
+                        continue
+                    tau_ns = float(tau_v[k] * 1e9)
+                    maps['tau_1'][yi, xi] = tau_ns
+                    maps['tau_mean_amp'][yi, xi] = tau_ns
+                    maps['tau_mean_int'][yi, xi] = tau_ns
+                    maps['alpha_1'][yi, xi] = float(amp_v[k])
+                    maps['frac_1'][yi, xi] = 1.0
+                    maps['tvb_scale'][yi, xi] = float(tvb_v[k])
+                    model_px = amp_v[k] * basis_grid[best_g[k]] + tvb_v[k] * tvb_profile + bg_z[k]
+                    resid = dvf[k] - model_px
+                    chi2_px = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
+                    maps['chi2_r'][yi, xi] = chi2_px / max(n_bins - 2, 1)
+                    fitted += 1
                 continue
             dv = decay_row[valid_xi] 
             peak_b_v = np.argmax(dv, axis=1)  

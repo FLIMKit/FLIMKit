@@ -1050,6 +1050,17 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     _dist_type = getattr(args, 'dist_type', 'discrete')
     _dist_nc   = getattr(args, 'dist_n_components', 1)
 
+    tvb_profile = None
+    _tvb_ptu = getattr(args, 'tvb_ptu', None)
+    if _tvb_ptu:
+        from flimkit.FLIM.bg_tools import tvb_from_reference_ptu
+        _tvb_chan = getattr(args, 'tvb_channel', None)
+        if _tvb_chan is None:
+            _tvb_chan = getattr(args, 'channel', None)
+        print(f"\n[4c] Time-varying background from: {_tvb_ptu}")
+        tvb_profile = tvb_from_reference_ptu(_tvb_ptu, ptu, channel=_tvb_chan)
+    fit_tvb = tvb_profile is not None
+
     def _run_summed():
         if _dist_type != 'discrete':
             return fit_summed_dist(
@@ -1065,6 +1076,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
                 irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
         return fit_summed(
             decay, ptu.tcspc_res, ptu.n_bins,
@@ -1079,6 +1091,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
 
     if args.mode in ('summed', 'both'):
@@ -1140,6 +1153,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 n_sync=ptu.n_records,
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
 
         if not args.no_plots:
