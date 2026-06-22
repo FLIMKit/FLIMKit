@@ -190,7 +190,7 @@ class StitchMode(BaseMode):
                                                 'Background reference PTU',
                                                 [('PTU', '*.ptu'), ('All', '*.*')])).grid(
             row=2, column=2, sticky='w', padx=4)
-        ttk.Label(fm, text='(optional — measured background, aligned per tile)',
+        ttk.Label(fm, text='(optional: measured background, aligned per tile)',
                   foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)
         freg = _section(parent, 'Tile Registration')
         freg.grid(row=3, column=0, sticky='ew', pady=(0, 6))

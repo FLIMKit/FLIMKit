@@ -1140,6 +1140,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 progress_callback=perpixel_progress_cb,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
         else:
             pixel_maps = fit_per_pixel(

@@ -1048,6 +1048,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 'cell_mask':      self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
                 'correct_pileup': self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False,
                 'correct_pileup_st': self.bv_correct_pileup_st.get() if hasattr(self, 'bv_correct_pileup_st') else False,
+                'tvb_ptu_fov':    self.sv_tvb_ptu_fov.get() if hasattr(self, 'sv_tvb_ptu_fov') else '',
+                'tvb_ptu_st':     self.sv_tvb_ptu_st.get() if hasattr(self, 'sv_tvb_ptu_st') else '',
+                'tvb_ptu_batch':  self.sv_batch_tvb_ptu.get() if hasattr(self, 'sv_batch_tvb_ptu') else '',
                 'xlif_file':      self.sv_xlif.get()    if hasattr(self, 'sv_xlif')    else '',
                 'ptu_dir':        self.sv_ptu_dir.get() if hasattr(self, 'sv_ptu_dir') else '',
                 'out_st':         self.sv_out_st.get()  if hasattr(self, 'sv_out_st')  else '',
@@ -1110,6 +1113,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if 'cell_mask' in state and hasattr(self, 'bv_cell'): self.bv_cell.set(state['cell_mask'])
             if 'correct_pileup' in state and hasattr(self, 'bv_correct_pileup'): self.bv_correct_pileup.set(state['correct_pileup'])
             if 'correct_pileup_st' in state and hasattr(self, 'bv_correct_pileup_st'): self.bv_correct_pileup_st.set(state['correct_pileup_st'])
+            if 'tvb_ptu_fov' in state and hasattr(self, 'sv_tvb_ptu_fov'): self.sv_tvb_ptu_fov.set(state['tvb_ptu_fov'])
+            if 'tvb_ptu_st' in state and hasattr(self, 'sv_tvb_ptu_st'): self.sv_tvb_ptu_st.set(state['tvb_ptu_st'])
+            if 'tvb_ptu_batch' in state and hasattr(self, 'sv_batch_tvb_ptu'): self.sv_batch_tvb_ptu.set(state['tvb_ptu_batch'])
 
             if 'register' in state and hasattr(self, 'bv_register'):
                 self.bv_register.set(state['register'])
@@ -1118,7 +1124,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if 'threshold' in state and hasattr(self, 'sv_int_threshold'):
                 self.sv_int_threshold.set(state['threshold'])
 
-            # xlif_file and ptu_dir intentionally skipped — mode-specific, should come fresh from project browser
+            # xlif_file and ptu_dir intentionally skipped - mode-specific, should come fresh from project browser
             if 'out_st' in state and hasattr(self, 'sv_out_st'):
                 self.sv_out_st.set(state['out_st'])
             if 'bv_rotate' in state and hasattr(self, 'bv_rotate'):
@@ -1203,7 +1209,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     session_data[key] = val
                     print(f"  ✓ Saved array: {key} {val.shape}")
                 elif isinstance(val, dict):
-                    # hoist numpy arrays out of dicts before JSON-ing — default=str silently corrupts them
+                    # hoist numpy arrays out of dicts before JSON-ing - default=str silently corrupts them
                     try:
                         hoisted = {}
                         json_safe = {}
@@ -2509,7 +2515,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if any(v is None for v in _parsed):
                 messagebox.showerror(
                     'Missing τ',
-                    f"Fix reference τ is on — please enter all {n_exp} τ value(s), "
+                    f"Fix reference τ is on - please enter all {n_exp} τ value(s), "
                     "or untick it to fit τ from the pooled decay.")
                 return
             ref_tau1, ref_tau2, ref_tau3 = (_parsed + [None, None, None])[:3]
@@ -2568,7 +2574,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
         def on_done(result):
             self._set_buttons('normal')
-            self._res.set_status(f'✓  Timelapse complete — {n_groups} group(s), {n_frames} frames.')
+            self._res.set_status(f'✓  Timelapse complete - {n_groups} group(s), {n_frames} frames.')
             self._res.load_images(out_dir)
 
         self._set_buttons('disabled')
@@ -3317,7 +3323,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             )
 
     def _phasor_thread(self, worker_fn, done_cb, *, status='  Working...'):
-        # Only disables the phasor run button — the rest of the UI stays responsive unlike _launch
+        # Only disables the phasor run button - the rest of the UI stays responsive unlike _launch
         self._btn_ph.configure(state='disabled')
         self._res.set_status(status)
 

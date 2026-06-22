@@ -188,7 +188,7 @@ class BatchMode(BaseMode):
                                                 'Background reference PTU',
                                                 [('PTU', '*.ptu'), ('All', '*.*')])).grid(
             row=2, column=2, sticky='w', padx=4)
-        ttk.Label(fm, text='(optional — applied to every FOV in the batch)',
+        ttk.Label(fm, text='(optional: applied to every FOV in the batch)',
                   foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)
 
         fexp = _section(tab, 'Image Export')
@@ -209,7 +209,7 @@ class BatchMode(BaseMode):
         ttk.Checkbutton(fexp, text='Individual component maps (τ₁, a₁, τ₂...)',
                         variable=self.b.bv_batch_save_ind).grid(row=1, column=1, columnspan=2, sticky='w', **PAD)
         self.b.state.bv_batch_save_stack = tk.BooleanVar(value=True)
-        ttk.Checkbutton(fexp, text='4D stacks — (T, H, W) .npy per map  (timelapse only)',
+        ttk.Checkbutton(fexp, text='4D stacks - (T, H, W) .npy per map  (timelapse only)',
                         variable=self.b.bv_batch_save_stack).grid(row=2, column=0, columnspan=3, sticky='w', **PAD)
         ttk.Label(fexp, text='Lifetime colour scale (ns):').grid(row=3, column=0, sticky='w', **PAD)
         ttk.Entry(fexp, textvariable=self.b.sv_batch_tau_lo, width=7).grid(row=3, column=1, sticky='w', padx=4)
@@ -234,7 +234,7 @@ class BatchMode(BaseMode):
         ttk.Label(fexp, text='(τ map / lifetime image; both raw .npy saved either way)',
                   foreground='grey').grid(row=6, column=2, columnspan=3, sticky='w')
 
-        ftl = _section(tab, 'Timelapse — Reference Lifetimes')
+        ftl = _section(tab, 'Timelapse - Reference Lifetimes')
         ftl.grid(row=7, column=0, sticky='ew', pady=(0, 6))
         self.b._batch_tl_fr = ftl
 
@@ -289,7 +289,7 @@ class BatchMode(BaseMode):
         self.b.state.bv_tl_bound_fraction = tk.BooleanVar(value=False)
         ttk.Checkbutton(ftl,
                         text='Compute bound fraction  α₂/(α₁+α₂)  '
-                             '(off by default — verify component ordering)',
+                             '(off by default - verify component ordering)',
                         variable=self.b.bv_tl_bound_fraction).grid(
             row=3, column=0, columnspan=5, sticky='w', **PAD)
 

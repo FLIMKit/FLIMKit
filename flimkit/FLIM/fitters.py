@@ -886,8 +886,13 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                        n_tau_grid=50, n_width_grid=30,
                        progress_callback=None,
                        use_gpu='auto',
-                       gpu_backend=None) -> dict:
+                       gpu_backend=None,
+                       tvb_profile=None, fit_tvb=False) -> dict:
     ny, nx, _ = stack.shape
+    tvb_on = bool(fit_tvb) and tvb_profile is not None
+    if tvb_on and n_components != 1:
+        print('  Per-pixel distribution TVB only supported for unimodal (1 component); ignoring TVB here.')
+        tvb_on = False
     idx = 3 * n_components
     shift = global_popt[idx]; idx += 1
     sigma = global_popt[idx] if fit_sigma else 0.0
@@ -917,6 +922,8 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         maps[f"width_{i+1}"] = np.full((ny, nx), np.nan)
         maps[f"alpha_{i+1}"] = np.full((ny, nx), np.nan)
         maps[f"frac_{i+1}"] = np.full((ny, nx), np.nan)
+    if tvb_on:
+        maps['tvb_scale'] = np.full((ny, nx), np.nan)
     if n_components == 1:
         backend = gpu_backend if gpu_backend is not None else (
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
@@ -925,10 +932,46 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             return backend.batch_dist_scan_unimodal(
                 stack, basis, bb_grid, param_pairs,
                 irf_fixed, tcspc_res, n_bins, dist_type,
-                min_photons, progress_callback)
+                min_photons, progress_callback,
+                tvb_profile=tvb_profile if tvb_on else None,
+                fit_tvb=tvb_on)
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
         ph_counts = flat.sum(axis=1)
         valid_idx = np.where(ph_counts >= min_photons)[0]
+        if tvb_on and valid_idx.size > 0:
+            _U = np.column_stack([np.asarray(tvb_profile, dtype=float), np.ones(n_bins)])
+            _Up = np.linalg.pinv(_U)
+            _bp = basis.astype(np.float64) - (basis.astype(np.float64) @ _Up.T) @ _U.T
+            _bbp = np.maximum((_bp ** 2).sum(axis=1), 1e-20)
+            d_valid = flat[valid_idx].astype(np.float64)
+            d_perp = d_valid - (d_valid @ _Up.T) @ _U.T
+            bd = d_perp @ _bp.T
+            costs = (d_perp ** 2).sum(axis=1)[:, None] - np.maximum(bd, 0.0) ** 2 / _bbp[None, :]
+            best_g = np.argmin(costs, axis=1)
+            amp_v = np.maximum(bd[np.arange(len(valid_idx)), best_g] / _bbp[best_g], 0.0)
+            basis_best = basis[best_g].astype(np.float64)
+            resid_after = d_valid - amp_v[:, None] * basis_best
+            vz = resid_after @ _Up.T
+            tvb_v = np.maximum(vz[:, 0], 0.0)
+            bg_z = vz[:, 1]
+            B_arr = np.asarray(tvb_profile, dtype=np.float64)
+            tau_v = param_pairs[best_g, 0]
+            w_v = param_pairs[best_g, 1]
+            model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * B_arr[None, :] + bg_z[:, None]
+            chi2_v = ((d_valid - model_v) ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+            for k, fi in enumerate(valid_idx):
+                if amp_v[k] <= 0:
+                    continue
+                yy, xx = divmod(int(fi), nx)
+                maps['tau_center_1'][yy, xx] = tau_v[k] * 1e9
+                maps['width_1'][yy, xx] = w_v[k] * 1e9
+                maps['alpha_1'][yy, xx] = amp_v[k]
+                maps['frac_1'][yy, xx] = 1.0
+                maps['tau_mean_amp'][yy, xx] = tau_v[k] * 1e9
+                maps['tau_mean_int'][yy, xx] = (tau_v[k] + w_v[k] ** 2 / max(tau_v[k], 1e-15)) * 1e9
+                maps['chi2_r'][yy, xx] = chi2_v[k]
+                maps['tvb_scale'][yy, xx] = tvb_v[k]
+            return maps
         t0 = time.time()
         for row_i in range(ny):
             if progress_callback is not None:

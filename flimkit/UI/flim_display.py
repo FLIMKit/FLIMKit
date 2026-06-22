@@ -27,7 +27,7 @@ def compute_weighted_lifetime(
             arr[arr == 0] = np.nan
             return arr
 
-    # No precomputed mean map — derive the requested weighting from components.
+    # No precomputed mean map - derive the requested weighting from components.
     # Key format is 'tau1', 'tau2', ... and 'a1', 'a2', ... (no underscore)
     shape = intensity.shape
     num = np.zeros(shape, dtype=np.float64)

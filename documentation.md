@@ -367,6 +367,12 @@ python fit_cli.py [OPTIONS]
 | `--intensity-threshold INT` | Minimum photons per pixel mask |
 | `--tau-display-min FLOAT` | Min lifetime for exported tau images (ns) |
 | `--tau-display-max FLOAT` | Max lifetime for exported tau images (ns) |
+| `--tvb-ptu PATH` | Reference PTU of a fluorophore-free background (buffer / culture-medium well). Its summed decay is fit as a scaled time-varying background `V·b(t)` instead of a flat offset (FLIMfit-style). |
+| `--tvb-channel INT` | Detector channel for `--tvb-ptu` (default: same as `--channel`) |
+
+#### Time-varying background correction
+
+By default the fit treats the baseline as a flat constant `Z`. When a sample has structured background (autofluorescence from the medium, scatter, plate fluorescence), that background has its own decay shape, and a flat offset cannot remove it. Pass `--tvb-ptu` with a measurement of a fluorophore-free region and FLIMKit fits the full model `B = V·b(t) + Z`, where `b(t)` is the normalized measured background profile and `V` is a non-negative scale recovered per fit (and per pixel). The same option is available in the GUI (the "Time-varying background PTU" picker on the Single-FOV, Batch and Tile-Stitch panels) and the Python API (`tvb_profile=` / `fit_tvb=` on `fit_summed`, `fit_per_pixel`, and the distribution variants). The per-pixel scale is written out as a `*_tvb_scale.tif` map.
 
 #### Output Arguments
 

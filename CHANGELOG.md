@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Time-varying background correction (FLIMfit-style `B = V·b(t) + Z`): supply a measured fluorophore-free reference PTU and the fit removes a scaled, time-varying background instead of only a flat offset
+- Available across summed and per-pixel fits (discrete fixed-τ / free-τ / 1-exp grid scan, and unimodal distribution), on CPU, PyTorch and MLX, with a non-negative per-pixel `tvb_scale` map
+- Exposed via CLI (`--tvb-ptu` / `--tvb-channel`), all GUI fit tabs (Single-FOV, Batch-FOV, Tile-Stitch, Batch-ROI; the tile pipeline aligns the background per tile), and the Python API (`tvb_profile=` / `fit_tvb=`)
+- Per-pixel scale exported as `*_tvb_scale.tif`; summed-fit summary gains a TVB-scale line
+- 28 regression tests (`test_tvb.py`) covering loader, model, bounds, cost classes, summed/per-pixel recovery, CPU/GPU parity, and exports
+
+### Notes
+- Anthropic's Claude AI assisted with parts of the implementation. All scientific design and method selection are the author's own work.
+
+---
+
 ## [0.9.13] - 2026-06-09
 
 ### Added

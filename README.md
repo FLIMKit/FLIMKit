@@ -4,7 +4,7 @@
 
 FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems (or any PTU-based system). Built as a drop-in for FLIM microscope software, with two workflows:
 
-- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, and batch processing
+- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
 - **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
 - **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, spatial filtering (gaussian/median/wavelet), two-component decomposition, automatic peak detection, session save/load
 
@@ -170,6 +170,9 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 **Lifetime distribution fitting** - Gaussian and Lorentzian α(τ) models:
 > Lakowicz, J.R. (2006). *Principles of Fluorescence Spectroscopy* (3rd ed.). Springer. §4.11.2, pp. 141-144.
+
+**Time-varying background correction** - measured background decay `B = V·b(t) + Z`:
+> Görlitz, F. et al. (2017). Open Source High Content Analysis Utilizing Automated Fluorescence Lifetime Imaging Microscopy. *J. Vis. Exp.* (119), e55119. https://doi.org/10.3791/55119
 
 **PhasorPy**: Gohlke, C. et al. Zenodo. https://doi.org/10.5281/zenodo.13862586
 

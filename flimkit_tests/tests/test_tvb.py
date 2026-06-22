@@ -4,7 +4,8 @@ from flimkit.FLIM.models import (reconvolution_model, dist_reconvolution_model,
                                  _DECost, _DECostDist)
 from flimkit.FLIM.fit_tools import (_build_bounds, _pack_p0,
                                     _build_bounds_dist, _pack_p0_dist)
-from flimkit.FLIM.fitters import fit_summed, fit_summed_dist, fit_per_pixel
+from flimkit.FLIM.fitters import (fit_summed, fit_summed_dist,
+                                  fit_per_pixel, fit_per_pixel_dist)
 from flimkit.FLIM.bg_tools import tvb_from_decay
 
 N = 256
@@ -263,6 +264,52 @@ class TestPerPixelGridScan:
         d_tau = np.nanmax(np.abs(cpu['tau_1'] - gpu['tau_1']))
         assert d_tau < 1e-3
 
+class TestPerPixelDist:
+    def _dist_stack(self, tau_c_ns, width_ns, amp, scale, ny=8, nx=8, seed=4):
+        rng = np.random.default_rng(seed)
+        irf = _irf()
+        fluor = dist_reconvolution_model(np.array([tau_c_ns, width_ns, amp, 0.0]),
+                                         RES, N, irf, 1, 'gaussian', 0.0, False, False)
+        total = np.maximum(fluor + scale * _bg_profile(), 0)
+        return rng.poisson(total[None, None, :].repeat(ny, 0).repeat(nx, 1)).astype(float)
+
+    def test_cpu_unimodal_recovers(self, monkeypatch):
+        import flimkit.FLIM.fitters as F
+        monkeypatch.setattr(F, '_gpu_backend_cache', None)
+        irf = _irf()
+        B = _bg_profile()
+        stack = self._dist_stack(2.0e-9, 0.4e-9, 1000.0, 300.0)
+        gp = np.array([2.0e-9, 0.4e-9, 1000.0, 0.0])
+        on = fit_per_pixel_dist(stack, RES, N, irf, gp, 1, 'gaussian',
+                                fit_bg=True, fit_sigma=False, gpu_backend=None,
+                                tvb_profile=B, fit_tvb=True)
+        off = fit_per_pixel_dist(stack, RES, N, irf, gp, 1, 'gaussian',
+                                 fit_bg=True, fit_sigma=False, gpu_backend=None)
+        assert 'tvb_scale' in on
+        assert 'tvb_scale' not in off
+        assert abs(np.nanmedian(on['tau_center_1']) - 2.0) < 0.4
+        assert 150.0 < np.nanmedian(on['tvb_scale']) < 480.0
+        assert np.nanmedian(on['chi2_r']) < np.nanmedian(off['chi2_r'])
+
+    def test_cpu_gpu_parity(self, gpu_backend, monkeypatch):
+        if gpu_backend is None:
+            pytest.skip('no GPU backend available')
+        irf = _irf()
+        B = _bg_profile()
+        stack = self._dist_stack(2.0e-9, 0.4e-9, 1000.0, 300.0, ny=10, nx=10)
+        gp = np.array([2.0e-9, 0.4e-9, 1000.0, 0.0])
+        import flimkit.FLIM.fitters as F
+        monkeypatch.setattr(F, '_gpu_backend_cache', None)
+        cpu = fit_per_pixel_dist(stack, RES, N, irf, gp, 1, 'gaussian',
+                                 fit_bg=True, fit_sigma=False, gpu_backend=None,
+                                 tvb_profile=B, fit_tvb=True)
+        gpu = fit_per_pixel_dist(stack, RES, N, irf, gp, 1, 'gaussian',
+                                 fit_bg=True, fit_sigma=False, gpu_backend=gpu_backend,
+                                 tvb_profile=B, fit_tvb=True)
+        d = np.nanmax(np.abs(cpu['tau_center_1'] - gpu['tau_center_1']))
+        assert d < 1e-3
+
+
 class TestPerPixelFreeTau:
     def test_cpu_improves_chi2(self):
         irf = _irf()
@@ -276,3 +323,25 @@ class TestPerPixelFreeTau:
                             free_tau=True, use_gpu=False)
         assert 'tvb_scale' in on
         assert np.nanmedian(on['chi2_r']) < np.nanmedian(off['chi2_r'])
+
+
+class TestExports:
+    def test_summary_txt_includes_tvb_scale(self, tmp_path):
+        from flimkit.utils.enhanced_outputs import save_fit_summary_txt
+        p = tmp_path / 'summary.txt'
+        save_fit_summary_txt({'tvb_scale': 123.4, 'chi2r': 1.0}, p, n_exp=2)
+        assert 'TVB scale: 123.4' in p.read_text()
+
+    def test_summary_txt_omits_tvb_when_zero(self, tmp_path):
+        from flimkit.utils.enhanced_outputs import save_fit_summary_txt
+        p = tmp_path / 'summary.txt'
+        save_fit_summary_txt({'tvb_scale': 0.0, 'chi2r': 1.0}, p, n_exp=2)
+        assert 'TVB scale' not in p.read_text()
+
+    def test_individual_maps_save_tvb_scale_tif(self, tmp_path):
+        from flimkit.utils.enhanced_outputs import save_individual_tau_maps
+        maps = {'tau_1': np.full((4, 4), 2.0, dtype=np.float32),
+                'a1': np.full((4, 4), 1.0, dtype=np.float32),
+                'tvb_scale': np.full((4, 4), 50.0, dtype=np.float32)}
+        save_individual_tau_maps(maps, tmp_path, roi_name='X', n_exp=1)
+        assert (tmp_path / 'X_tvb_scale.tif').exists()

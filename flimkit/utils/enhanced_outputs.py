@@ -36,6 +36,8 @@ def save_fit_summary_txt(
         f.write(f"IRF strategy: {strategy}\n")
         f.write(f"Chi-squared (reduced): {summary.get('chi2r', 0):.6f}\n")
         f.write(f"Background: {summary.get('bg', 0):.3f}\n")
+        if summary.get('tvb_scale', 0):
+            f.write(f"TVB scale: {summary['tvb_scale']:.3f}\n")
         if 'sigma' in summary:
             f.write(f"IRF broadening (σ): {summary['sigma']:.3f} ns\n")
         f.write('\n')
@@ -285,6 +287,11 @@ def save_individual_tau_maps(
             amp_path = output_dir / f"{roi_name}_a{i}.tif"
             tifffile.imwrite(str(amp_path), amp.astype(np.float32))
             print(f"A{i} map saved: {amp_path}")
+
+    if 'tvb_scale' in pixel_maps:
+        tvb_path = output_dir / f"{roi_name}_tvb_scale.tif"
+        tifffile.imwrite(str(tvb_path), pixel_maps['tvb_scale'].astype(np.float32))
+        print(f"TVB scale map saved: {tvb_path}")
 
 
 def create_complete_output_package(

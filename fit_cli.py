@@ -20,7 +20,7 @@ from flimkit._version import fitter_version
 warnings.filterwarnings("ignore")
 
 def single_FOV_flim_fit_cli():
-    ap = argparse.ArgumentParser(description="FLIM reconvolution fit — PTU + optional XLSX (FLIM microscope)")
+    ap = argparse.ArgumentParser(description="FLIM reconvolution fit - PTU + optional XLSX (FLIM microscope)")
     ap.add_argument("--ptu",   default=None, required=True, help="Path to PTU file")
     ap.add_argument("--xlsx",  default=None,
                     help="FLIM microscope export xlsx (overlay comparison and/or IRF source)")
@@ -149,7 +149,7 @@ def single_FOV_flim_fit_cli():
         acq_s = ptu.n_records / ptu.sync_rate
         cr_mhz = (decay.sum() / acq_s) / 1e6
         pu_pct = pu * 100
-        pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
+        pu_warn = " ⚠ HIGH - use --correct-pileup" if pu_pct > 5 else ""
         print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
               f"Acq: {acq_s:.1f} s  "
               f"Count rate: {cr_mhz:.3f} MHz  "
@@ -348,7 +348,7 @@ def single_FOV_flim_fit_cli():
             plot_lifetime_histogram(pixel_maps, args.nexp, args.out)
     print("\nDone.\n")
     ap = argparse.ArgumentParser(
-        description="FLIM reconvolution fit — PTU + optional XLSX (FLIM microscope)"
+        description="FLIM reconvolution fit - PTU + optional XLSX (FLIM microscope)"
     )
     ap.add_argument("--ptu",   default=None, required=True, help="Path to PTU file")
     ap.add_argument("--xlsx",  default=None,
@@ -478,7 +478,7 @@ def single_FOV_flim_fit_cli():
         acq_s = ptu.n_records / ptu.sync_rate
         cr_mhz = (decay.sum() / acq_s) / 1e6
         pu_pct = pu * 100
-        pu_warn = " ⚠ HIGH — use --correct-pileup" if pu_pct > 5 else ""
+        pu_warn = " ⚠ HIGH - use --correct-pileup" if pu_pct > 5 else ""
         print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
               f"Acq: {acq_s:.1f} s  "
               f"Count rate: {cr_mhz:.3f} MHz  "

@@ -246,6 +246,8 @@ class TorchBackend(_BackendMixin):
         dist_type,
         min_photons,
         progress_callback=None,
+        tvb_profile=None,
+        fit_tvb=False,
     ):
         torch = self._torch
         ny, nx, _ = stack.shape
@@ -264,6 +266,44 @@ class TorchBackend(_BackendMixin):
             frac_1 = np.full((ny, nx), np.nan),
         )
         if valid_idx.size == 0:
+            return maps
+        if fit_tvb and tvb_profile is not None:
+            maps['tvb_scale'] = np.full((ny, nx), np.nan)
+            U, U_pinv, basis_perp, bb_perp = self._tvb_grid_prep(basis, tvb_profile, n_bins)
+            d_valid = flat[valid_idx]
+            d_perp = self._tvb_project_data(d_valid.astype(np.float64), U, U_pinv).astype(np.float32)
+            basis_pt = torch.as_tensor(basis_perp, dtype=torch.float32, device=self.device)
+            bbp_t = torch.as_tensor(bb_perp, dtype=torch.float32, device=self.device)
+            dperp_t = torch.as_tensor(d_perp, dtype=torch.float32, device=self.device)
+            bd_t = dperp_t @ basis_pt.T
+            dsq_t = (dperp_t ** 2).sum(dim=1)
+            costs_t = dsq_t[:, None] - torch.clamp(bd_t, min=0.0) ** 2 / bbp_t[None, :]
+            best_g = costs_t.argmin(dim=1).cpu().numpy()
+            bd_np = bd_t.cpu().numpy()
+            tau_v = param_pairs[best_g, 0]
+            w_v = param_pairs[best_g, 1]
+            amp_v = np.maximum(bd_np[np.arange(len(valid_idx)), best_g] / bb_perp[best_g], 0.0)
+            good = amp_v > 0
+            tau_amp_ns = tau_v * 1e9
+            tau_int_ns = (tau_v + w_v ** 2 / np.maximum(tau_v, 1e-15)) * 1e9
+            basis_best = basis[best_g].astype(np.float64)
+            resid_after = d_valid.astype(np.float64) - amp_v[:, None] * basis_best
+            vz = resid_after @ U_pinv.T
+            tvb_v = np.maximum(vz[:, 0], 0.0)
+            bg_z = vz[:, 1]
+            B_arr = np.asarray(tvb_profile, dtype=np.float64)
+            model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * B_arr[None, :] + bg_z[:, None]
+            resid_v = d_valid.astype(np.float64) - model_v
+            chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+            yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
+            maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
+            maps['width_1'][yi_arr[good], xi_arr[good]] = w_v[good] * 1e9
+            maps['alpha_1'][yi_arr[good], xi_arr[good]] = amp_v[good]
+            maps['frac_1'][yi_arr[good], xi_arr[good]] = 1.0
+            maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
+            maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
+            maps['chi2_r'][yi_arr[good], xi_arr[good]] = chi2_v[good]
+            maps['tvb_scale'][yi_arr[good], xi_arr[good]] = tvb_v[good]
             return maps
         bg_flat = self._estimate_bg_batch(flat, valid_mask)
         dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)

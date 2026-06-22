@@ -128,7 +128,7 @@ class FovMode(BaseMode):
                                                 'Background reference PTU',
                                                 [('PTU', '*.ptu'), ('All', '*.*')])).grid(
             row=3, column=2, sticky='w', padx=4)
-        ttk.Label(fm, text='(optional — fits a measured fluorophore-free background decay, FLIMfit-style)',
+        ttk.Label(fm, text='(optional: fits a measured fluorophore-free background decay, FLIMfit-style)',
                   foreground='grey').grid(row=4, column=0, columnspan=3, sticky='w', padx=8)
         self.b._expert_banner_fov = ttk.Label(
             tab, text='⚙  Custom expert settings active',
