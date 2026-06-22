@@ -4,11 +4,13 @@ services:
     build: .
     ports:
       - "14500:14500"
+      - "5900:5900"
     volumes:
       - /mnt/tank/microscopy:/data
       - /mnt/tank/flimkit-config:/config
     environment:
       - FLIMKIT_DATA_DIR=/data
       - FLIMKIT_CONFIG_DIR=/config
+      - TZ=Etc/UTC
     restart: unless-stopped
     shm_size: 512m

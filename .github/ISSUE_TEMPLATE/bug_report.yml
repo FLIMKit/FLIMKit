@@ -1,0 +1,50 @@
+name: Bug report
+description: Report something that isn't working in FLIMKit
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug. Fill in what you can.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: How can we trigger it? Note the data type (PTU/XLSX) and mode (single FOV / stitch / phasor / timelapse) if relevant.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FLIMKit version
+      description: Shown under Help > About, or the tag/commit you are on.
+    validations:
+      required: false
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running FLIMKit?
+      options:
+        - Desktop app (packaged binary)
+        - Docker / browser (noVNC)
+        - From source (Python)
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. macOS 14, Windows 11, Ubuntu 24.04, TrueNAS
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Paste any traceback or crash log (from ~/.flimkit/logs if present).
+      render: shell

@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest a new capability or improvement for FLIMKit
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the analysis or workflow need behind the request.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like FLIMKit to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or current workaround
+      description: How do you handle this today?
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - FLIM fitting
+        - Phasor analysis
+        - Tile stitching
+        - Timelapse / batch
+        - IRF handling
+        - GUI / usability
+        - CLI
+        - Packaging / deployment
+        - Other
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Links, references, sample data, or papers that help explain the request.
+    validations:
+      required: false

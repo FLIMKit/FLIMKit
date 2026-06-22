@@ -1,16 +1,13 @@
-FROM python:3.12-slim-bookworm
-
-# xpra is not in the standard Debian repos — add xpra.org's own apt source
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl gnupg ca-certificates \
-    && curl -fsSL https://xpra.org/gpg.asc \
-       | gpg --dearmor -o /usr/share/keyrings/xpra.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/xpra.gpg] https://xpra.org/stable/bookworm/ ./" \
-       > /etc/apt/sources.list.d/xpra.list \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.14-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        xpra \
+        xvfb \
+        x11vnc \
+        fluxbox \
+        novnc \
+        websockify \
+        x11-utils \
+        tzdata \
         python3-tk \
         libgl1 \
         libglib2.0-0 \
@@ -23,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
+ENV TZ=Etc/UTC
+
 WORKDIR /app
 
 COPY requirements.txt .
@@ -32,11 +31,14 @@ RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
 
 COPY . .
 
+RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&reconnect=true">\n' > /usr/share/novnc/index.html \
+    && for ic in /usr/share/novnc/app/images/icons/novnc-*.png; do [ -e "$ic" ] && cp -f flimkit/UI/icon.png "$ic"; done
+
 RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-EXPOSE 14500
+EXPOSE 14500 5900
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
