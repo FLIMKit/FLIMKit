@@ -1,9 +1,5 @@
 FROM python:3.12-slim-bookworm
 
-# Stays on Python 3.12 — PyTorch's rocm6.2 wheels only go up to cp312 (no cp314).
-# GUI is served to the browser via a real X session: Xvfb + fluxbox (window manager)
-# + x11vnc, with noVNC/websockify as the HTML5 client. fluxbox is what actually maps
-# and paints the Tk window (xpra's seamless mode left it registered but unpainted).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb \
         x11vnc \
