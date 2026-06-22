@@ -6,7 +6,7 @@ tqdm.disable = True
 from scipy.optimize import least_squares, differential_evolution, nnls
 from scipy.stats.distributions import chi2 as chi2_dist
 from ..FLIM.irf_tools import build_full_irf
-from ..FLIM.fit_tools import estimate_bg, find_fit_end, _build_bounds, _pack_p0, coates_pileup_correction
+from ..FLIM.fit_tools import estimate_bg, find_fit_start, find_fit_end, _build_bounds, _pack_p0, coates_pileup_correction
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
                            dist_reconvolution_model, build_dist_basis_grid,
@@ -68,9 +68,10 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     bg_init = estimate_bg(decay_work, peak_bin)
     bg_fixed = bg_init if not fit_bg else 0.0
     fit_end = find_fit_end(decay_work, peak_bin, tau_max, tcspc_res, n_bins)
-    fit_start = 1
     standard_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
     fit_end = min(fit_end, standard_fit_end)
+    fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
+    fit_start = max(0, min(fit_start, fit_end - 10))
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
     if fit_tvb and tvb_profile is None:
         raise ValueError('fit_tvb=True requires a tvb_profile.')
@@ -652,9 +653,10 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     bg_init = estimate_bg(decay_work, peak_bin)
     bg_fixed = bg_init if not fit_bg else 0.0
     fit_end = find_fit_end(decay_work, peak_bin, tau_max, tcspc_res, n_bins)
-    fit_start = 1
     standard_fit_end = int(round(44.9455 / (tcspc_res * 1e9)))
     fit_end = min(fit_end, standard_fit_end)
+    fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
+    fit_start = max(0, min(fit_start, fit_end - 10))
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
     if fit_tvb and tvb_profile is None:
         raise ValueError('fit_tvb=True requires a tvb_profile.')
