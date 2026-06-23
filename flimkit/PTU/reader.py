@@ -136,24 +136,59 @@ class PTUFile:
         nsync = records & 0xFFFF
         return ch, dtime, nsync
     
+    # Record types sharing the generic HydraHarp-style T3 layout:
+    # HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic.
+    _HT3_RECTYPES = frozenset({0x00010304, 0x01010304, 0x00010305, 0x01010305,
+                               0x00010306, 0x01010306, 0x00010307, 0x01010307})
+
+    def _is_ht3(self):
+        return self.rec_type in self._HT3_RECTYPES
+
+    def _decode_records(self, records):
+        # Dispatch on record type: HydraHarp-style HT3 vs PicoHarp T3 bit layout.
+        if self._is_ht3():
+            special = ((records >> 31) & 0x1).astype(bool)
+            ch = (records >> 25) & 0x3F
+            dtime = (records >> 10) & 0x7FFF
+            nsync = records & 0x3FF
+        else:
+            ch = (records >> 28) & 0xF
+            dtime = (records >> 16) & 0xFFF
+            nsync = records & 0xFFFF
+            special = ch == 0xF
+        return special, ch, dtime, nsync
+
+    def _overflow_cumsum(self, special, ch, dtime, nsync):
+        if self._is_ht3():
+            ovf = special & (ch == 0x3F)
+            mult = np.where(nsync > 0, nsync, 1).astype(np.int64)
+            return np.cumsum(np.where(ovf, mult, 0)) * 1024
+        ovf = special & (dtime == 0)
+        return np.cumsum(ovf.astype(np.int64)) * 65536
+
+    def _line_markers(self, special, ch, dtime):
+        if self._is_ht3():
+            mk = special & (ch >= 1) & (ch <= 15)
+            mbits = ch[mk]
+        else:
+            mk = special & (dtime != 0)
+            mbits = dtime[mk]
+        midx = np.where(mk)[0]
+        return midx[(mbits & 1) != 0], midx[(mbits & 2) != 0]
+
     def summed_decay(self, channel=None):
         channel = _norm_channel(channel)
         records = self._load_records()
-        ch, dtime, _ = self._decode_picoharp_t3(records)
-        special = ch == 0xF
-        photon  = ~special
+        special, ch, dtime, _ = self._decode_records(records)
+        photon = ~special
 
         if channel is None:
-            ch_counts = np.bincount(ch[photon], minlength=16)
-            channel   = int(np.argmax(ch_counts))
+            ch_counts = np.bincount(ch[photon], minlength=64)
+            channel = int(np.argmax(ch_counts))
             self.photon_channel = channel
-            if self.verbose:
-                # print(f"  Auto-detected photon channel: {channel} "
-                    #   f"({ch_counts[channel]:,} photons)")
-                pass
         ph_mask = photon & (ch == channel)
-        dt_ph   = dtime[ph_mask].astype(np.int32)
-        decay   = np.bincount(dt_ph, minlength=self.n_bins).astype(float)
+        dt_ph = dtime[ph_mask].astype(np.int32)
+        decay = np.bincount(dt_ph, minlength=self.n_bins).astype(float)
         self._total_photons = int(decay.sum())
         return decay[:self.n_bins]
 
@@ -170,26 +205,15 @@ class PTUFile:
         ch_use = channel if channel is not None else self.photon_channel
 
         records = self._load_records()
-        ch, dtime, nsync = self._decode_picoharp_t3(records)
+        special, ch, dtime, nsync = self._decode_records(records)
 
-        #  Overflow correction 
-        T3WRAPAROUND = 65536
-        overflow_mask = (ch == 0xF) & (dtime == 0)
-        overflow_cumsum = np.cumsum(overflow_mask.astype(np.int64)) * T3WRAPAROUND
-        nsync_corrected = nsync.astype(np.int64) + overflow_cumsum
+        nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
 
-        special  = ch == 0xF
         ph_mask  = (~special) & (ch == ch_use)
         ph_idx   = np.where(ph_mask)[0]
         ph_dtime = dtime[ph_mask].astype(np.int32)
 
-        # Marker events (dtime != 0 excludes overflow records)
-        marker_mask  = special & (dtime != 0)
-        marker_idx   = np.where(marker_mask)[0]
-        marker_dtime = dtime[marker_mask]
-
-        line_start_abs = marker_idx[marker_dtime & 1 != 0]
-        line_stop_abs  = marker_idx[marker_dtime & 2 != 0]
+        line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
 
         n_lines = min(len(line_start_abs), len(line_stop_abs))
         if n_lines == 0:
@@ -254,25 +278,15 @@ class PTUFile:
         t0 = time.time()
 
         records  = self._load_records()
-        ch, dtime, nsync = self._decode_picoharp_t3(records)
+        special, ch, dtime, nsync = self._decode_records(records)
 
-        #  Overflow correction 
-        T3WRAPAROUND = 65536
-        overflow_mask = (ch == 0xF) & (dtime == 0)
-        overflow_cumsum = np.cumsum(overflow_mask.astype(np.int64)) * T3WRAPAROUND
-        nsync_corrected = nsync.astype(np.int64) + overflow_cumsum
+        nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
 
-        special  = ch == 0xF
         ph_mask  = (~special) & (ch == ch_use)
         ph_idx   = np.where(ph_mask)[0]
         ph_dtime = dtime[ph_mask].astype(np.int32)
 
-        marker_mask  = special & (dtime != 0)
-        marker_idx   = np.where(marker_mask)[0]
-        marker_dtime = dtime[marker_mask]
-
-        line_start_abs = marker_idx[marker_dtime & 1 != 0]
-        line_stop_abs  = marker_idx[marker_dtime & 2 != 0]
+        line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
 
         n_lines = min(len(line_start_abs), len(line_stop_abs))
         ny_out  = self.n_y  // binning

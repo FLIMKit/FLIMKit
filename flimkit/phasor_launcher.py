@@ -132,8 +132,8 @@ def get_ptu_active_channels(ptu_path):
 
     ptu = PTUFile(str(ptu_path), verbose=False)
     records = ptu._load_records()
-    ch_raw, _, _ = ptu._decode_picoharp_t3(records)
-    active_channels = np.unique(ch_raw[(ch_raw != 0xF) & (ch_raw >= 0)]).astype(int)
+    special, ch_raw, _, _ = ptu._decode_records(records)
+    active_channels = np.unique(ch_raw[~special]).astype(int)
     return sorted(int(channel) for channel in active_channels)
 
 

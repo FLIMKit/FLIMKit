@@ -14,8 +14,9 @@ def test_get_ptu_active_channels(monkeypatch):
         def _load_records(self):
             return np.array([1, 2, 3, 4], dtype=np.uint32)
 
-        def _decode_picoharp_t3(self, records):
-            return np.array([3, 0xF, 1, 3], dtype=np.uint32), None, None
+        def _decode_records(self, records):
+            ch = np.array([3, 0xF, 1, 3], dtype=np.uint32)
+            return ch == 0xF, ch, None, None
 
     monkeypatch.setattr(reader, "PTUFile", FakePTUFile)
 
