@@ -1,6 +1,6 @@
 # FLIMKit Development Roadmap
 
-**Last Updated:** April 16, 2026
+**Last Updated:** June 23, 2026
 
 ## High Priority - To Do
 
@@ -21,6 +21,9 @@ Histogram visualization for ROI statistical distributions (tau, photon counts, e
 ### 1. Auto-Detect Regions
 Automatic boundary detection for regions of interest based on intensity or lifetime gradients.
 
+### 2. T2-mode TTTR decoding
+Decode PicoQuant T2-mode records (used for FCS and point timing) alongside the current T3 modes, by deriving each photon's microtime from the recorded sync events. Blocked on a real T2 test file, ideally a matched T2/T3 pair of the same sample to validate against. Could later extend to older PicoQuant formats (`.pt3`/`.ht3`/`.phu`) and Becker and Hickl `.sdt`.
+
 ## Completed 
 
 **High Priority:**
@@ -34,6 +37,7 @@ Automatic boundary detection for regions of interest based on intensity or lifet
 - Better error messages (Extensive throughout codebase)
 
 **Core Features:**
+- Multi-format PTU decoding (PicoHarp, HydraHarp, TimeHarp 260, MultiHarp T3) and SymPhoTime `.pck` IRF import
 - Region drawing (4 tools: rectangle, ellipse, polygon, freehand)
 - Per-region stats (tau, photon counts)
 - CSV/GeoJSON export-import
