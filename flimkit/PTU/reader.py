@@ -85,6 +85,52 @@ def _read_ptu_header(path):
     return tags, data_offset
 
 
+def read_pck(path):
+    with open(path, 'rb') as fh:
+        magic = fh.read(8)
+        if b'PQCHECK' not in magic:
+            raise ValueError(f'Not a PicoQuant Check (.pck) file: magic={magic!r}')
+        fh.read(8)
+        buf = fh.read()
+    tags = {}
+    hist_blob = None
+    pos = 0
+    while pos + 48 <= len(buf):
+        ident = buf[pos:pos+32].decode('ascii', errors='replace').rstrip('\x00')
+        tagidx = struct.unpack_from('<i', buf, pos+32)[0]
+        tagtyp = struct.unpack_from('<I', buf, pos+36)[0]
+        tagval = buf[pos+40:pos+48]
+        pos += 48
+        if ident == 'Header_End':
+            break
+        info = _TAG_TYPES.get(tagtyp)
+        if info is None:
+            continue
+        name, fmt = info
+        if fmt in ('arr', 'str', 'blob'):
+            blen = struct.unpack('<q', tagval)[0]
+            blob = bytes(buf[pos:pos+blen])
+            pos += blen
+            if ident == 'ChkHistogram':
+                hist_blob = blob
+            val = blob.decode('utf-8', errors='replace').rstrip('\x00') if fmt == 'str' else blob
+        elif fmt:
+            val = struct.unpack(f'<{fmt}', tagval)[0]
+        else:
+            val = None
+        key = f'{ident}[{tagidx}]' if tagidx >= 0 else ident
+        tags[key] = val
+    if hist_blob is None:
+        raise ValueError(f'No ChkHistogram block in {path!r} - not a Check/IRF .pck?')
+    n_chan = max(1, int(tags.get('ChkChannels', 1)))
+    hist = np.frombuffer(hist_blob, dtype='<u4')
+    if hist.size % n_chan == 0:
+        hist = hist.reshape(n_chan, hist.size // n_chan)
+    else:
+        hist = hist.reshape(1, hist.size)
+    return hist, tags
+
+
 class PTUFile:
     def __init__(self, path, verbose=True):
         self.path    = str(path)

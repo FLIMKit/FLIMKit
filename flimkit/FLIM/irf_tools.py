@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import json
-from ..PTU.reader import PTUFile
+from ..PTU.reader import PTUFile, read_pck
 from ..utils.xlsx_tools import load_xlsx
 from ..configs import MACHINE_IRF_DIR as _DEFAULT_MACHINE_IRF_DIR
 
@@ -214,6 +214,28 @@ def irf_from_scatter_ptu(path: str, ptu_ref: PTUFile,
         raise ValueError(f"Scatter PTU {path!r} has no photons in the first {n} bins.")
     print(f"  IRF from scatter PTU: {s:,.0f} photons")
     return decay / s
+
+
+def irf_from_pck(path: str, n_bins: int, channel=None) -> np.ndarray:
+    hist, tags = read_pck(path)
+    if channel is None:
+        channel = int(np.argmax(hist.sum(axis=1)))
+    if channel >= hist.shape[0]:
+        raise ValueError(f'Channel {channel} not in .pck (has {hist.shape[0]} channel(s))')
+    full = hist[channel].astype(float)
+    peak = int(np.argmax(full))
+    if peak >= n_bins:
+        raise ValueError(f'.pck IRF peak (bin {peak}) is beyond the {n_bins}-bin target grid; '
+                         f'the .pck ({full.size} bins) and the data have different TCSPC resolution.')
+    if full.size < n_bins:
+        irf = np.concatenate([full, np.zeros(n_bins - full.size)])
+    else:
+        irf = full[:n_bins]
+    s = irf.sum()
+    if s == 0:
+        raise ValueError(f'.pck IRF channel {channel} has no counts.')
+    print(f'  IRF from .pck: channel {channel}, {int(s):,} photons, peak bin {peak}')
+    return irf / s
 
 def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
                               verbose: bool = True) -> tuple[np.ndarray, dict]:

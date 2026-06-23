@@ -96,6 +96,34 @@ state = launch_phasor('data.ptu', irf_path='irf.xlsx',
                       phasor_filter='gaussian', filter_kwargs={'sigma': 1.5})
 ```
 
+## Supported formats
+
+**FLIM data (PicoQuant `.ptu`, T3 mode):**
+
+- PicoHarp T3 (Leica FALCON / STELLARIS)
+- HydraHarp v1/v2 T3
+- TimeHarp 260 N / P T3
+- MultiHarp / generic T3
+
+Imaging PTUs are reconstructed into per-pixel decays from their scan line markers.
+
+**Read as a decay only (no image):** image reconstruction needs scan line markers, so FLIMKit fits the decay but cannot rebuild a FLIM image from a PTU that has none. This covers single-spot, point, and FCS acquisitions (for example PicoQuant TimeHarp 260P point measurements), and any PTU exported without imaging markers.
+
+**IRF sources:**
+
+- Measured / scatter IRF from a `.ptu`
+- Leica IRF from the exported `.xlsx` (interpolated or analytical model)
+- PicoQuant SymPhoTime Check file (`.pck`) histogram
+- A built machine IRF, or an analytical Gaussian IRF
+
+A `.pck` IRF must come from the same instrument and TCSPC resolution as the data being fit.
+
+**Not supported:**
+
+- **T2-mode PTUs.** FLIMKit decodes T3 mode only (one TCSPC histogram per sync period). T2 records are raw global timestamps with no per-period decay, so a T2 `.ptu` will not produce a meaningful decay.
+- Older PicoQuant formats (`.pt3`, `.ht3`, `.phu`, `.pt2`) and non-PicoQuant TCSPC (Becker and Hickl `.sdt` / `.spc`).
+- Leica `.lif` and proprietary LMSCOMPRESSED blocks. Export `.ptu` from LAS X instead.
+
 ## Machine IRF (do this first)
 
 Before fitting, build a machine IRF for your system once and reuse it across sessions. You need matched `.ptu` + `.xlsx` pairs, 10-20 is a good number.
@@ -182,7 +210,7 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ## Contact
 
