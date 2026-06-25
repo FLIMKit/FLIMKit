@@ -1,18 +1,18 @@
 import pytest
 import numpy as np
 from flimkit.UI.flim_display import (
-    compute_intensity_weighted_lifetime,
+    compute_weighted_lifetime,
     apply_color_scale,
 )
 
 
-class TestComputeIntensityWeightedLifetime:
+class TestComputeWeightedLifetime:
     def test_precomputed_tau_mean_int(self):
         """If pixel_maps already has tau_mean_int, return it directly."""
         tau_map = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
         pixel_maps = {'tau_mean_int': tau_map}
         intensity = np.ones((2, 2))
-        result = compute_intensity_weighted_lifetime(pixel_maps, intensity)
+        result = compute_weighted_lifetime(pixel_maps, intensity)
         np.testing.assert_array_equal(result, tau_map)
 
     def test_precomputed_tau_mean_amp(self):
@@ -20,7 +20,7 @@ class TestComputeIntensityWeightedLifetime:
         tau_map = np.array([[1.5, 0.0], [2.5, 3.0]], dtype=np.float32)
         pixel_maps = {'tau_mean_amp': tau_map}
         intensity = np.ones((2, 2))
-        result = compute_intensity_weighted_lifetime(pixel_maps, intensity)
+        result = compute_weighted_lifetime(pixel_maps, intensity)
         assert np.isnan(result[0, 1])
         assert result[0, 0] == pytest.approx(1.5)
 
@@ -33,7 +33,7 @@ class TestComputeIntensityWeightedLifetime:
             'a2':   np.array([[100.0, 50.0]]),
         }
         intensity = np.ones((1, 2))
-        result = compute_intensity_weighted_lifetime(pixel_maps, intensity, n_exp=2)
+        result = compute_weighted_lifetime(pixel_maps, intensity, n_exp=2)
         # Pixel (0,0): (1*100 + 3*100) / 200 = 2.0
         assert result[0, 0] == pytest.approx(2.0)
         # Pixel (0,1): (2*50 + 4*50) / 100 = 3.0
@@ -46,12 +46,12 @@ class TestComputeIntensityWeightedLifetime:
             'a1':   np.array([[0.0]]),
         }
         intensity = np.zeros((1, 1))
-        result = compute_intensity_weighted_lifetime(pixel_maps, intensity, n_exp=1)
+        result = compute_weighted_lifetime(pixel_maps, intensity, n_exp=1)
         assert np.isnan(result[0, 0])
 
     def test_empty_pixel_maps(self):
         """No matching keys → all NaN."""
-        result = compute_intensity_weighted_lifetime({}, np.ones((2, 2)), n_exp=2)
+        result = compute_weighted_lifetime({}, np.ones((2, 2)), n_exp=2)
         assert np.all(np.isnan(result))
 
 
