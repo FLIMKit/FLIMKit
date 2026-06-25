@@ -41,10 +41,10 @@ def _make_operation_progress_callback(operation_name, progress_window_manager):
 def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
     irf_path = Path(machine_irf_path) if machine_irf_path else Path(MACHINE_IRF_DEFAULT_PATH)
     if not irf_path.exists():
-        raise FileNotFoundError(f"Machine IRF file not found: {irf_path}")
+        raise FileNotFoundError(f'Machine IRF file not found: {irf_path}')
     irf_prompt = np.asarray(np.load(str(irf_path)), dtype=float).ravel()
     if irf_prompt.size == 0:
-        raise ValueError(f"Machine IRF file is empty: {irf_path}")
+        raise ValueError(f'Machine IRF file is empty: {irf_path}')
     irf_prompt = np.maximum(irf_prompt, 0.0)
     if irf_prompt.size > n_bins:
         irf_prompt = irf_prompt[:n_bins]
@@ -54,13 +54,13 @@ def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
         irf_prompt = padded
     s = irf_prompt.sum()
     if s <= 0:
-        raise ValueError(f"Machine IRF has zero total intensity after processing: {irf_path}")
+        raise ValueError(f'Machine IRF has zero total intensity after processing: {irf_path}')
     irf_prompt /= s
     current_peak = int(np.argmax(irf_prompt))
     shift = int(decay_peak_bin) - current_peak
     if shift != 0:
         irf_prompt = np.roll(irf_prompt, shift)
-    strategy = f"machine_irf ({irf_path.name}) peak_aligned_to_decay"
+    strategy = f'machine_irf ({irf_path.name}) peak_aligned_to_decay'
     return irf_prompt, strategy
 
 def yes_no_question(question):
@@ -76,11 +76,11 @@ def stitch_tiles_inquire():
     # XLIF metadata file
     xlif_path = input('Enter path to XLIF metadata file: ').strip()
     if not xlif_path or not Path(xlif_path).exists():
-        raise ValueError(f"XLIF file not found: {xlif_path}")
+        raise ValueError(f'XLIF file not found: {xlif_path}')
     # PTU directory
     ptu_dir = input('Enter directory containing PTU tiles: ').strip()
     if not ptu_dir or not Path(ptu_dir).exists():
-        raise ValueError(f"PTU directory not found: {ptu_dir}")
+        raise ValueError(f'PTU directory not found: {ptu_dir}')
     # Output directory - now we automatically create a subdirectory named after the ROI
     base_output = input('Enter base output directory (a subfolder named after the ROI will be created inside it): ').strip()
     if not base_output:
@@ -89,7 +89,7 @@ def stitch_tiles_inquire():
     ptu_basename = Path(xlif_path).stem
     roi_clean = ptu_basename.replace(' ', '_')
     output_dir = str(Path(base_output) / roi_clean)
-    print(f"  Data will be saved in: {output_dir}")
+    print(f'  Data will be saved in: {output_dir}')
     # Ask about rotation
     rotate_q = yes_no_question('Apply 90° clockwise rotation to tiles? (Recommended for FLIM microscope data)')
     rotate_tiles = (rotate_q == 'y')
@@ -141,7 +141,7 @@ def stitch_and_fit_inquire():
     elif estimate_irf == 'machine_irf' or estimate_irf.startswith('machine_irf_sigma'):
         _default_machine = str(MACHINE_IRF_DEFAULT_PATH)
         machine_irf_path = input(
-            f"Enter path to machine IRF .npy (Enter for default: {_default_machine}): "
+            f'Enter path to machine IRF .npy (Enter for default: {_default_machine}): '
         ).strip()
         machine_irf_path = machine_irf_path if machine_irf_path else _default_machine
         if not Path(machine_irf_path).exists():
@@ -162,7 +162,7 @@ def stitch_and_fit_inquire():
     save_individual = (save_individual_q == 'y')
     # Auto-select optimizer
     optimizer_choice = 'de'
-    print(f"\n[Auto] Using optimizer: de (log-tau + Sobol, robust global search)")
+    print(f'\n[Auto] Using optimizer: de (log-tau + Sobol, robust global search)')
     # Lifetime display range for weighted tau images
     if fit_per_pixel_mode:
         tau_range_q = yes_no_question('Set a lifetime display range for tau images? (e.g. 0-5 ns)')
@@ -252,7 +252,7 @@ def stitch_and_fit_inquire():
     return args
 def _run_tile_stitch(args):
     print(f"\n{'='*60}")
-    print(f"  TILE STITCHING")
+    print(f'  TILE STITCHING')
     print(f"{'='*60}")
     result = stitch_flim_tiles(
         xlif_path=Path(args.xlif),
@@ -267,10 +267,10 @@ def _run_tile_stitch(args):
     if result['tiles_processed'] == 0:
         raise RuntimeError('No tiles were successfully stitched!')
     print(f"\n{'='*60}")
-    print(f"  STITCHING COMPLETE")
+    print(f'  STITCHING COMPLETE')
     print(f"{'='*60}")
     print(f"Processed: {result['tiles_processed']}/{result['tiles_processed'] + result['tiles_skipped']} tiles")
-    print(f"\nOutputs:")
+    print(f'\nOutputs:')
     print(f"  Intensity: {result['intensity_path']}")
     print(f"  FLIM data: {result['flim_path']}")
     print(f"  Time axis: {result['time_axis_path']}")
@@ -278,7 +278,7 @@ def _run_tile_stitch(args):
     return result
 def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     print(f"\n{'='*60}")
-    print(f"  STEP 1: TILE STITCHING")
+    print(f'  STEP 1: TILE STITCHING')
     print(f"{'='*60}")
     # Create progress window for tile stitching
     stitch_progress_cb = _make_operation_progress_callback(
@@ -300,18 +300,18 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     print(f"\nStitching complete: {stitch_result['tiles_processed']} tiles processed")
     roi_name = args.ptu_basename.replace(' ', '_')
     print(f"\n{'='*60}")
-    print(f"  STEP 2: LOADING STITCHED DATA")
+    print(f'  STEP 2: LOADING STITCHED DATA')
     print(f"{'='*60}")
     stack, tcspc_res, n_bins = load_flim_for_fitting(
         Path(args.output_dir),
         load_to_memory=False
     )
-    print(f"  Mapped: {stack.shape} @ {tcspc_res*1e12:.2f} ps/bin")
+    print(f'  Mapped: {stack.shape} @ {tcspc_res*1e12:.2f} ps/bin')
     weight_candidates = sorted(Path(args.output_dir).glob('*_weight_map.npy'))
     if weight_candidates:
         weight_map = np.load(str(weight_candidates[0])).astype(np.float32)
         weight_map = np.clip(weight_map, 1.0, None)
-        print(f"  Loaded weight map: max overlap = {int(weight_map.max())} tiles")
+        print(f'  Loaded weight map: max overlap = {int(weight_map.max())} tiles')
     else:
         weight_map = None
         print('  No weight map found, overlap normalisation skipped')
@@ -335,7 +335,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                                    desc='  Normalising overlap (pixel stack)',
                                    unit='chunk', disable=True):
                         r1 = min(r0 + CHUNK, ny)
-                        w  = self._weight_map[r0:r1, :, np.newaxis]
+                        w = self._weight_map[r0:r1, :, np.newaxis]
                         out[r0:r1] = self._stack[r0:r1].astype(np.float32) / w
                     return out
                 else:
@@ -362,7 +362,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     ptu = StitchedData(stack, tcspc_res, n_bins, weight_map=weight_map)
     CHUNK_ROWS = 64
     ny, nx = stack.shape[:2]
-    print(f"\n  Building tissue mask from stitched intensity (chunked)...")
+    print(f'\n  Building tissue mask from stitched intensity (chunked)...')
     intensity_2d = np.zeros((ny, nx), dtype=np.float64)
     for r0 in tqdm(range(0, ny, CHUNK_ROWS), desc='  Building intensity', unit='chunk', disable=True):
         r1 = min(r0 + CHUNK_ROWS, ny)
@@ -371,31 +371,31 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                                  save_mask=True,
                                  path=str(Path(args.output_dir) / roi_name))
     n_tissue = int(tissue_mask.sum())
-    n_total  = tissue_mask.size
-    print(f"    Tissue mask: {n_tissue:,} / {n_total:,} pixels "
-          f"({100*n_tissue/n_total:.1f}%) are tissue")
+    n_total = tissue_mask.size
+    print(f'    Tissue mask: {n_tissue:,} / {n_total:,} pixels '
+          f'({100*n_tissue/n_total:.1f}%) are tissue')
     _int_thr = getattr(args, 'intensity_threshold', None)
     if _int_thr is not None:
-        print(f"\n  Applying intensity threshold...")
+        print(f'\n  Applying intensity threshold...')
         if _int_thr == 'interactive':
             _int_thr = pick_intensity_threshold(intensity_2d)
         else:
             _int_thr = int(_int_thr)
-        int_mask    = apply_intensity_threshold(intensity_2d, _int_thr)
+        int_mask = apply_intensity_threshold(intensity_2d, _int_thr)
         tissue_mask = tissue_mask & int_mask
         n_after = int(tissue_mask.sum())
-        print(f"    Intensity threshold: {_int_thr} photons  →  "
-              f"{n_after:,}/{n_total:,} pixels kept ({100*n_after/n_total:.1f}%)")
-    print(f"\n  Building masked summed decay (chunked)...")
+        print(f'    Intensity threshold: {_int_thr} photons  →  '
+              f'{n_after:,}/{n_total:,} pixels kept ({100*n_after/n_total:.1f}%)')
+    print(f'\n  Building masked summed decay (chunked)...')
     decay = np.zeros(n_bins, dtype=np.float64)
     for r0 in tqdm(range(0, ny, CHUNK_ROWS), desc='  Building decay', unit='chunk', disable=True):
-        r1       = min(r0 + CHUNK_ROWS, ny)
-        chunk    = stack[r0:r1].astype(np.float32)
+        r1 = min(r0 + CHUNK_ROWS, ny)
+        chunk = stack[r0:r1].astype(np.float32)
         row_mask = tissue_mask[r0:r1]
         chunk[~row_mask] = 0
         decay   += chunk.sum(axis=(0, 1))
     del chunk
-    print(f"  Total photons (tissue): {decay.sum():,.0f}")
+    print(f'  Total photons (tissue): {decay.sum():,.0f}')
     if decay.sum() == 0:
         print('  \u26a0 WARNING: tissue mask produced zero photons '
               '(mask may be inverted or canvas gaps only). '
@@ -404,17 +404,17 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         for r0 in range(0, ny, CHUNK_ROWS):
             r1 = min(r0 + CHUNK_ROWS, ny)
             decay += stack[r0:r1].astype(np.float64).sum(axis=(0, 1))
-        print(f"  Total photons (full canvas): {decay.sum():,.0f}")
+        print(f'  Total photons (full canvas): {decay.sum():,.0f}')
     print(f"\n{'='*60}")
-    print(f"  STEP 3: FLIM FITTING")
+    print(f'  STEP 3: FLIM FITTING')
     print(f"{'='*60}")
-    print(f"  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f'  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}')
     irf_peak_bin = find_irf_peak_bin(decay)
     decay_peak_bin = int(np.argmax(decay))
-    print(f"\nSummed decay (tissue-masked):")
-    print(f"  {decay.sum():,.0f} photons  |  peak={decay.max():,.0f} at bin {decay_peak_bin}")
-    print(f"  IRF peak (steepest rise): bin {irf_peak_bin} ({irf_peak_bin * tcspc_res * 1e9:.3f} ns)")
-    print(f"\nBuilding IRF (method: {args.estimate_irf})...")
+    print(f'\nSummed decay (tissue-masked):')
+    print(f'  {decay.sum():,.0f} photons  |  peak={decay.max():,.0f} at bin {decay_peak_bin}')
+    print(f'  IRF peak (steepest rise): bin {irf_peak_bin} ({irf_peak_bin * tcspc_res * 1e9:.3f} ns)')
+    print(f'\nBuilding IRF (method: {args.estimate_irf})...')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None and Path(args.irf).exists():
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
@@ -423,97 +423,97 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_sigma = False
         fit_bg = True
     elif getattr(args, 'irf_xlsx', None) is not None:
-        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
+        print(f'  IRF: fitting analytical model to: {args.irf_xlsx}')
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f"IRF XLSX file not found: {args.irf_xlsx}")
+            raise FileNotFoundError(f'IRF XLSX file not found: {args.irf_xlsx}')
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f"No IRF columns found in XLSX: {args.irf_xlsx}")
+            raise ValueError(f'No IRF columns found in XLSX: {args.irf_xlsx}')
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, n_bins, tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))
         pre_shift = irf_peak_bin - irf_current_peak
         if pre_shift != 0:
-            x          = np.arange(n_bins, dtype=float)
+            x = np.arange(n_bins, dtype=float)
             irf_prompt = np.interp(x - pre_shift, x, irf_prompt, left=0.0, right=0.0)
             s = irf_prompt.sum()
             if s > 0:
                 irf_prompt /= s
-            print(f"  Pre-shifted IRF by {pre_shift:+d} bins "
-                  f"(from bin {irf_current_peak} → {irf_peak_bin})")
-        strategy  = (f"irf_xlsx_analytical ({Path(args.irf_xlsx).name})  "
+            print(f'  Pre-shifted IRF by {pre_shift:+d} bins '
+                  f'(from bin {irf_current_peak} → {irf_peak_bin})')
+        strategy = (f'irf_xlsx_analytical ({Path(args.irf_xlsx).name})  '
                      f"FWHM={irf_params['fwhm_ns']*1000:.1f}ps  "
                      f"tail_amp={irf_params['tail_amp']:.3f}  "
                      f"tail_tau={irf_params['tail_tau_ns']:.3f}ns")
-        has_tail  = False
+        has_tail = False
         fit_sigma = False
-        fit_bg    = True
+        fit_bg = True
     elif args.estimate_irf == 'machine_irf':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = MACHINE_IRF_FIT_SIGMA
-        fit_bg    = MACHINE_IRF_FIT_BG
+        fit_bg = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'machine_irf_sigma_full':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
-        fit_bg    = MACHINE_IRF_FIT_BG
+        fit_bg = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'machine_irf_sigma_half':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
-        fit_bg    = MACHINE_IRF_FIT_BG
+        fit_bg = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_HALF
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'raw':
         from .FLIM.irf_tools import estimate_irf_from_decay_raw
         irf_prompt = estimate_irf_from_decay_raw(
             decay, tcspc_res, n_bins, n_irf_bins=args.irf_bins)
-        strategy  = f"estimated_raw (bins={args.irf_bins})"
-        has_tail  = True
+        strategy = f'estimated_raw (bins={args.irf_bins})'
+        has_tail = True
         fit_sigma = True
-        fit_bg    = True
-        print(f"  IRF: {strategy}")
+        fit_bg = True
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'parametric':
         from .FLIM.irf_tools import estimate_irf_from_decay_parametric
         irf_prompt = estimate_irf_from_decay_parametric(
             decay, tcspc_res, n_bins, fit_window_width_ns=args.irf_fit_width)
-        strategy  = f"estimated_parametric (width={args.irf_fit_width}ns)"
-        has_tail  = True
+        strategy = f'estimated_parametric (width={args.irf_fit_width}ns)'
+        has_tail = True
         fit_sigma = True
-        fit_bg    = True
-        print(f"  IRF: {strategy}")
+        fit_bg = True
+        print(f'  IRF: {strategy}')
     else:
         fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else tcspc_res * 1e9
         irf_prompt = gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, decay_peak_bin)
-        strategy  = f"gaussian FWHM={fwhm_ns*1000:.1f}ps"
-        has_tail  = False
+        strategy = f'gaussian FWHM={fwhm_ns*1000:.1f}ps'
+        has_tail = False
         fit_sigma = False
-        fit_bg    = True
-        print(f"  IRF: {strategy}")
-    print(f"  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}")
+        fit_bg = True
+        print(f'  IRF: {strategy}')
+    print(f'  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}')
     _dist_type = getattr(args, 'dist_type', 'discrete')
-    _dist_nc   = getattr(args, 'dist_n_components', 1)
+    _dist_nc = getattr(args, 'dist_n_components', 1)
     if _dist_type != 'discrete':
-        print(f"\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...")
+        print(f'\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...')
         global_popt, global_summary = fit_summed_dist(
             decay, tcspc_res, n_bins, irf_prompt,
             _dist_nc, _dist_type, fit_bg, fit_sigma,
@@ -529,7 +529,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
         )
     else:
-        print(f"\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...")
+        print(f'\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...')
         global_popt, global_summary = fit_summed(
             decay, tcspc_res, n_bins,
             irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -552,7 +552,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     }
     save_fit_summary_txt(
         global_summary,
-        Path(args.output_dir) / f"{roi_name}_fit_summary.txt",
+        Path(args.output_dir) / f'{roi_name}_fit_summary.txt',
         n_exp=args.nexp,
         strategy=strategy,
         metadata=metadata
@@ -560,7 +560,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     if not args.no_plots:
         matplotlib.use('Agg')
         output_name = Path(args.output_dir) / 'fit_results'
-        print(f"\nGenerating plots...")
+        print(f'\nGenerating plots...')
         plot_summed(
             decay, global_summary, ptu, None,
             args.nexp, strategy, str(output_name),
@@ -568,11 +568,11 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         )
     pixel_maps = None
     if args.mode in ('perPixel', 'both'):
-        print(f"\nBuilding pixel stack (binning={args.binning}×{args.binning})...")
+        print(f'\nBuilding pixel stack (binning={args.binning}×{args.binning})...')
         pixel_stack = ptu.pixel_stack(channel=None, binning=args.binning)
         if tissue_mask is not None:
-            print(f"  Background pixels will be skipped via min_photons threshold")
-        print(f"Per-pixel fitting (min_photons={args.min_photons})...")
+            print(f'  Background pixels will be skipped via min_photons threshold')
+        print(f'Per-pixel fitting (min_photons={args.min_photons})...')
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
         if _dist_type != 'discrete':
@@ -621,13 +621,13 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             )
         if not args.no_plots:
             matplotlib.use('Agg')
-            print(f"Generating pixel maps...")
+            print(f'Generating pixel maps...')
             plot_pixel_maps(pixel_maps, args.nexp, str(output_name), binning=args.binning)
             plot_lifetime_histogram(pixel_maps, args.nexp, str(output_name))
     print(f"\n{'='*60}")
-    print(f"  WORKFLOW COMPLETE")
+    print(f'  WORKFLOW COMPLETE')
     print(f"{'='*60}")
-    print(f"Stitched data: {args.output_dir}")
+    print(f'Stitched data: {args.output_dir}')
     print('\nDone!\n')
 def single_FOV_flim_fit_inquire():
     print('\n Interactive FLIM Fit Setup')
@@ -663,7 +663,7 @@ def single_FOV_flim_fit_inquire():
             elif estimate_irf == 'machine_irf' or estimate_irf.startswith('machine_irf_sigma'):
                 _default_machine = str(MACHINE_IRF_DEFAULT_PATH)
                 machine_irf_path = input(
-                    f"Enter path to machine IRF .npy (Enter for default: {_default_machine}): "
+                    f'Enter path to machine IRF .npy (Enter for default: {_default_machine}): '
                 ).strip()
                 machine_irf_path = machine_irf_path if machine_irf_path else _default_machine
                 irf_path = None
@@ -684,7 +684,7 @@ def single_FOV_flim_fit_inquire():
         elif estimate_irf == 'machine_irf' or estimate_irf.startswith('machine_irf_sigma'):
             _default_machine = str(MACHINE_IRF_DEFAULT_PATH)
             machine_irf_path = input(
-                f"Enter path to machine IRF .npy (Enter for default: {_default_machine}): "
+                f'Enter path to machine IRF .npy (Enter for default: {_default_machine}): '
             ).strip()
             machine_irf_path = machine_irf_path if machine_irf_path else _default_machine
             irf_path = None
@@ -737,31 +737,96 @@ def single_FOV_flim_fit_inquire():
     else:
         args.intensity_threshold = None
     return args
+def _recommended_photons(n_exp, dist_type='discrete'):
+    # rough TCSPC rules of thumb for a stable reconvolution fit
+    if dist_type != 'discrete':
+        return 500
+    return {1: 100, 2: 500}.get(int(n_exp), 1000)
+def _bin_intensity(intensity, k):
+    if k <= 1:
+        return intensity
+    ny, nx = intensity.shape
+    h, w = ny // k, nx // k
+    if h == 0 or w == 0:
+        return np.array([[intensity.sum()]])
+    return intensity[:h*k, :w*k].reshape(h, k, w, k).sum(axis=(1, 3))
+def _photon_budget_warning(stack, n_exp, min_photons, cur_binning,
+                           dist_type='discrete', max_binning=32):
+    # warn if too sparse to fit per-pixel; suggest a coarser binning that pools enough photons
+    intensity = stack.sum(axis=2)
+    signal = intensity[intensity > 0]
+    n_sig = int(signal.size)
+    if n_sig == 0:
+        print('  [!] No photons in any pixel - per-pixel map cannot be built.')
+        return None
+    rec = max(_recommended_photons(n_exp, dist_type), int(min_photons))
+    n_fit = int((intensity >= min_photons).sum())
+    frac = n_fit / n_sig
+    med = float(np.median(signal))
+    floor_bin = None
+    qual_bin = None
+    for k in (1, 2, 4, 8, 16, 32):
+        b = cur_binning * k
+        if k != 1 and b > max_binning:
+            break
+        sig = _bin_intensity(intensity, k)
+        sig = sig[sig > 0]
+        if sig.size == 0:
+            continue
+        m = float(np.median(sig))
+        if floor_bin is None and m >= min_photons:
+            floor_bin = b
+        if qual_bin is None and m >= rec:
+            qual_bin = b
+    if n_fit > 0 and frac >= 0.2:
+        if med < rec:
+            print(f'  [i] Median signal pixel has {med:.0f} photons (< ~{rec} recommended '
+                  f'for {n_exp}-exp); fits may be noisy.')
+        return None
+    if n_fit == 0:
+        print(f'  [!] PHOTON-STARVED: 0/{n_sig:,} signal pixels reach min_photons={min_photons} '
+              f'at binning={cur_binning}.')
+        print(f'      The per-pixel lifetime map will be entirely empty (NaN).')
+    else:
+        print(f'  [!] PHOTON-STARVED: only {n_fit:,}/{n_sig:,} signal pixels ({100*frac:.1f}%) reach '
+              f'min_photons={min_photons} at binning={cur_binning}.')
+        print(f'      Most of the lifetime map will be empty (NaN).')
+    print(f'      Brightest pixel = {int(intensity.max())} photons, median signal pixel = {med:.0f}.')
+    if floor_bin is not None:
+        print(f'      Suggest binning {floor_bin}x{floor_bin} so most signal pixels clear '
+              f'min_photons={min_photons}.')
+    if qual_bin is not None and qual_bin != floor_bin:
+        print(f'      Use binning {qual_bin}x{qual_bin} for ~{rec} photons/pixel '
+              f'(stable {n_exp}-exp fit).')
+    if floor_bin is None:
+        print(f'      Even {max_binning}x{max_binning} binning is too sparse for per-pixel fitting; '
+              f'use fast-FLIM (mean arrival time) or phasor analysis instead.')
+    return qual_bin or floor_bin
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     _dt = getattr(args, 'dist_type', 'discrete')
     _model_label = (f"{args.nexp}-exp" if _dt == 'discrete'
                     else f"{getattr(args, 'dist_n_components', 1)}-comp {_dt} dist.")
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}")
+    print(f'  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}')
     print(f"{'='*60}")
-    print(f"\n[1] PTU: {args.ptu}")
+    print(f'\n[1] PTU: {args.ptu}')
     ptu = PTUFile(args.ptu, verbose=True)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
-    print(f"  IRF FWHM: {fwhm_ns*1000:.2f} ps "
+    print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
     cell_mask = None
     if getattr(args, 'cell_mask', False):
-        print(f"\n[1b] Building cell mask")
+        print(f'\n[1b] Building cell mask')
         intensity_img = make_intensity_image(args.ptu, rotate_90_cw=False, save_image=False)
         cell_mask = make_cell_mask(intensity_img, save_mask=True, path=args.out)
         n_cell_px = int(cell_mask.sum())
         n_total_px = cell_mask.size
-        print(f"    Cell mask: {n_cell_px:,} / {n_total_px:,} pixels "
-              f"({100*n_cell_px/n_total_px:.1f}% of FOV)")
+        print(f'    Cell mask: {n_cell_px:,} / {n_total_px:,} pixels '
+              f'({100*n_cell_px/n_total_px:.1f}% of FOV)')
     intensity_mask = None
     _int_thr = getattr(args, 'intensity_threshold', None)
     if _int_thr is not None:
-        print(f"\n[1c] Intensity threshold")
+        print(f'\n[1c] Intensity threshold')
         if cell_mask is None:
             intensity_img = make_intensity_image(args.ptu, rotate_90_cw=False, save_image=False)
         if _int_thr == 'interactive':
@@ -771,11 +836,11 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         intensity_mask = apply_intensity_threshold(intensity_img, _int_thr)
         n_kept = int(intensity_mask.sum())
         n_total_px = intensity_mask.size
-        print(f"    Intensity threshold: {_int_thr} photons  →  "
-              f"{n_kept:,}/{n_total_px:,} pixels kept ({100*n_kept/n_total_px:.1f}%)")
+        print(f'    Intensity threshold: {_int_thr} photons  →  '
+              f'{n_kept:,}/{n_total_px:,} pixels kept ({100*n_kept/n_total_px:.1f}%)')
         if cell_mask is not None:
             cell_mask = cell_mask & intensity_mask
-            print(f"    Combined with cell mask: {int(cell_mask.sum()):,} pixels kept")
+            print(f'    Combined with cell mask: {int(cell_mask.sum()):,} pixels kept')
         else:
             cell_mask = intensity_mask
     print(f"\n[2] Building summed decay (channel={args.channel or 'auto'})")
@@ -784,15 +849,15 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         stack_for_decay[~cell_mask] = 0
         decay = stack_for_decay.sum(axis=(0, 1))
         del stack_for_decay
-        print(f"    (Using cell-masked photons only)")
+        print(f'    (Using cell-masked photons only)')
     else:
         decay = ptu.summed_decay(channel=args.channel)
-    irf_peak_bin   = find_irf_peak_bin(decay)
+    irf_peak_bin = find_irf_peak_bin(decay)
     decay_peak_bin = int(np.argmax(decay))
-    print(f"    {decay.sum():,.0f} photons  |  peak={decay.max():,.0f}  "
-          f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
-    print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
-          f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
+    print(f'    {decay.sum():,.0f} photons  |  peak={decay.max():,.0f}  '
+          f'at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)')
+    print(f'    IRF peak (steepest rise): bin {irf_peak_bin} '
+          f'({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)')
     # Pile-up report
     pu = ptu.pileup_fraction
     _pileup_pct = None
@@ -804,107 +869,107 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         _pileup_pct = round(pu_pct, 2)
         _count_rate_mhz = round(cr_mhz, 4)
         pu_warn = ' HIGH - use --correct-pileup' if pu_pct > 5 else ''
-        print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
-              f"Acq: {acq_s:.1f} s  "
-              f"Count rate: {cr_mhz:.3f} MHz  "
-              f"Pile-up: {pu_pct:.1f}%{pu_warn}")
+        print(f'    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  '
+              f'Acq: {acq_s:.1f} s  '
+              f'Count rate: {cr_mhz:.3f} MHz  '
+              f'Pile-up: {pu_pct:.1f}%{pu_warn}')
         if getattr(args, 'correct_pileup', False):
             from flimkit.FLIM.fit_tools import coates_pileup_correction, estimate_bg
             bg_pre = estimate_bg(decay, irf_peak_bin)
             decay_no_bg = np.maximum(decay - bg_pre, 0.0)
             decay_raw_sum = decay.sum()
             decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
-            print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
-                  f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
+            print(f'    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): '
+                  f'{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)')
     xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
-        print(f"\n[3] XLSX: {args.xlsx}")
+        print(f'\n[3] XLSX: {args.xlsx}')
         xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
             print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
         elif xlsx['fit_t'] is not None:
-            print(f"    FLIM microscope fit_t present but fit_c absent")
+            print(f'    FLIM microscope fit_t present but fit_c absent')
     else:
-        print(f"\n[3] No XLSX provided or file not found")
-    print(f"\n[4] Building IRF")
+        print(f'\n[3] No XLSX provided or file not found')
+    print(f'\n[4] Building IRF')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
-        strategy   = 'scatter_ptu'
-        has_tail   = False
-        fit_sigma  = False
-        fit_bg     = True
+        strategy = 'scatter_ptu'
+        has_tail = False
+        fit_sigma = False
+        fit_bg = True
     elif args.irf_xlsx is not None:
-        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
+        print(f'  IRF: fitting analytical model to: {args.irf_xlsx}')
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f"--irf-xlsx file not found: {args.irf_xlsx}")
+            raise FileNotFoundError(f'--irf-xlsx file not found: {args.irf_xlsx}')
         irf_ref = load_xlsx(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f"No IRF columns found in --irf-xlsx: {args.irf_xlsx}")
+            raise ValueError(f'No IRF columns found in --irf-xlsx: {args.irf_xlsx}')
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, ptu.n_bins, ptu.tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))
         pre_shift = irf_peak_bin - irf_current_peak
         if pre_shift != 0:
-            x          = np.arange(ptu.n_bins, dtype=float)
+            x = np.arange(ptu.n_bins, dtype=float)
             irf_prompt = np.interp(x - pre_shift, x, irf_prompt, left=0.0, right=0.0)
             s = irf_prompt.sum()
             if s > 0:
                 irf_prompt /= s
-            print(f"  Pre-shifted IRF by {pre_shift:+d} bins "
-                  f"(from bin {irf_current_peak} → {irf_peak_bin})")
-        strategy  = (f"irf_xlsx_analytical ({Path(args.irf_xlsx).name})  "
+            print(f'  Pre-shifted IRF by {pre_shift:+d} bins '
+                  f'(from bin {irf_current_peak} → {irf_peak_bin})')
+        strategy = (f'irf_xlsx_analytical ({Path(args.irf_xlsx).name})  '
                      f"FWHM={irf_params['fwhm_ns']*1000:.1f}ps  "
                      f"tail_amp={irf_params['tail_amp']:.3f}  "
                      f"tail_tau={irf_params['tail_tau_ns']:.3f}ns")
-        has_tail  = False
+        has_tail = False
         fit_sigma = False
-        fit_bg    = True
-        print(f"  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}")
+        fit_bg = True
+        print(f'  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}')
     elif args.estimate_irf == 'machine_irf':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = MACHINE_IRF_FIT_SIGMA
-        fit_bg    = MACHINE_IRF_FIT_BG
-        print(f"  IRF: {strategy}")
+        fit_bg = MACHINE_IRF_FIT_BG
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'machine_irf_sigma_full':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
-        fit_bg    = MACHINE_IRF_FIT_BG
+        fit_bg = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     elif args.estimate_irf == 'machine_irf_sigma_half':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
         irf_prompt, strategy = _load_machine_irf_prompt(
             getattr(args, 'machine_irf', None), ptu.n_bins, _align_bin)
-        strategy += f" align={_align_lbl}"
-        has_tail  = MACHINE_IRF_FIT_TAIL
+        strategy += f' align={_align_lbl}'
+        has_tail = MACHINE_IRF_FIT_TAIL
         fit_sigma = True
-        fit_bg    = MACHINE_IRF_FIT_BG
+        fit_bg = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_HALF
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     elif xlsx is not None and xlsx['irf_t'] is not None and not args.no_xlsx_irf:
         irf_prompt = irf_from_xlsx(xlsx, ptu.n_bins, ptu.tcspc_res)
-        above      = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
-        fwhm_xlsx  = (above[-1] - above[0]) * ptu.tcspc_res * 1e9 if len(above) > 1 else 0
-        print(f"  IRF: xlsx prompt  peak bin={int(np.argmax(irf_prompt))}  "
-              f"FWHM={fwhm_xlsx:.3f} ns  + tail + σ as free params")
-        strategy  = 'xlsx'
-        has_tail  = True
+        above = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
+        fwhm_xlsx = (above[-1] - above[0]) * ptu.tcspc_res * 1e9 if len(above) > 1 else 0
+        print(f'  IRF: xlsx prompt  peak bin={int(np.argmax(irf_prompt))}  '
+              f'FWHM={fwhm_xlsx:.3f} ns  + tail + σ as free params')
+        strategy = 'xlsx'
+        has_tail = True
         fit_sigma = True
-        fit_bg    = True
+        fit_bg = True
     elif args.estimate_irf != 'none':
         if args.estimate_irf == 'raw':
             irf_prompt = estimate_irf_from_decay_raw(
@@ -915,19 +980,20 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 decay, ptu.tcspc_res, ptu.n_bins,
                 fit_window_width_ns=args.irf_fit_width)
             strategy = 'estimated_parametric'
-        has_tail  = True
+        has_tail = True
         fit_sigma = True
-        fit_bg    = True
-        print(f"  IRF: {strategy} + tail + σ as free params")
+        fit_bg = True
+        print(f'  IRF: {strategy} + tail + σ as free params')
     if not args.no_plots and xlsx is not None:
         matplotlib.use('Agg')
-        print(f"\n[4b] IRF comparison")
+        print(f'\n[4b] IRF comparison')
         compare_irfs(irf_prompt, xlsx, ptu.tcspc_res, ptu.n_bins, strategy, args.out)
-    global_popt    = None
+    global_popt = None
     global_summary = None
-    pixel_maps     = None
+    pixel_maps = None
+    _suggested_binning = None
     _dist_type = getattr(args, 'dist_type', 'discrete')
-    _dist_nc   = getattr(args, 'dist_n_components', 1)
+    _dist_nc = getattr(args, 'dist_n_components', 1)
     tvb_profile = None
     _tvb_ptu = getattr(args, 'tvb_ptu', None)
     if _tvb_ptu:
@@ -935,7 +1001,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         _tvb_chan = getattr(args, 'tvb_channel', None)
         if _tvb_chan is None:
             _tvb_chan = getattr(args, 'channel', None)
-        print(f"\n[4c] Time-varying background from: {_tvb_ptu}")
+        print(f'\n[4c] Time-varying background from: {_tvb_ptu}')
         tvb_profile = tvb_from_reference_ptu(_tvb_ptu, ptu, channel=_tvb_chan)
     fit_tvb = tvb_profile is not None
     def _run_summed():
@@ -971,21 +1037,21 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
     if args.mode in ('summed', 'both'):
-        print(f"\n[5] Summed decay fit  ({args.nexp}-exp, optimizer={args.optimizer})")
+        print(f'\n[5] Summed decay fit  ({args.nexp}-exp, optimizer={args.optimizer})')
         global_popt, global_summary = _run_summed()
         print_summary(global_summary, strategy, args.nexp)
         if not args.no_plots:
             matplotlib.use('Agg')
-            print(f"\n[6] Plotting")
+            print(f'\n[6] Plotting')
             plot_summed(decay, global_summary, ptu, xlsx,
                         args.nexp, strategy, args.out,
                         irf_prompt=irf_prompt)
     if args.mode in ('perPixel', 'both'):
         if global_popt is None:
-            print(f"\n[5] Running summed fit first (τ needed for per-pixel)")
+            print(f'\n[5] Running summed fit first (τ needed for per-pixel)')
             global_popt, global_summary = _run_summed()
             print_summary(global_summary, strategy, args.nexp)
-        print(f"\n[7] Building pixel stack (binning={args.binning}×{args.binning})")
+        print(f'\n[7] Building pixel stack (binning={args.binning}×{args.binning})')
         stack = ptu.pixel_stack(channel=ptu.photon_channel, binning=args.binning)
         if cell_mask is not None:
             import cv2
@@ -996,8 +1062,10 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             else:
                 mask_resized = cell_mask
             stack[~mask_resized] = 0
-            print(f"    Applied cell mask to pixel stack")
-        print(f"\n[8] Per-pixel fitting (min_photons={args.min_photons})")
+            print(f'    Applied cell mask to pixel stack')
+        _suggested_binning = _photon_budget_warning(
+            stack, args.nexp, args.min_photons, args.binning, dist_type=_dist_type)
+        print(f'\n[8] Per-pixel fitting (min_photons={args.min_photons})')
         # Create progress window for per-pixel fitting
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
@@ -1028,7 +1096,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             )
         if not args.no_plots:
             matplotlib.use('Agg')
-            print(f"\n[9] Plotting pixel maps")
+            print(f'\n[9] Plotting pixel maps')
             plot_pixel_maps(pixel_maps, args.nexp, args.out, binning=args.binning)
             plot_lifetime_histogram(pixel_maps, args.nexp, args.out)
     print('\nDone.\n')
@@ -1044,6 +1112,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         'decay':            decay,
         'pileup_pct':       _pileup_pct,
         'count_rate_mhz':   _count_rate_mhz,
+        'suggested_binning': _suggested_binning,
     }
 def single_FOV_flim_fit(interactive=False):
     if interactive:
@@ -1187,7 +1256,7 @@ def tile_fit_inquire():
     if estimate_irf == 'machine_irf' or estimate_irf.startswith('machine_irf_sigma'):
         _default_machine = str(MACHINE_IRF_DEFAULT_PATH)
         machine_irf_path = input(
-            f"Enter path to machine IRF .npy (Enter for default: {_default_machine}): "
+            f'Enter path to machine IRF .npy (Enter for default: {_default_machine}): '
         ).strip()
         machine_irf_path = machine_irf_path if machine_irf_path else _default_machine
         if not Path(machine_irf_path).exists():
@@ -1213,50 +1282,50 @@ def tile_fit_inquire():
         intensity_threshold = None
     tau_range_q = yes_no_question('Set lifetime display range for tau images?')
     if tau_range_q == 'y':
-        tau_min_display = input(f"  Min tau (ns, Enter=auto): ").strip()
-        tau_max_display = input(f"  Max tau (ns, Enter=auto): ").strip()
+        tau_min_display = input(f'  Min tau (ns, Enter=auto): ').strip()
+        tau_max_display = input(f'  Max tau (ns, Enter=auto): ').strip()
         tau_min_display = float(tau_min_display) if tau_min_display else None
         tau_max_display = float(tau_max_display) if tau_max_display else None
     else:
         tau_min_display = TAU_DISPLAY_MIN
         tau_max_display = TAU_DISPLAY_MAX
     args = argparse.Namespace()
-    args.xlif         = stitch_args.xlif
-    args.ptu_dir      = stitch_args.ptu_dir
-    args.output_dir   = stitch_args.output_dir
+    args.xlif = stitch_args.xlif
+    args.ptu_dir = stitch_args.ptu_dir
+    args.output_dir = stitch_args.output_dir
     args.ptu_basename = stitch_args.ptu_basename
-    args.rotate_tiles    = stitch_args.rotate_tiles
-    args.register_tiles  = True
+    args.rotate_tiles = stitch_args.rotate_tiles
+    args.register_tiles = True
     args.reg_max_shift_px = 120
-    args.estimate_irf  = estimate_irf
-    args.irf_xlsx_dir  = irf_xlsx_dir
-    args.machine_irf   = machine_irf_path
-    args.irf           = None
-    args.irf_xlsx      = None
-    args.irf_bins      = IRF_BINS
+    args.estimate_irf = estimate_irf
+    args.irf_xlsx_dir = irf_xlsx_dir
+    args.machine_irf = machine_irf_path
+    args.irf = None
+    args.irf_xlsx = None
+    args.irf_bins = IRF_BINS
     args.irf_fit_width = IRF_FIT_WIDTH
-    args.irf_fwhm      = IRF_FWHM
-    args.nexp        = nexp
-    args.tau_min     = Tau_min
-    args.tau_max     = Tau_max
-    args.mode        = 'both'
-    args.binning     = binning_factor
+    args.irf_fwhm = IRF_FWHM
+    args.nexp = nexp
+    args.tau_min = Tau_min
+    args.tau_max = Tau_max
+    args.mode = 'both'
+    args.binning = binning_factor
     args.min_photons = MIN_PHOTONS_PERPIX
-    args.optimizer   = 'de'
-    args.restarts    = lm_restarts
+    args.optimizer = 'de'
+    args.restarts = lm_restarts
     args.de_population = de_population
-    args.de_maxiter    = de_maxiter
-    args.workers       = n_workers
-    args.no_polish     = False
-    args.channel       = channels
-    args.no_plots      = True
-    args.cell_mask     = False
+    args.de_maxiter = de_maxiter
+    args.workers = n_workers
+    args.no_polish = False
+    args.channel = channels
+    args.no_plots = True
+    args.cell_mask = False
     args.intensity_threshold = intensity_threshold
-    args.no_xlsx_irf   = True
-    args.debug_xlsx    = False
-    args.print_config  = False
-    args.xlsx          = None
-    args.out           = None
+    args.no_xlsx_irf = True
+    args.debug_xlsx = False
+    args.print_config = False
+    args.xlsx = None
+    args.out = None
     args.tau_display_min = tau_min_display
     args.tau_display_max = tau_max_display
     return args
@@ -1265,32 +1334,32 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     from .FLIM.assemble import assemble_tile_maps, derive_global_tau, save_assembled_maps
     roi_name = args.ptu_basename.replace(' ', '_')
     print(f"\n{'='*60}")
-    print(f"  STEP 1: PER-TILE FITTING")
+    print(f'  STEP 1: PER-TILE FITTING')
     print(f"{'='*60}")
     (tile_results, canvas_height, canvas_width, corrected_positions,
      pooled_decay, pooled_irf, tcspc_ref, global_popt, global_summary) = fit_flim_tiles(
-        xlif_path     = Path(args.xlif),
-        ptu_dir       = Path(args.ptu_dir),
-        output_dir    = Path(args.output_dir),
-        args          = args,
-        ptu_basename  = args.ptu_basename,
-        rotate_tiles  = args.rotate_tiles,
-        irf_xlsx_dir  = getattr(args, 'irf_xlsx_dir', None),
-        irf_xlsx_map  = getattr(args, 'irf_xlsx_map', None),
-        verbose       = True,
+        xlif_path = Path(args.xlif),
+        ptu_dir = Path(args.ptu_dir),
+        output_dir = Path(args.output_dir),
+        args = args,
+        ptu_basename = args.ptu_basename,
+        rotate_tiles = args.rotate_tiles,
+        irf_xlsx_dir = getattr(args, 'irf_xlsx_dir', None),
+        irf_xlsx_map = getattr(args, 'irf_xlsx_map', None),
+        verbose = True,
         progress_callback = progress_callback,
-        cancel_event  = cancel_event,
+        cancel_event = cancel_event,
     )
     if not tile_results:
         raise RuntimeError('No tiles were successfully fitted.')
     print(f"\n{'='*60}")
-    print(f"  STEP 2: ASSEMBLING CANVAS")
+    print(f'  STEP 2: ASSEMBLING CANVAS')
     print(f"{'='*60}")
     canvas = assemble_tile_maps(
-        tile_results   = tile_results,
-        canvas_height  = canvas_height,
-        canvas_width   = canvas_width,
-        n_exp          = args.nexp,
+        tile_results = tile_results,
+        canvas_height = canvas_height,
+        canvas_width = canvas_width,
+        n_exp = args.nexp,
     )
     # fit_flim_tiles computes the canvas at (H//binning, W//binning)
     # using effective_pixel_size_m = pixel_size_m * binning.  Batch
@@ -1310,12 +1379,12 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
                                    interpolation=_cv2.INTER_NEAREST)
             canvas = {k: _up(v) for k, v in canvas.items()}
             canvas_height = _th
-            canvas_width  = _tw
-            print(f"  ↑ Canvas upsampled ×{_binning} → {_th}×{_tw} px (full tile resolution)")
+            canvas_width = _tw
+            print(f'  ↑ Canvas upsampled ×{_binning} → {_th}×{_tw} px (full tile resolution)')
         except Exception as _upe:
-            print(f"  Canvas upsample failed: {_upe} - TIFFs will be at binned resolution")
+            print(f'  Canvas upsample failed: {_upe} - TIFFs will be at binned resolution')
     print(f"\n{'='*60}")
-    print(f"  STEP 3: GLOBAL TAU SUMMARY")
+    print(f'  STEP 3: GLOBAL TAU SUMMARY')
     print(f"{'='*60}")
     # Preserve fields from the consensus (pooled) fit before derive_global_tau
     # replaces global_summary.  'model' is needed by display_fit_results to draw
@@ -1326,53 +1395,53 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
                  'reduced_chi2_tail_pearson', 'reduced_chi2_pearson'):
         if _key in _consensus_summary:
             global_summary[_key] = _consensus_summary[_key]
-    n_px     = global_summary.get('n_pixels_fitted', 0)
+    n_px = global_summary.get('n_pixels_fitted', 0)
     tau_mean = global_summary.get('tau_mean_amp_global_ns', float('nan'))
-    tau_std  = global_summary.get('tau_std_amp_global_ns',  float('nan'))
-    tau_med  = global_summary.get('tau_median_amp_global_ns', float('nan'))
+    tau_std = global_summary.get('tau_std_amp_global_ns',  float('nan'))
+    tau_med = global_summary.get('tau_median_amp_global_ns', float('nan'))
     print(f"\n{'─'*60}")
-    print(f"  Per-tile fit: {args.nexp}-exp | {n_px:,} pixels")
+    print(f'  Per-tile fit: {args.nexp}-exp | {n_px:,} pixels')
     print(f"{'─'*60}")
     for k in range(1, args.nexp + 1):
         tau_k = global_summary.get(f'tau{k}_mean_ns', float('nan'))
-        a_k   = global_summary.get(f'a{k}_mean_frac', float('nan'))
-        print(f"  τ{k} = {tau_k:8.4f} ns   α{k} = {a_k:.3e}   f{k} = {a_k:.4f}")
-    print(f"  τ_mean (amplitude-weighted)  = {tau_mean:.4f} ns")
-    print(f"  τ_mean (median, amp-wtd)     = {tau_med:.4f} ns")
-    print(f"  τ σ (pixel distribution)     = {tau_std:.4f} ns")
-    print(f"  n pixels fitted              = {n_px}")
-    print(f"  Optimizer: per-pixel (per-tile fit)")
+        a_k = global_summary.get(f'a{k}_mean_frac', float('nan'))
+        print(f'  τ{k} = {tau_k:8.4f} ns   α{k} = {a_k:.3e}   f{k} = {a_k:.4f}')
+    print(f'  τ_mean (amplitude-weighted)  = {tau_mean:.4f} ns')
+    print(f'  τ_mean (median, amp-wtd)     = {tau_med:.4f} ns')
+    print(f'  τ σ (pixel distribution)     = {tau_std:.4f} ns')
+    print(f'  n pixels fitted              = {n_px}')
+    print(f'  Optimizer: per-pixel (per-tile fit)')
     print(f"\n{'='*60}")
-    print(f"  STEP 4: SAVING OUTPUTS")
+    print(f'  STEP 4: SAVING OUTPUTS')
     print(f"{'='*60}")
     save_assembled_maps(
-        canvas                = canvas,
-        global_summary        = global_summary,
-        output_dir            = Path(args.output_dir),
-        roi_name              = roi_name,
-        n_exp                 = args.nexp,
-        tau_display_min       = getattr(args, 'tau_display_min',       None),
-        tau_display_max       = getattr(args, 'tau_display_max',       None),
+        canvas = canvas,
+        global_summary = global_summary,
+        output_dir = Path(args.output_dir),
+        roi_name = roi_name,
+        n_exp = args.nexp,
+        tau_display_min = getattr(args, 'tau_display_min',       None),
+        tau_display_max = getattr(args, 'tau_display_max',       None),
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
     )
     # Intensity-weighted lifetime colour image
     print(f"\n{'='*60}")
-    print(f"  STEP 5: LIFETIME IMAGE")
+    print(f'  STEP 5: LIFETIME IMAGE')
     print(f"{'='*60}")
     tau_min_img = getattr(args, 'tau_display_min', None) or 0.0
     tau_max_img = getattr(args, 'tau_display_max', None) or 5.0
     make_lifetime_image(
-        canvas          = canvas,
-        output_dir      = Path(args.output_dir),
-        roi_name        = roi_name,
-        tau_min_ns      = tau_min_img,
-        tau_max_ns      = tau_max_img,
+        canvas = canvas,
+        output_dir = Path(args.output_dir),
+        roi_name = roi_name,
+        tau_min_ns = tau_min_img,
+        tau_max_ns = tau_max_img,
         smooth_sigma_px = 2.0,
-        verbose         = True,
+        verbose = True,
     )
     print(f"\n{'='*60}")
-    print(f"  PER-TILE FITTING COMPLETE")
+    print(f'  PER-TILE FITTING COMPLETE')
     print(f"{'='*60}\n")
     # Build time_ns array from tcspc resolution and number of bins
     import numpy as np
@@ -1397,7 +1466,7 @@ def _run_timelapse_fit(args, progress_callback=None, cancel_event=None):
     print(f'  Output: {args.output_dir}')
     print(f'  Model:  {args.nexp}-exp  |  optimizer={args.optimizer}')
     pool = getattr(args, 'pool_positions', False)
-    print(f'  Positions: {"pooled" if pool else "independent"}')
+    print(f'  Positions: {'pooled' if pool else 'independent'}')
     return fit_timelapse(
         ptu_dir=args.ptu_dir,
         output_dir=args.output_dir,
@@ -1565,20 +1634,20 @@ def tile_fit(interactive=False):
             args.rotate_tiles = False
         if args.ptu_basename is None:
             args.ptu_basename = Path(args.xlif).stem
-        args.register_tiles   = not args.no_register
+        args.register_tiles = not args.no_register
         args.reg_max_shift_px = args.reg_max_shift
-        args.irf          = None
-        args.irf_xlsx     = None
+        args.irf = None
+        args.irf_xlsx = None
         args.irf_xlsx_map = None
         args.irf_xlsx_dir = args.irf_xlsx_dir
-        args.machine_irf  = args.machine_irf
-        args.mode         = 'both'
-        args.no_plots     = True
-        args.cell_mask    = False
-        args.no_xlsx_irf  = True
-        args.debug_xlsx   = False
+        args.machine_irf = args.machine_irf
+        args.mode = 'both'
+        args.no_plots = True
+        args.cell_mask = False
+        args.no_xlsx_irf = True
+        args.debug_xlsx = False
         args.print_config = False
-        args.xlsx         = None
-        args.out          = None
-        args.no_polish    = args.no_polish
+        args.xlsx = None
+        args.out = None
+        args.no_polish = args.no_polish
         _run_tile_fit(args)
