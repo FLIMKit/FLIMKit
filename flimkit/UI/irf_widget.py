@@ -3,12 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 from flimkit.UI.utils import _browse_file, _section
-
-
 class IRFWidget:
     # Sentinel to detect that the path was auto-filled (not user-entered)
     _AUTO_FILL = object()
-
     CHOICES = [
         ('Analytical model (XLSX)',                      'irf_xlsx'),
         ('Machine IRF (.npy pre-built)',                 'machine_irf'),
@@ -19,21 +16,17 @@ class IRFWidget:
         ('Estimate from decay - parametric',             'parametric'),
         ('Gaussian (fallback)',                          'gaussian'),
     ]
-
     def __init__(self, parent, default='irf_xlsx', xlsx_var=None, machine_irf_default: str = ''):
         self.xlsx_var  = xlsx_var
         self._machine_irf_default = machine_irf_default
         self.sv_method = tk.StringVar(value=default)
         self.sv_path   = tk.StringVar()
-
         self.frame = _section(parent, 'Instrument Response Function (IRF)')
         self.frame.columnconfigure(1, weight=1)
-
         for i, (lbl, val) in enumerate(self.CHOICES):
             ttk.Radiobutton(self.frame, text=lbl, variable=self.sv_method,
                             value=val, command=self._update).grid(
                 row=i, column=0, columnspan=3, sticky='w', padx=4, pady=1)
-
         r = len(self.CHOICES)
         self._path_lbl = ttk.Label(self.frame, text='IRF file')
         self._path_lbl.grid(row=r, column=0, sticky='e', padx=6, pady=3)
@@ -43,15 +36,12 @@ class IRFWidget:
             self.frame, text='Browse...',
             command=self._browse_irf_path)
         self._path_btn.grid(row=r, column=2, padx=4, pady=3)
-
         self._note = ttk.Label(
             self.frame,
             text='Uses the XLSX entered in Input Files above',
             foreground='grey')
         self._note.grid(row=r, column=0, columnspan=3, sticky='w', padx=8, pady=3)
-
         self._update()
-
     def _browse_irf_path(self):
         if self.sv_method.get().startswith('machine_irf'):
             _browse_file(self.sv_path, 'Select machine IRF',
@@ -59,7 +49,6 @@ class IRFWidget:
         else:
             _browse_file(self.sv_path, 'Select IRF file',
                          [('PTU / XLSX', '*.ptu *.xlsx'), ('All', '*.*')])
-
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
@@ -70,19 +59,16 @@ class IRFWidget:
         self._path_e.grid()
         self._path_btn.grid()
         self._note.grid_remove()
-
     def _show_note(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid()
-
     def _hide_all(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid_remove()
-
     def _update(self):
         method = self.sv_method.get()
         if method == 'irf_xlsx':
@@ -91,10 +77,8 @@ class IRFWidget:
             self._show_browse()
         else:
             self._hide_all()
-
     def grid(self, **kw):
         self.frame.grid(**kw)
-
     def get_args(self, xlsx_fallback: Optional[str] = None) -> dict:
         method = self.sv_method.get()
         path   = self.sv_path.get().strip() or None

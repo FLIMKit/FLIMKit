@@ -30,30 +30,21 @@ from .utils.enhanced_outputs import (
 from .utils.lifetime_image import make_lifetime_image
 from .image.tools import make_intensity_image, make_cell_mask, apply_intensity_threshold, pick_intensity_threshold
 from ._version import fitter_version
-
-
 def _make_operation_progress_callback(operation_name, progress_window_manager):
     if progress_window_manager is None:
         return None
-    
     # Create progress window for this operation
     window_id = progress_window_manager.create_progress_window(task_name=operation_name)
-    
     def callback(current, total):
         progress_window_manager.update_progress(window_id, current, total)
-    
     return callback
-
-
 def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
     irf_path = Path(machine_irf_path) if machine_irf_path else Path(MACHINE_IRF_DEFAULT_PATH)
     if not irf_path.exists():
         raise FileNotFoundError(f"Machine IRF file not found: {irf_path}")
-
     irf_prompt = np.asarray(np.load(str(irf_path)), dtype=float).ravel()
     if irf_prompt.size == 0:
         raise ValueError(f"Machine IRF file is empty: {irf_path}")
-
     irf_prompt = np.maximum(irf_prompt, 0.0)
     if irf_prompt.size > n_bins:
         irf_prompt = irf_prompt[:n_bins]
@@ -61,17 +52,14 @@ def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
         padded = np.zeros(n_bins, dtype=float)
         padded[:irf_prompt.size] = irf_prompt
         irf_prompt = padded
-
     s = irf_prompt.sum()
     if s <= 0:
         raise ValueError(f"Machine IRF has zero total intensity after processing: {irf_path}")
     irf_prompt /= s
-
     current_peak = int(np.argmax(irf_prompt))
     shift = int(decay_peak_bin) - current_peak
     if shift != 0:
         irf_prompt = np.roll(irf_prompt, shift)
-
     strategy = f"machine_irf ({irf_path.name}) peak_aligned_to_decay"
     return irf_prompt, strategy
 
@@ -82,8 +70,6 @@ def yes_no_question(question):
                                choices=['Yes', 'No'])]
     answer = inquirer.prompt(questions)
     return 'y' if answer['yesno'] == 'Yes' else 'n'
-
-
 def stitch_tiles_inquire():
     print('\nROI Reconstruction: Tile Stitching')
     import inquirer
@@ -91,27 +77,22 @@ def stitch_tiles_inquire():
     xlif_path = input('Enter path to XLIF metadata file: ').strip()
     if not xlif_path or not Path(xlif_path).exists():
         raise ValueError(f"XLIF file not found: {xlif_path}")
-    
     # PTU directory
     ptu_dir = input('Enter directory containing PTU tiles: ').strip()
     if not ptu_dir or not Path(ptu_dir).exists():
         raise ValueError(f"PTU directory not found: {ptu_dir}")
-    
     # Output directory - now we automatically create a subdirectory named after the ROI
     base_output = input('Enter base output directory (a subfolder named after the ROI will be created inside it): ').strip()
     if not base_output:
         raise ValueError('Output directory is required')
-    
     # Extract PTU basename from XLIF filename (e.g., "R 2.xlif" -> "R 2")
     ptu_basename = Path(xlif_path).stem
     roi_clean = ptu_basename.replace(' ', '_')
     output_dir = str(Path(base_output) / roi_clean)
     print(f"  Data will be saved in: {output_dir}")
-    
     # Ask about rotation
     rotate_q = yes_no_question('Apply 90° clockwise rotation to tiles? (Recommended for FLIM microscope data)')
     rotate_tiles = (rotate_q == 'y')
-    
     # Build namespace
     args = argparse.Namespace()
     args.xlif = xlif_path
@@ -119,21 +100,15 @@ def stitch_tiles_inquire():
     args.output_dir = output_dir
     args.ptu_basename = ptu_basename
     args.rotate_tiles = rotate_tiles
-    
     return args
-
-
 def stitch_and_fit_inquire():
     import inquirer
     print('\n ROI Reconstruction + FLIM Fitting')
-    
     # First get stitching parameters
     print('\nStep 1: Tile Stitching Setup')
     stitch_args = stitch_tiles_inquire()
-    
     # Then get fitting parameters
     print('\nStep 2: FLIM Fitting Setup')
-    
     # IRF method
     print('\nIRF estimation options:')
     print("  1. 'irf_xlsx'                - analytical Gaussian+tail fit from XLSX (recommended)")
@@ -148,7 +123,6 @@ def stitch_and_fit_inquire():
                               message='Choose IRF estimation method',
                               choices=['irf_xlsx', 'file', 'machine_irf', 'machine_irf_sigma_full', 'machine_irf_sigma_half', 'raw', 'parametric', 'gaussian'])]
     estimate_irf = inquirer.prompt(method_q)['method']
-    
     irf_path = None
     irf_xlsx_path = None
     machine_irf_path = None
@@ -174,26 +148,21 @@ def stitch_and_fit_inquire():
             print('  Warning: machine IRF file not found, falling back to Gaussian')
             estimate_irf = 'gaussian'
             machine_irf_path = None
-    
     # Number of exponentials
     nexp_q = [inquirer.List('nexp',
                             message='Number of exponential components',
                             choices=['1', '2', '3'],
                             default='2')]
     nexp = int(inquirer.prompt(nexp_q)['nexp'])
-    
     # Per-pixel fitting
     perpixel_q = yes_no_question('Perform per-pixel fitting? (slower but gives lifetime maps)')
     fit_per_pixel_mode = (perpixel_q == 'y')
-    
     # Ask about saving individual component maps
     save_individual_q = yes_no_question('Save individual component maps? (tau1, tau2, a1, a2) (default: No)')
     save_individual = (save_individual_q == 'y')
-    
     # Auto-select optimizer
     optimizer_choice = 'de'
     print(f"\n[Auto] Using optimizer: de (log-tau + Sobol, robust global search)")
-    
     # Lifetime display range for weighted tau images
     if fit_per_pixel_mode:
         tau_range_q = yes_no_question('Set a lifetime display range for tau images? (e.g. 0-5 ns)')
@@ -207,7 +176,6 @@ def stitch_and_fit_inquire():
         else:
             tau_min_display = TAU_DISPLAY_MIN
             tau_max_display = TAU_DISPLAY_MAX
-
         # Intensity display range
         int_range_q = yes_no_question('Set an intensity display range for exported images?')
         if int_range_q == 'y':
@@ -225,7 +193,6 @@ def stitch_and_fit_inquire():
         tau_max_display = None
         int_min_display = None
         int_max_display = None
-    
     # Intensity threshold
     thresh_q = yes_no_question('Apply an intensity threshold to exclude low-signal pixels?')
     if thresh_q == 'y':
@@ -244,17 +211,14 @@ def stitch_and_fit_inquire():
     else:
         intensity_threshold = None
         intensity_threshold_interactive = False
-
     # Build combined namespace
     args = argparse.Namespace()
-    
     # Stitching parameters
     args.xlif = stitch_args.xlif
     args.ptu_dir = stitch_args.ptu_dir
     args.output_dir = stitch_args.output_dir
     args.ptu_basename = stitch_args.ptu_basename
     args.rotate_tiles = stitch_args.rotate_tiles
-    
     # Fitting parameters
     args.irf = irf_path
     args.irf_xlsx = irf_xlsx_path
@@ -278,7 +242,6 @@ def stitch_and_fit_inquire():
     args.irf_fit_width = IRF_FIT_WIDTH
     args.no_plots = False
     args.intensity_threshold = intensity_threshold
-    
     # Output control flags
     args.save_individual = save_individual
     args.save_weighted = True
@@ -286,15 +249,11 @@ def stitch_and_fit_inquire():
     args.tau_display_max = tau_max_display
     args.intensity_display_min = int_min_display
     args.intensity_display_max = int_max_display
-    
     return args
-
-
 def _run_tile_stitch(args):
     print(f"\n{'='*60}")
     print(f"  TILE STITCHING")
     print(f"{'='*60}")
-    
     result = stitch_flim_tiles(
         xlif_path=Path(args.xlif),
         ptu_dir=Path(args.ptu_dir),
@@ -305,10 +264,8 @@ def _run_tile_stitch(args):
         reg_max_shift_px=getattr(args, 'reg_max_shift_px', 80),
         verbose=True,
     )
-    
     if result['tiles_processed'] == 0:
         raise RuntimeError('No tiles were successfully stitched!')
-    
     print(f"\n{'='*60}")
     print(f"  STITCHING COMPLETE")
     print(f"{'='*60}")
@@ -318,19 +275,14 @@ def _run_tile_stitch(args):
     print(f"  FLIM data: {result['flim_path']}")
     print(f"  Time axis: {result['time_axis_path']}")
     print(f"  Metadata:  {result['metadata_path']}")
-    
     return result
-
-
 def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     print(f"\n{'='*60}")
     print(f"  STEP 1: TILE STITCHING")
     print(f"{'='*60}")
-    
     # Create progress window for tile stitching
     stitch_progress_cb = _make_operation_progress_callback(
         'Tile Stitching', progress_window_manager) or progress_callback
-    
     stitch_result = stitch_flim_tiles(
         xlif_path=Path(args.xlif),
         ptu_dir=Path(args.ptu_dir),
@@ -343,25 +295,18 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         progress_callback=stitch_progress_cb,
         cancel_event=cancel_event,
     )
-    
     if stitch_result['tiles_processed'] == 0:
         raise RuntimeError('No tiles were successfully stitched!')
-    
     print(f"\nStitching complete: {stitch_result['tiles_processed']} tiles processed")
-    
     roi_name = args.ptu_basename.replace(' ', '_')
-    
     print(f"\n{'='*60}")
     print(f"  STEP 2: LOADING STITCHED DATA")
     print(f"{'='*60}")
-
     stack, tcspc_res, n_bins = load_flim_for_fitting(
         Path(args.output_dir),
         load_to_memory=False
     )
-
     print(f"  Mapped: {stack.shape} @ {tcspc_res*1e12:.2f} ps/bin")
-
     weight_candidates = sorted(Path(args.output_dir).glob('*_weight_map.npy'))
     if weight_candidates:
         weight_map = np.load(str(weight_candidates[0])).astype(np.float32)
@@ -370,7 +315,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     else:
         weight_map = None
         print('  No weight map found, overlap normalisation skipped')
-
     class StitchedData:
         def __init__(self, stack, tcspc_res, n_bins, weight_map=None):
             self.n_bins = n_bins
@@ -379,13 +323,10 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             self.photon_channel = None
             self._stack = stack
             self._weight_map = weight_map
-
         def summed_decay(self, channel=None):
             return self._stack.sum(axis=(0, 1))
-
         def pixel_stack(self, channel=None, binning=1):
             ny, nx, nt = self._stack.shape
-
             if binning == 1:
                 if self._weight_map is not None:
                     out = np.empty((ny, nx, nt), dtype=np.float32)
@@ -418,18 +359,14 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                             if w > 0:
                                 binned[i, j, :] /= w
                 return binned
-
     ptu = StitchedData(stack, tcspc_res, n_bins, weight_map=weight_map)
-
     CHUNK_ROWS = 64
     ny, nx = stack.shape[:2]
-
     print(f"\n  Building tissue mask from stitched intensity (chunked)...")
     intensity_2d = np.zeros((ny, nx), dtype=np.float64)
     for r0 in tqdm(range(0, ny, CHUNK_ROWS), desc='  Building intensity', unit='chunk', disable=True):
         r1 = min(r0 + CHUNK_ROWS, ny)
         intensity_2d[r0:r1] = stack[r0:r1].sum(axis=2)
-
     tissue_mask = make_cell_mask(intensity_2d,
                                  save_mask=True,
                                  path=str(Path(args.output_dir) / roi_name))
@@ -437,7 +374,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     n_total  = tissue_mask.size
     print(f"    Tissue mask: {n_tissue:,} / {n_total:,} pixels "
           f"({100*n_tissue/n_total:.1f}%) are tissue")
-
     _int_thr = getattr(args, 'intensity_threshold', None)
     if _int_thr is not None:
         print(f"\n  Applying intensity threshold...")
@@ -450,7 +386,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         n_after = int(tissue_mask.sum())
         print(f"    Intensity threshold: {_int_thr} photons  →  "
               f"{n_after:,}/{n_total:,} pixels kept ({100*n_after/n_total:.1f}%)")
-
     print(f"\n  Building masked summed decay (chunked)...")
     decay = np.zeros(n_bins, dtype=np.float64)
     for r0 in tqdm(range(0, ny, CHUNK_ROWS), desc='  Building decay', unit='chunk', disable=True):
@@ -460,9 +395,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         chunk[~row_mask] = 0
         decay   += chunk.sum(axis=(0, 1))
     del chunk
-
     print(f"  Total photons (tissue): {decay.sum():,.0f}")
-
     if decay.sum() == 0:
         print('  \u26a0 WARNING: tissue mask produced zero photons '
               '(mask may be inverted or canvas gaps only). '
@@ -472,30 +405,23 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             r1 = min(r0 + CHUNK_ROWS, ny)
             decay += stack[r0:r1].astype(np.float64).sum(axis=(0, 1))
         print(f"  Total photons (full canvas): {decay.sum():,.0f}")
-
     print(f"\n{'='*60}")
     print(f"  STEP 3: FLIM FITTING")
     print(f"{'='*60}")
     print(f"  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
-    
     irf_peak_bin = find_irf_peak_bin(decay)
     decay_peak_bin = int(np.argmax(decay))
-    
     print(f"\nSummed decay (tissue-masked):")
     print(f"  {decay.sum():,.0f} photons  |  peak={decay.max():,.0f} at bin {decay_peak_bin}")
     print(f"  IRF peak (steepest rise): bin {irf_peak_bin} ({irf_peak_bin * tcspc_res * 1e9:.3f} ns)")
-    
     print(f"\nBuilding IRF (method: {args.estimate_irf})...")
-    
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
-    
     if args.irf is not None and Path(args.irf).exists():
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
         strategy = 'scatter_ptu'
         has_tail = False
         fit_sigma = False
         fit_bg = True
-
     elif getattr(args, 'irf_xlsx', None) is not None:
         print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
@@ -522,7 +448,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         has_tail  = False
         fit_sigma = False
         fit_bg    = True
-
     elif args.estimate_irf == 'machine_irf':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -534,7 +459,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_bg    = MACHINE_IRF_FIT_BG
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
         print(f"  IRF: {strategy}")
-
     elif args.estimate_irf == 'machine_irf_sigma_full':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -547,7 +471,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
         print(f"  IRF: {strategy}")
-
     elif args.estimate_irf == 'machine_irf_sigma_half':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -560,7 +483,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         sigma_max = MACHINE_IRF_SIGMA_MAX_HALF
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
         print(f"  IRF: {strategy}")
-
     elif args.estimate_irf == 'raw':
         from .FLIM.irf_tools import estimate_irf_from_decay_raw
         irf_prompt = estimate_irf_from_decay_raw(
@@ -570,7 +492,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_sigma = True
         fit_bg    = True
         print(f"  IRF: {strategy}")
-    
     elif args.estimate_irf == 'parametric':
         from .FLIM.irf_tools import estimate_irf_from_decay_parametric
         irf_prompt = estimate_irf_from_decay_parametric(
@@ -580,7 +501,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_sigma = True
         fit_bg    = True
         print(f"  IRF: {strategy}")
-    
     else:
         fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else tcspc_res * 1e9
         irf_prompt = gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, decay_peak_bin)
@@ -589,12 +509,9 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         fit_sigma = False
         fit_bg    = True
         print(f"  IRF: {strategy}")
-    
     print(f"  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}")
-    
     _dist_type = getattr(args, 'dist_type', 'discrete')
     _dist_nc   = getattr(args, 'dist_n_components', 1)
-
     if _dist_type != 'discrete':
         print(f"\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...")
         global_popt, global_summary = fit_summed_dist(
@@ -627,9 +544,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
         )
-
     print_summary(global_summary, strategy, args.nexp)
-    
     metadata = {
         'canvas_shape': stack.shape[:2],
         'total_photons': int(decay.sum()),
@@ -642,7 +557,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         strategy=strategy,
         metadata=metadata
     )
-    
     if not args.no_plots:
         matplotlib.use('Agg')
         output_name = Path(args.output_dir) / 'fit_results'
@@ -652,19 +566,15 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             args.nexp, strategy, str(output_name),
             irf_prompt=irf_prompt
         )
-    
     pixel_maps = None
     if args.mode in ('perPixel', 'both'):
         print(f"\nBuilding pixel stack (binning={args.binning}×{args.binning})...")
         pixel_stack = ptu.pixel_stack(channel=None, binning=args.binning)
-
         if tissue_mask is not None:
             print(f"  Background pixels will be skipped via min_photons threshold")
-        
         print(f"Per-pixel fitting (min_photons={args.min_photons})...")
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
-
         if _dist_type != 'discrete':
             pixel_maps = fit_per_pixel_dist(
                 pixel_stack, tcspc_res, n_bins, irf_prompt,
@@ -688,7 +598,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
             )
-        
         if getattr(args, 'save_weighted', True):
             save_weighted_tau_images(
                 pixel_maps,
@@ -703,7 +612,6 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 intensity_display_max=getattr(args, 'intensity_display_max', None),
                 target_shape=(ny, nx),
             )
-        
         if getattr(args, 'save_individual', False):
             save_individual_tau_maps(
                 pixel_maps,
@@ -711,27 +619,22 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 roi_name=roi_name,
                 n_exp=args.nexp
             )
-        
         if not args.no_plots:
             matplotlib.use('Agg')
             print(f"Generating pixel maps...")
             plot_pixel_maps(pixel_maps, args.nexp, str(output_name), binning=args.binning)
             plot_lifetime_histogram(pixel_maps, args.nexp, str(output_name))
-    
     print(f"\n{'='*60}")
     print(f"  WORKFLOW COMPLETE")
     print(f"{'='*60}")
     print(f"Stitched data: {args.output_dir}")
     print('\nDone!\n')
-
-
 def single_FOV_flim_fit_inquire():
     print('\n Interactive FLIM Fit Setup')
     import inquirer
     ptu_path = input('Enter path to PTU file for this FOV: ').strip()
     if not ptu_path:
         raise ValueError('PTU file path is required.')
-
     xlsxq = yes_no_question('Do you have an XLSX file for this FOV? (Recommended for pixel size info)')
     if xlsxq == 'y':
         xlif_path = input('Enter path to XLSX file: ').strip()
@@ -788,7 +691,6 @@ def single_FOV_flim_fit_inquire():
         else:
             irf_path = None
             machine_irf_path = None
-
     import argparse
     args = argparse.Namespace()
     args.ptu = ptu_path
@@ -818,10 +720,8 @@ def single_FOV_flim_fit_inquire():
     args.no_plots = False
     args.debug_xlsx = False
     args.print_config = False
-
     mask_q = yes_no_question('Apply cell mask to filter background before fitting?')
     args.cell_mask = (mask_q == 'y')
-
     thresh_q = yes_no_question('Apply an intensity threshold to exclude low-signal pixels?')
     if thresh_q == 'y':
         thresh_mode_q = [inquirer.List('tmode',
@@ -836,10 +736,7 @@ def single_FOV_flim_fit_inquire():
             args.intensity_threshold = 'interactive'
     else:
         args.intensity_threshold = None
-
     return args
-
-
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     _dt = getattr(args, 'dist_type', 'discrete')
     _model_label = (f"{args.nexp}-exp" if _dt == 'discrete'
@@ -847,14 +744,11 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f"\n{'='*60}")
     print(f"  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
-
     print(f"\n[1] PTU: {args.ptu}")
     ptu = PTUFile(args.ptu, verbose=True)
-
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f"  IRF FWHM: {fwhm_ns*1000:.2f} ps "
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
-
     cell_mask = None
     if getattr(args, 'cell_mask', False):
         print(f"\n[1b] Building cell mask")
@@ -864,7 +758,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         n_total_px = cell_mask.size
         print(f"    Cell mask: {n_cell_px:,} / {n_total_px:,} pixels "
               f"({100*n_cell_px/n_total_px:.1f}% of FOV)")
-
     intensity_mask = None
     _int_thr = getattr(args, 'intensity_threshold', None)
     if _int_thr is not None:
@@ -885,7 +778,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             print(f"    Combined with cell mask: {int(cell_mask.sum()):,} pixels kept")
         else:
             cell_mask = intensity_mask
-
     print(f"\n[2] Building summed decay (channel={args.channel or 'auto'})")
     if cell_mask is not None:
         stack_for_decay = ptu.raw_pixel_stack(channel=args.channel)
@@ -901,7 +793,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
           f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
     print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
           f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
-
     # Pile-up report
     pu = ptu.pileup_fraction
     _pileup_pct = None
@@ -935,18 +826,14 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             print(f"    FLIM microscope fit_t present but fit_c absent")
     else:
         print(f"\n[3] No XLSX provided or file not found")
-
     print(f"\n[4] Building IRF")
-
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
-
     if args.irf is not None:
         irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
         strategy   = 'scatter_ptu'
         has_tail   = False
         fit_sigma  = False
         fit_bg     = True
-
     elif args.irf_xlsx is not None:
         print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
@@ -974,7 +861,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         fit_sigma = False
         fit_bg    = True
         print(f"  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}")
-
     elif args.estimate_irf == 'machine_irf':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -985,7 +871,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         fit_sigma = MACHINE_IRF_FIT_SIGMA
         fit_bg    = MACHINE_IRF_FIT_BG
         print(f"  IRF: {strategy}")
-
     elif args.estimate_irf == 'machine_irf_sigma_full':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -998,7 +883,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
         print(f"  IRF: {strategy}")
-
     elif args.estimate_irf == 'machine_irf_sigma_half':
         _align_bin = irf_peak_bin if getattr(args, 'irf_align', 'steepest_rise') == 'steepest_rise' else decay_peak_bin
         _align_lbl = 'steepest_rise' if _align_bin == irf_peak_bin else 'decay_peak'
@@ -1011,7 +895,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         sigma_max = MACHINE_IRF_SIGMA_MAX_HALF
         strategy += ' + σ≤{:.1f}'.format(sigma_max)
         print(f"  IRF: {strategy}")
-
     elif xlsx is not None and xlsx['irf_t'] is not None and not args.no_xlsx_irf:
         irf_prompt = irf_from_xlsx(xlsx, ptu.n_bins, ptu.tcspc_res)
         above      = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
@@ -1022,7 +905,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         has_tail  = True
         fit_sigma = True
         fit_bg    = True
-
     elif args.estimate_irf != 'none':
         if args.estimate_irf == 'raw':
             irf_prompt = estimate_irf_from_decay_raw(
@@ -1037,19 +919,15 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         fit_sigma = True
         fit_bg    = True
         print(f"  IRF: {strategy} + tail + σ as free params")
-
     if not args.no_plots and xlsx is not None:
         matplotlib.use('Agg')
         print(f"\n[4b] IRF comparison")
         compare_irfs(irf_prompt, xlsx, ptu.tcspc_res, ptu.n_bins, strategy, args.out)
-
     global_popt    = None
     global_summary = None
     pixel_maps     = None
-
     _dist_type = getattr(args, 'dist_type', 'discrete')
     _dist_nc   = getattr(args, 'dist_n_components', 1)
-
     tvb_profile = None
     _tvb_ptu = getattr(args, 'tvb_ptu', None)
     if _tvb_ptu:
@@ -1060,7 +938,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f"\n[4c] Time-varying background from: {_tvb_ptu}")
         tvb_profile = tvb_from_reference_ptu(_tvb_ptu, ptu, channel=_tvb_chan)
     fit_tvb = tvb_profile is not None
-
     def _run_summed():
         if _dist_type != 'discrete':
             return fit_summed_dist(
@@ -1093,28 +970,23 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
-
     if args.mode in ('summed', 'both'):
         print(f"\n[5] Summed decay fit  ({args.nexp}-exp, optimizer={args.optimizer})")
         global_popt, global_summary = _run_summed()
         print_summary(global_summary, strategy, args.nexp)
-
         if not args.no_plots:
             matplotlib.use('Agg')
             print(f"\n[6] Plotting")
             plot_summed(decay, global_summary, ptu, xlsx,
                         args.nexp, strategy, args.out,
                         irf_prompt=irf_prompt)
-
     if args.mode in ('perPixel', 'both'):
         if global_popt is None:
             print(f"\n[5] Running summed fit first (τ needed for per-pixel)")
             global_popt, global_summary = _run_summed()
             print_summary(global_summary, strategy, args.nexp)
-
         print(f"\n[7] Building pixel stack (binning={args.binning}×{args.binning})")
         stack = ptu.pixel_stack(channel=ptu.photon_channel, binning=args.binning)
-
         if cell_mask is not None:
             import cv2
             sy, sx = stack.shape[:2]
@@ -1125,12 +997,10 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 mask_resized = cell_mask
             stack[~mask_resized] = 0
             print(f"    Applied cell mask to pixel stack")
-
         print(f"\n[8] Per-pixel fitting (min_photons={args.min_photons})")
         # Create progress window for per-pixel fitting
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
-        
         if _dist_type != 'discrete':
             pixel_maps = fit_per_pixel_dist(
                 stack, ptu.tcspc_res, ptu.n_bins, irf_prompt,
@@ -1156,15 +1026,12 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 free_tau=getattr(args, 'free_tau_perpixel', False),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
-
         if not args.no_plots:
             matplotlib.use('Agg')
             print(f"\n[9] Plotting pixel maps")
             plot_pixel_maps(pixel_maps, args.nexp, args.out, binning=args.binning)
             plot_lifetime_histogram(pixel_maps, args.nexp, args.out)
-
     print('\nDone.\n')
-
     return {
         'pixel_maps':       pixel_maps     if args.mode in ('perPixel', 'both') else None,
         'global_summary':   global_summary,
@@ -1178,8 +1045,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         'pileup_pct':       _pileup_pct,
         'count_rate_mhz':   _count_rate_mhz,
     }
-
-
 def single_FOV_flim_fit(interactive=False):
     if interactive:
         args = single_FOV_flim_fit_inquire()
@@ -1217,14 +1082,10 @@ def single_FOV_flim_fit(interactive=False):
         ap.add_argument('--intensity-threshold', default=INTENSITY_THRESHOLD)
         ap.add_argument('--print-config', action='store_true')
         args = ap.parse_args()
-
     if args.print_config:
         print(config_message)
         return
-
     _run_flim_fit(args)
-
-
 def stitch_tiles(interactive=False):
     if interactive:
         args = stitch_tiles_inquire()
@@ -1240,15 +1101,11 @@ def stitch_tiles(interactive=False):
         ap.add_argument('--rotate-tiles', action='store_true', default=True)
         ap.add_argument('--no-rotate', action='store_true')
         args = ap.parse_args()
-        
         if args.no_rotate:
             args.rotate_tiles = False
         if args.ptu_basename is None:
             args.ptu_basename = Path(args.xlif).stem
-        
         _run_tile_stitch(args)
-
-
 def stitch_and_fit(interactive=False):
     if interactive:
         print('\n Stitched ROI Fitting')
@@ -1262,7 +1119,6 @@ def stitch_and_fit(interactive=False):
             ]
         )]
         pipeline = inquirer.prompt(pipeline_q)['pipeline']
-
         if pipeline.startswith('Per-tile'):
             args = tile_fit_inquire()
             _run_tile_fit(args)
@@ -1302,26 +1158,19 @@ def stitch_and_fit(interactive=False):
         ap.add_argument('--no-save-weighted', action='store_true')
         ap.add_argument('--intensity-threshold', default=INTENSITY_THRESHOLD)
         args = ap.parse_args()
-        
         if args.no_rotate:
             args.rotate_tiles = False
         if args.ptu_basename is None:
             args.ptu_basename = Path(args.xlif).stem
         args.save_weighted = not args.no_save_weighted
-        
         _run_stitch_and_fit(args)
-
-
-
 def tile_fit_inquire():
     print('\n Per-Tile FLIM Fitting')
     print('Fits each tile independently with its own IRF, then assembles')
     print('the results into a full-ROI canvas.  Avoids inter-tile IRF mismatch.\n')
     import inquirer
     stitch_args = stitch_tiles_inquire()
-
     print('\nFitting Parameters')
-
     print('\nIRF estimation options:')
     print("  1. 'parametric'              - fit Gaussian + exponential tail to rising edge (default)")
     print("  2. 'raw'                     - non-parametric IRF from raw decay")
@@ -1333,7 +1182,6 @@ def tile_fit_inquire():
                               message='Choose IRF method',
                               choices=['parametric', 'raw', 'machine_irf', 'machine_irf_sigma_full', 'machine_irf_sigma_half', 'irf_xlsx_dir'])]
     estimate_irf = inquirer.prompt(method_q)['method']
-
     irf_xlsx_dir = None
     machine_irf_path = None
     if estimate_irf == 'machine_irf' or estimate_irf.startswith('machine_irf_sigma'):
@@ -1352,20 +1200,17 @@ def tile_fit_inquire():
             print('  Warning: directory not found, falling back to parametric')
             estimate_irf = 'parametric'
             irf_xlsx_dir = None
-
     nexp_q = [inquirer.List('nexp',
                             message='Number of exponential components',
                             choices=['1', '2', '3'],
                             default='2')]
     nexp = int(inquirer.prompt(nexp_q)['nexp'])
-
     thresh_q = yes_no_question('Apply intensity threshold to exclude low-signal pixels?')
     if thresh_q == 'y':
         val = input('  Min photon intensity per pixel (Enter for none): ').strip()
         intensity_threshold = int(val) if val else None
     else:
         intensity_threshold = None
-
     tau_range_q = yes_no_question('Set lifetime display range for tau images?')
     if tau_range_q == 'y':
         tau_min_display = input(f"  Min tau (ns, Enter=auto): ").strip()
@@ -1375,9 +1220,7 @@ def tile_fit_inquire():
     else:
         tau_min_display = TAU_DISPLAY_MIN
         tau_max_display = TAU_DISPLAY_MAX
-
     args = argparse.Namespace()
-
     args.xlif         = stitch_args.xlif
     args.ptu_dir      = stitch_args.ptu_dir
     args.output_dir   = stitch_args.output_dir
@@ -1385,7 +1228,6 @@ def tile_fit_inquire():
     args.rotate_tiles    = stitch_args.rotate_tiles
     args.register_tiles  = True
     args.reg_max_shift_px = 120
-
     args.estimate_irf  = estimate_irf
     args.irf_xlsx_dir  = irf_xlsx_dir
     args.machine_irf   = machine_irf_path
@@ -1394,7 +1236,6 @@ def tile_fit_inquire():
     args.irf_bins      = IRF_BINS
     args.irf_fit_width = IRF_FIT_WIDTH
     args.irf_fwhm      = IRF_FWHM
-
     args.nexp        = nexp
     args.tau_min     = Tau_min
     args.tau_max     = Tau_max
@@ -1416,23 +1257,16 @@ def tile_fit_inquire():
     args.print_config  = False
     args.xlsx          = None
     args.out           = None
-
     args.tau_display_min = tau_min_display
     args.tau_display_max = tau_max_display
-
     return args
-
-
 def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     from .PTU.stitch import fit_flim_tiles
     from .FLIM.assemble import assemble_tile_maps, derive_global_tau, save_assembled_maps
-
     roi_name = args.ptu_basename.replace(' ', '_')
-
     print(f"\n{'='*60}")
     print(f"  STEP 1: PER-TILE FITTING")
     print(f"{'='*60}")
-
     (tile_results, canvas_height, canvas_width, corrected_positions,
      pooled_decay, pooled_irf, tcspc_ref, global_popt, global_summary) = fit_flim_tiles(
         xlif_path     = Path(args.xlif),
@@ -1447,21 +1281,17 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         progress_callback = progress_callback,
         cancel_event  = cancel_event,
     )
-
     if not tile_results:
         raise RuntimeError('No tiles were successfully fitted.')
-
     print(f"\n{'='*60}")
     print(f"  STEP 2: ASSEMBLING CANVAS")
     print(f"{'='*60}")
-
     canvas = assemble_tile_maps(
         tile_results   = tile_results,
         canvas_height  = canvas_height,
         canvas_width   = canvas_width,
         n_exp          = args.nexp,
     )
-
     # fit_flim_tiles computes the canvas at (H//binning, W//binning)
     # using effective_pixel_size_m = pixel_size_m * binning.  Batch
     # hardcodes binning=1 so its canvas is always full-res; single-ROI
@@ -1484,11 +1314,9 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
             print(f"  ↑ Canvas upsampled ×{_binning} → {_th}×{_tw} px (full tile resolution)")
         except Exception as _upe:
             print(f"  Canvas upsample failed: {_upe} - TIFFs will be at binned resolution")
-
     print(f"\n{'='*60}")
     print(f"  STEP 3: GLOBAL TAU SUMMARY")
     print(f"{'='*60}")
-
     # Preserve fields from the consensus (pooled) fit before derive_global_tau
     # replaces global_summary.  'model' is needed by display_fit_results to draw
     # the fitted curve on the decay panel; the chi2 values go into the fit summary.
@@ -1498,7 +1326,6 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
                  'reduced_chi2_tail_pearson', 'reduced_chi2_pearson'):
         if _key in _consensus_summary:
             global_summary[_key] = _consensus_summary[_key]
-
     n_px     = global_summary.get('n_pixels_fitted', 0)
     tau_mean = global_summary.get('tau_mean_amp_global_ns', float('nan'))
     tau_std  = global_summary.get('tau_std_amp_global_ns',  float('nan'))
@@ -1515,11 +1342,9 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f"  τ σ (pixel distribution)     = {tau_std:.4f} ns")
     print(f"  n pixels fitted              = {n_px}")
     print(f"  Optimizer: per-pixel (per-tile fit)")
-
     print(f"\n{'='*60}")
     print(f"  STEP 4: SAVING OUTPUTS")
     print(f"{'='*60}")
-
     save_assembled_maps(
         canvas                = canvas,
         global_summary        = global_summary,
@@ -1531,15 +1356,12 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
     )
-
     # Intensity-weighted lifetime colour image
     print(f"\n{'='*60}")
     print(f"  STEP 5: LIFETIME IMAGE")
     print(f"{'='*60}")
-
     tau_min_img = getattr(args, 'tau_display_min', None) or 0.0
     tau_max_img = getattr(args, 'tau_display_max', None) or 5.0
-
     make_lifetime_image(
         canvas          = canvas,
         output_dir      = Path(args.output_dir),
@@ -1549,16 +1371,13 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         smooth_sigma_px = 2.0,
         verbose         = True,
     )
-
     print(f"\n{'='*60}")
     print(f"  PER-TILE FITTING COMPLETE")
     print(f"{'='*60}\n")
-
     # Build time_ns array from tcspc resolution and number of bins
     import numpy as np
     n_bins_pooled = len(pooled_decay)
     time_ns = np.arange(n_bins_pooled) * tcspc_ref * 1e9
-    
     return {
         'canvas': canvas,
         'global_summary': global_summary,
@@ -1569,21 +1388,16 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         'tcspc_res': tcspc_ref,
         'n_bins': n_bins_pooled,
     }
-
-
 def _run_timelapse_fit(args, progress_callback=None, cancel_event=None):
     from .FLIM.timelapse import fit_timelapse
-
     print(f"\n{'='*60}")
     print(f'  TIMELAPSE FLIM FITTING')
     print(f"{'='*60}")
     print(f'  Input:  {args.ptu_dir}')
     print(f'  Output: {args.output_dir}')
     print(f'  Model:  {args.nexp}-exp  |  optimizer={args.optimizer}')
-
     pool = getattr(args, 'pool_positions', False)
     print(f'  Positions: {"pooled" if pool else "independent"}')
-
     return fit_timelapse(
         ptu_dir=args.ptu_dir,
         output_dir=args.output_dir,
@@ -1597,28 +1411,22 @@ def _run_timelapse_fit(args, progress_callback=None, cancel_event=None):
         progress_callback=progress_callback,
         cancel_event=cancel_event,
     )
-
-
 def timelapse_flim_fit(interactive=False):
     if interactive:
         import inquirer
         print('\n Timelapse FLIM Fit')
         print('Expected filename pattern: region_tX[_sY][_zZ].ptu\n')
-
         ptu_dir = input('Enter folder containing timelapse PTU files: ').strip()
         if not ptu_dir or not Path(ptu_dir).exists():
             raise ValueError(f'PTU folder not found: {ptu_dir}')
-
         output_dir = input('Enter output directory: ').strip()
         if not output_dir:
             raise ValueError('Output directory is required.')
-
         nexp_q = [inquirer.List('nexp',
                                 message='Number of exponential components',
                                 choices=['1', '2', '3'],
                                 default='2')]
         nexp = int(inquirer.prompt(nexp_q)['nexp'])
-
         supplied_q = yes_no_question('Provide reference τ values instead of fitting from pooled data?')
         ref_tau1 = None
         ref_tau2 = None
@@ -1626,7 +1434,6 @@ def timelapse_flim_fit(interactive=False):
             ref_tau1 = float(input('  τ₁ (ns): ').strip())
             if nexp >= 2:
                 ref_tau2 = float(input('  τ₂ (ns): ').strip())
-
         print('\nIRF options:')
         print("  1. 'gaussian'              - simple Gaussian (fastest)")
         print("  2. 'parametric'            - fit Gaussian+tail to rising edge")
@@ -1638,17 +1445,14 @@ def timelapse_flim_fit(interactive=False):
                                         'machine_irf_sigma_half', 'machine_irf_sigma_full',
                                         'raw'])]
         estimate_irf = inquirer.prompt(irf_q)['irf']
-
         machine_irf = None
         if estimate_irf.startswith('machine_irf'):
             _default = str(MACHINE_IRF_DEFAULT_PATH)
             machine_irf = input(
                 f'Path to machine IRF .npy (Enter for default: {_default}): ').strip()
             machine_irf = machine_irf or _default
-
         save_stack_q = yes_no_question('Save 4D stacks (T, H, W) for each map? (uses more disk)')
         no_plots_q = yes_no_question('Skip summary plots?')
-
         args = argparse.Namespace()
         args.ptu_dir = ptu_dir
         args.output_dir = output_dir
@@ -1674,9 +1478,7 @@ def timelapse_flim_fit(interactive=False):
         args.correct_pileup = False
         args.save_stack = (save_stack_q == 'y')
         args.no_plots = (no_plots_q == 'y')
-
         _run_timelapse_fit(args)
-
     else:
         ap = argparse.ArgumentParser(
             description='Timelapse FLIM batch fitting from region_tX[_sY][_zZ].ptu files'
@@ -1714,13 +1516,9 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--no-stack',   action='store_true',
                         help='Skip saving 4D (T,H,W) stacks')
         ap.add_argument('--no-plots',   action='store_true')
-
         args = ap.parse_args()
         args.save_stack = not args.no_stack
-
         _run_timelapse_fit(args)
-
-
 def tile_fit(interactive=False):
     if interactive:
         args = tile_fit_inquire()
@@ -1762,14 +1560,11 @@ def tile_fit(interactive=False):
         ap.add_argument('--intensity-threshold', default=None)
         ap.add_argument('--tau-display-min', type=float, default=None)
         ap.add_argument('--tau-display-max', type=float, default=None)
-
         args = ap.parse_args()
-
         if args.no_rotate:
             args.rotate_tiles = False
         if args.ptu_basename is None:
             args.ptu_basename = Path(args.xlif).stem
-
         args.register_tiles   = not args.no_register
         args.reg_max_shift_px = args.reg_max_shift
         args.irf          = None
@@ -1786,5 +1581,4 @@ def tile_fit(interactive=False):
         args.xlsx         = None
         args.out          = None
         args.no_polish    = args.no_polish
-
         _run_tile_fit(args)

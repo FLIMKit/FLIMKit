@@ -52,12 +52,10 @@ def _detect_gpu():
     """
     os_name = sys.platform
     machine = platform.machine()
-
     if os_name == "darwin":
         if machine == "arm64":
             return "mlx"
         return "mps"
-
     if shutil.which("nvidia-smi"):
         try:
             result = subprocess.run(
@@ -67,10 +65,8 @@ def _detect_gpu():
                 return "cuda"
         except Exception:
             pass
-
     if shutil.which("rocminfo") or Path("/opt/rocm").exists():
         return "rocm"
-
     if os_name == "linux" and shutil.which("lspci"):
         try:
             result = subprocess.run(
@@ -82,7 +78,6 @@ def _detect_gpu():
                 return "rocm"
         except Exception:
             pass
-
     return "cpu"
 
 _TORCH_INDEX = {
@@ -101,7 +96,7 @@ def _install_gpu(token, dry_run):
         if ok:
             _ok("mlx installed")
         _info("Installing PyTorch (MPS fallback)…")
-        ok = _pip("torch", "--index-url",
+        ok = _pip("torch", "torchvision", "--index-url",
                   "https://download.pytorch.org/whl/cpu",
                   dry_run=dry_run)
         if ok:
@@ -110,7 +105,7 @@ def _install_gpu(token, dry_run):
         # Intel Mac: only CPU torch; MPS requires Apple Silicon
         _info("Intel Mac detected — installing PyTorch CPU wheel.")
         _info("(MPS backend requires Apple Silicon; GPU acceleration unavailable.)")
-        ok = _pip("torch", "--index-url",
+        ok = _pip("torch", "torchvision", "--index-url",
                   "https://download.pytorch.org/whl/cpu",
                   dry_run=dry_run)
         if ok:
@@ -118,12 +113,12 @@ def _install_gpu(token, dry_run):
     elif token in ("cuda", "rocm"):
         index = _TORCH_INDEX[token]
         _info(f"Installing PyTorch for {token.upper()} from {index} …")
-        ok = _pip("torch", "--index-url", index, dry_run=dry_run)
+        ok = _pip("torch", "torchvision", "--index-url", index, dry_run=dry_run)
         if ok:
             _ok(f"torch ({token}) installed")
     else:
         _info("No GPU detected — installing CPU-only PyTorch…")
-        ok = _pip("torch", "--index-url", _TORCH_INDEX["cpu"], dry_run=dry_run)
+        ok = _pip("torch", "torchvision", "--index-url", _TORCH_INDEX["cpu"], dry_run=dry_run)
         if ok:
             _ok("torch (cpu) installed")
 
@@ -161,7 +156,6 @@ def main():
         _err("Core requirements failed — aborting.")
         return 1
     _ok("Core requirements installed")
-
     if args.dev:
         _hdr("Installing PyInstaller")
         ok = _pip("pyinstaller", dry_run=args.dry_run)
@@ -169,7 +163,6 @@ def main():
             _ok("PyInstaller installed")
         else:
             _err("PyInstaller install failed — continuing.")
-
         test_req = Path(__file__).parent / "flimkit_tests" / "requirements_test.txt"
         if test_req.exists():
             _hdr("Installing test requirements")
@@ -181,7 +174,6 @@ def main():
                 _err("Test requirements install failed — continuing.")
         else:
             _info(f"Test requirements file not found: {test_req}")
-
     token = _detect_gpu()
     _info(f"Detected GPU target: {token.upper()}")
     _install_gpu(token, dry_run=args.dry_run)

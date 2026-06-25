@@ -1,5 +1,4 @@
 FROM python:3.14-slim-bookworm
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb \
         x11vnc \
@@ -19,26 +18,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxrandr2 \
         fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
-
 ENV TZ=Etc/UTC
-
 WORKDIR /app
-
 COPY requirements.txt .
 RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
     && pip install --no-cache-dir -r requirements-docker.txt \
     && rm requirements-docker.txt
-
 COPY . .
-
 RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&reconnect=true">\n' > /usr/share/novnc/index.html \
     && for ic in /usr/share/novnc/app/images/icons/novnc-*.png; do [ -e "$ic" ] && cp -f flimkit/UI/icon.png "$ic"; done
-
 RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
-
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-
 EXPOSE 14500 5900
-
 ENTRYPOINT ["/docker-entrypoint.sh"]
