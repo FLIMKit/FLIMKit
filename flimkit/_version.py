@@ -1,4 +1,4 @@
-__version__ = '0.9.14'
+__version__ = '0.9.15.dev0+iss'
 fitter_version = '17'
 
 roadmap = '''Flim program roadmap:
@@ -29,5 +29,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.12 -> changed masking to use cellpose-SAM
 0.9.13 -> added Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2)
 0.9.14 -> bug fixes galore
+0.9.15.dev0+iss -> [in development, feature/iss-format-support branch] ISS file format support (TD-FLIM .TAGTIME/.TAGCHANNEL/.TAGDECAY, FD-FLIM phasor .ifli); see issue #19
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

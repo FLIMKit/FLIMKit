@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### In development
+- ISS file format support (branch `feature/iss-format-support`, version `0.9.15.dev0+iss`): new `flimkit/ISS/` package mirroring `flimkit/PTU/` to read ISS lifetime data. Primary target is the time-domain triplet (`.TAGTIME`/`.TAGCHANNEL`/`.TAGDECAY`) returning the same `(Y, X, H)` decay cube + metadata as the PTU reader; secondary is the frequency-domain phasor `.ifli`. Planning stage, blocked on real ISS sample files. Tracked in issue #19. Specs provided by Jeff Liao (ISS) via Anand Yethiraj (Guelph).
+
 ### Added
 - Time-varying background correction (FLIMfit-style `B = V·b(t) + Z`): supply a measured fluorophore-free reference PTU and the fit removes a scaled, time-varying background instead of only a flat offset
 - Available across summed and per-pixel fits (discrete fixed-τ / free-τ / 1-exp grid scan, and unimodal distribution), on CPU, PyTorch and MLX, with a non-negative per-pixel `tvb_scale` map
