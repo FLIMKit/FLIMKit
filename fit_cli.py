@@ -4,7 +4,7 @@ import warnings
 from pathlib import Path
 import matplotlib
 import argparse
-from flimkit.PTU.reader import PTUFile
+from flimkit.formats import FLIMFile
 from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu, irf_from_pck, irf_from_xlsx, irf_from_xlsx_analytical, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, reconstruct_irf_from_decay, compare_irfs
 from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, MIN_PHOTONS_PERPIX
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
@@ -111,7 +111,7 @@ def single_FOV_flim_fit_cli():
     print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
     print(f"{'='*60}")
     print(f"\n[1] PTU: {args.ptu}")
-    ptu = PTUFile(args.ptu, verbose=True)
+    ptu = FLIMFile(args.ptu, verbose=True)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f"  IRF FWHM: {fwhm_ns*1000:.2f} ps "
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")

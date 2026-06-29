@@ -1,5 +1,5 @@
 import numpy as np
-from ..PTU.reader import PTUFile
+from flimkit.formats import FLIMFile
 
 def _resample_decay(decay, src_res, dst_res, n_bins):
     decay = np.asarray(decay, dtype=float)
@@ -23,7 +23,7 @@ def _normalize_profile(decay, normalize):
     return decay
 
 def tvb_from_reference_ptu(path, ptu_ref, channel=None, normalize=True):
-    ref   = PTUFile(path, verbose=False)
+    ref = FLIMFile(path, verbose=False)
     decay = ref.summed_decay(channel=channel)
     total = decay.sum()
     if total == 0 and channel is not None:

@@ -46,7 +46,7 @@ class TestCompleteStitchingPipeline:
     def test_stitch_2x2_tiles(self, test_project_2x2):
         """Test stitching 2x2 tile layout."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles
             
             output_dir = test_project_2x2['base_dir'] / "stitched"
             
@@ -83,7 +83,7 @@ class TestCompleteStitchingPipeline:
     def test_stitch_3x3_tiles(self, test_project_3x3):
         """Test stitching 3x3 tile layout."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles
             
             output_dir = test_project_3x3['base_dir'] / "stitched"
             
@@ -107,7 +107,7 @@ class TestCompleteStitchingPipeline:
     def test_load_stitched_data(self, test_project_2x2):
         """Test loading stitched data."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_stitched_flim
             
             output_dir = test_project_2x2['base_dir'] / "stitched"
             
@@ -145,7 +145,7 @@ class TestCompleteStitchingPipeline:
     def test_load_for_fitting(self, test_project_2x2):
         """Test loading data ready for fitting."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
             
             output_dir = test_project_2x2['base_dir'] / "stitched"
             
@@ -188,7 +188,7 @@ class TestCompleteFittingPipeline:
     def stitched_project(self):
         """Create and stitch a test project."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles
             
             with tempfile.TemporaryDirectory() as temp_dir:
                 project = generate_test_project(
@@ -218,7 +218,7 @@ class TestCompleteFittingPipeline:
     def test_fit_stitched_summed_decay(self, stitched_project):
         """Test fitting summed decay from stitched data."""
         try:
-            from flimkit.PTU.stitch import load_flim_for_fitting
+            from flimkit.formats.PTU.stitch import load_flim_for_fitting
             from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
             from flimkit.FLIM.fitters import fit_summed
             
@@ -275,7 +275,7 @@ class TestCompleteFittingPipeline:
     def test_full_workflow_summed_only(self, stitched_project):
         """Test complete workflow: stitch → load → fit (summed only)."""
         try:
-            from flimkit.PTU.stitch import load_flim_for_fitting
+            from flimkit.formats.PTU.stitch import load_flim_for_fitting
             from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
             from flimkit.FLIM.fitters import fit_summed
             
@@ -414,7 +414,7 @@ class TestEdgeCases:
     def test_missing_tiles(self):
         """Test handling of missing PTU tiles."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles
             from mock_data import generate_mock_xlif, generate_mock_ptu_tiles
             
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -486,7 +486,7 @@ class TestEdgeCases:
     def test_single_tile_as_mosaic(self):
         """Test that single tile (no stitching needed) works."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles
             from mock_data import generate_mock_xlif, generate_mock_ptu_tiles
             
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -531,7 +531,7 @@ class TestDataIntegrity:
     def test_photon_conservation(self):
         """Test that photons are conserved during stitching."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_stitched_flim
             from mock_data import generate_test_project, load_mock_ptu_file
             
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -571,8 +571,8 @@ class TestDataIntegrity:
     def test_time_axis_consistency(self):
         """Test time axis is consistent throughout pipeline."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim
-            from flimkit.PTU.decode import create_time_axis
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_stitched_flim
+            from flimkit.formats.PTU.decode import create_time_axis
             from mock_data import generate_test_project
             
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -838,7 +838,7 @@ class TestPerTileFitPipeline:
         with tempfile.TemporaryDirectory() as tmp:
             args = self._base_args(Path(tmp))
 
-            with patch('flimkit.PTU.stitch.fit_flim_tiles',
+            with patch('flimkit.formats.PTU.stitch.fit_flim_tiles',
                        return_value=fit_flim_tiles_return):
                 fit_result = _run_tile_fit(args)
 
@@ -881,7 +881,7 @@ class TestPerTileFitPipeline:
             args = self._base_args(Path(tmp))
             args.ptu_basename = 'R 3'
 
-            with patch('flimkit.PTU.stitch.fit_flim_tiles',
+            with patch('flimkit.formats.PTU.stitch.fit_flim_tiles',
                     return_value=fit_flim_tiles_return):
                 fit_result = _run_tile_fit(args)
                 canvas = fit_result['canvas']
@@ -906,7 +906,7 @@ class TestPerTileFitPipeline:
         with tempfile.TemporaryDirectory() as tmp:
             args = self._base_args(Path(tmp), n_exp=2)
 
-            with patch('flimkit.PTU.stitch.fit_flim_tiles',
+            with patch('flimkit.formats.PTU.stitch.fit_flim_tiles',
                        return_value=fit_flim_tiles_return):
                 fit_result = _run_tile_fit(args)
                 global_summary = fit_result['global_summary']
@@ -940,7 +940,7 @@ class TestPerTileFitPipeline:
             args.estimate_irf = 'machine_irf'
             args.machine_irf  = str(mirf_path)
 
-            with patch('flimkit.PTU.stitch.fit_flim_tiles',
+            with patch('flimkit.formats.PTU.stitch.fit_flim_tiles',
                        return_value=self._fit_flim_tiles_return_value(tile_results, ch, cw, n_exp=1)):
                 fit_result = _run_tile_fit(args)
             canvas = fit_result['canvas']
@@ -954,8 +954,8 @@ def test_installation_check():
     """Test that all required modules can be imported."""
     required_modules = [
         'flimkit.utils.xml_utils',
-        'flimkit.PTU.decode',
-        'flimkit.PTU.stitch',
+        'flimkit.formats.PTU.decode',
+        'flimkit.formats.PTU.stitch',
     ]
     
     optional_modules = [

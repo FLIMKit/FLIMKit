@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from phasorpy.plot import plot_phasor
-from ..PTU.tools import signal_from_PTUFile
+from ..formats.PTU.tools import signal_from_PTUFile
 from phasorpy.phasor import phasor_from_signal
 from phasorpy.phasor import phasor_to_polar, phasor_transform
 

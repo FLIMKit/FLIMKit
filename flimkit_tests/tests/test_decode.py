@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from mock_data import generate_mock_ptu_tiles, MockPTUFile
-from flimkit.PTU.reader import PTUFile
+from flimkit.formats.PTU.reader import PTUFile
 
 
 class TestDecode:
@@ -27,7 +27,7 @@ class TestDecode:
     
     def test_create_time_axis(self):
         """Test time axis creation."""
-        from flimkit.PTU.decode import create_time_axis
+        from flimkit.formats.PTU.decode import create_time_axis
         
         n_bins = 256
         tcspc_res = 97e-12
@@ -169,7 +169,7 @@ class TestDecodeIntegration:
 
 def test_normalise_flim():
     """Test FLIM normalization function."""
-    from flimkit.PTU.decode import normalise_flim
+    from flimkit.formats.PTU.decode import normalise_flim
     
     # Test 4D -> 3D
     data_4d = np.random.rand(1, 512, 512, 256)
@@ -217,7 +217,7 @@ class TestPTUWriteRead:
 
     def test_write_read_roundtrip(self, tmp_path):
         """Write a synthetic histogram and read back, verify exact match."""
-        from flimkit.PTU.reader import PTUFile
+        from flimkit.formats.PTU.reader import PTUFile
         import numpy as np
 
         ny, nx, nb = 8, 8, 64
@@ -239,7 +239,7 @@ class TestPTUWriteRead:
         assert stack_raw.sum() == pytest.approx(histogram.sum(), rel=0.01)
 
     def test_write_invalid_shape_raises(self, tmp_path):
-        from flimkit.PTU.reader import PTUFile
+        from flimkit.formats.PTU.reader import PTUFile
         histogram = np.ones((64, 64))
         with pytest.raises(ValueError, match="must be .*Y, X, H"):
             PTUFile.write(tmp_path / "bad.ptu", histogram, 97e-12, 20e6)
@@ -251,7 +251,7 @@ class TestPTUWriteRead:
 
     def test_write_read_roundtrip(self, tmp_path):
         """Write a synthetic histogram and read back, verify exact match."""
-        from flimkit.PTU.reader import PTUFile
+        from flimkit.formats.PTU.reader import PTUFile
         import numpy as np
 
         ny, nx, nb = 8, 8, 64
@@ -273,7 +273,7 @@ class TestPTUWriteRead:
         assert stack_raw.sum() == pytest.approx(histogram.sum(), rel=0.01)
 
     def test_write_invalid_shape_raises(self, tmp_path):
-        from flimkit.PTU.reader import PTUFile
+        from flimkit.formats.PTU.reader import PTUFile
         histogram = np.ones((64, 64))
         with pytest.raises(ValueError, match="must be .*Y, X, H"):
             PTUFile.write(tmp_path / "bad.ptu", histogram, 97e-12, 20e6)

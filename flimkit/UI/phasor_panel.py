@@ -907,10 +907,10 @@ class PhasorViewPanel:
 
         def task(progress_callback=None, cancel_event=None):
             import numpy as _np
-            from flimkit.PTU.reader import PTUFile
+            from flimkit.formats import FLIMFile
             from flimkit.FLIM.fitters import fit_summed
 
-            ptu       = PTUFile(ptu_path, verbose=False)
+            ptu = FLIMFile(ptu_path, verbose=False)
             n_bins    = ptu.n_bins
             tcspc_res = ptu.tcspc_res
 

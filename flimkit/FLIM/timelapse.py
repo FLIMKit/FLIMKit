@@ -7,7 +7,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import defaultdict
-from ..PTU.reader import PTUFile
+from flimkit.formats import FLIMFile
 from ..FLIM.fitters import fit_summed, fit_per_pixel
 from ..FLIM.fit_tools import find_irf_peak_bin, estimate_bg
 from ..FLIM.irf_tools import gaussian_irf_from_fwhm, estimate_irf_from_decay_parametric
@@ -55,7 +55,7 @@ def _pool_decays(frame_positions, channel=None):
     n_bins = None
     for _t, positions in sorted(frame_positions.items()):
         for _s, ptu_path in sorted(positions.items()):
-            ptu = PTUFile(str(ptu_path), verbose=False)
+            ptu = FLIMFile(str(ptu_path), verbose=False)
             d = ptu.summed_decay(channel=channel).astype(np.float64)
             if pooled is None:
                 pooled = d.copy()
@@ -437,7 +437,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                     progress_callback(step, total_frames)
                 print(f'\n  t={t}  s={s}: {ptu_path.name}')
                 t_start = time.time()
-                ptu = PTUFile(str(ptu_path), verbose=False)
+                ptu = FLIMFile(str(ptu_path), verbose=False)
                 pixel_stack = ptu.raw_pixel_stack(channel=channel)
                 if pixel_stack.shape[2] != n_bins:
                     nb = pixel_stack.shape[2]

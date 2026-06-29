@@ -128,9 +128,9 @@ def load_session(path):
 
 
 def get_ptu_active_channels(ptu_path):
-    from .PTU.reader import PTUFile
+    from flimkit.formats import FLIMFile
 
-    ptu = PTUFile(str(ptu_path), verbose=False)
+    ptu = FLIMFile(str(ptu_path), verbose=False)
     records = ptu._load_records()
     special, ch_raw, _, _ = ptu._decode_records(records)
     active_channels = np.unique(ch_raw[~special]).astype(int)
@@ -191,8 +191,8 @@ def resolve_ptu_channel(
 def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
                  filter_kwargs=None):
     from phasorpy.phasor import phasor_from_signal
-    from .PTU.tools import signal_from_PTUFile
-    from .PTU.reader import PTUFile
+    from .formats.PTU.tools import signal_from_PTUFile
+    from flimkit.formats import FLIMFile
     from .phasor.signal import get_phasor_irf, calibrate_signal_with_irf
 
     print(f"Loading PTU file: {ptu_path}")
@@ -207,7 +207,7 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
 
     # Build a spatially-correct intensity image via raw_pixel_stack
     # (uses nsync timing → accurate pixel positions for the FOV overlay)
-    ptu = PTUFile(str(ptu_path), verbose=False)
+    ptu = FLIMFile(str(ptu_path), verbose=False)
     display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)
 
     if irf_path:

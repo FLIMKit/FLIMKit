@@ -205,7 +205,7 @@ class TestStitchAndFitRecovery:
     def test_stitched_biexp_recovery(self):
         """τ values recovered from stitched mosaic match MockPTUFile truth."""
         try:
-            from flimkit.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
+            from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
             from flimkit.FLIM.fitters import fit_summed
             from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
         except ImportError as e:

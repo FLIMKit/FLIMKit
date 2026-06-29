@@ -2182,8 +2182,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
             ptu_path = getattr(self._fov_preview, '_ptu_path', None)
             if ptu_path and Path(ptu_path).exists():
-                from flimkit.PTU.reader import PTUFile
-                ptu = PTUFile(str(ptu_path), verbose=False)
+                from flimkit.formats import FLIMFile
+                ptu = FLIMFile(str(ptu_path), verbose=False)
                 pix_res = ptu.tags.get('ImgHdr_PixRes', 0)
                 if pix_res and float(pix_res) > 0:
                     return float(pix_res) * 1e6
@@ -2748,7 +2748,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
 
-        from flimkit.PTU.stitch    import fit_flim_tiles
+        from flimkit.formats.PTU.stitch    import fit_flim_tiles
         from flimkit.FLIM.assemble import (derive_global_tau, save_assembled_maps,
                                            assemble_tile_maps)
         from flimkit.utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
@@ -3115,7 +3115,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 return
 
         pipeline = self.sv_pipeline.get()
-        from flimkit.PTU.stitch import stitch_flim_tiles
+        from flimkit.formats.PTU.stitch import stitch_flim_tiles
 
         a = self._controller.stitch_args()
 

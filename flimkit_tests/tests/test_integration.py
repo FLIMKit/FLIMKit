@@ -9,7 +9,7 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from mock_data import (generate_test_project,
     generate_synthetic_decay)
-from flimkit.PTU.reader import PTUFile
+from flimkit.formats.PTU.reader import PTUFile
 
 class TestStitchingWorkflow:
     """Test complete tile stitching workflow."""
@@ -256,7 +256,7 @@ class TestPerformance:
     def test_stitching_speed(self):
         """Test that stitching completes in reasonable time (reduced data)."""
         import time
-        from flimkit.PTU.stitch import stitch_flim_tiles
+        from flimkit.formats.PTU.stitch import stitch_flim_tiles
         from mock_data import generate_mock_xlif, generate_mock_ptu_tiles
     
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -444,7 +444,7 @@ class TestMemoryEfficiency:
         """Create a large memmap array, write/read chunks, verify no memory leak."""
         import psutil
         import gc
-        from flimkit.PTU.stitch import stitch_flim_tiles
+        from flimkit.formats.PTU.stitch import stitch_flim_tiles
         from mock_data import generate_test_project
 
         # Generate a 4x4 tile project (bigger than typical 2x2)

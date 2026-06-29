@@ -1,27 +1,14 @@
 #!/usr/bin/env python3
-"""
-Installation Validation Script
-
-Checks that all components are properly installed and working.
-Runs quick sanity tests without requiring pytest.
-"""
-
 import sys
 import traceback
 from pathlib import Path
 from unittest.mock import patch
-
-# Ensure the project root is on the path
 project_root = str(Path(__file__).parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-# Now we can import from flimkit and mock_data
 from flimkit_tests.mock_data import MockPTUFile, generate_test_project
 
-
 class Colors:
-    """ANSI color codes."""
     GREEN = '\033[92m'
     RED = '\033[91m'
     YELLOW = '\033[93m'
@@ -29,33 +16,22 @@ class Colors:
     END = '\033[0m'
     BOLD = '\033[1m'
 
-
 def print_header(text):
-    """Print section header."""
     print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.BLUE}{text:^60}{Colors.END}")
+    print(f'{Colors.BOLD}{Colors.BLUE}{text:^60}{Colors.END}')
     print(f"{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}\n")
 
-
 def print_success(text):
-    """Print success message."""
-    print(f"{Colors.GREEN}✓{Colors.END} {text}")
-
+    print(f'{Colors.GREEN}✓{Colors.END} {text}')
 
 def print_error(text):
-    """Print error message."""
-    print(f"{Colors.RED}✗{Colors.END} {text}")
-
+    print(f'{Colors.RED}✗{Colors.END} {text}')
 
 def print_warning(text):
-    """Print warning message."""
-    print(f"{Colors.YELLOW}⚠{Colors.END} {text}")
-
+    print(f'{Colors.YELLOW}⚠{Colors.END} {text}')
 
 def check_dependencies():
-    """Check that required dependencies are installed."""
-    print_header("Checking Dependencies")
-    
+    print_header('Checking Dependencies')
     required = {
         'numpy': 'NumPy',
         'scipy': 'SciPy',
@@ -64,7 +40,6 @@ def check_dependencies():
         'xarray': 'xarray',
         'inquirer': 'Inquirer',
     }
-    
     optional = {
         'pytest': 'Pytest (for testing)',
         'matplotlib': 'Matplotlib (for plotting)',
@@ -72,190 +47,143 @@ def check_dependencies():
         'ipympl': 'ipympl (notebook matplotlib backend)',
         'pandas': 'Pandas (IRF Excel reading)',
     }
-    
     all_ok = True
-    
     for module, name in required.items():
         try:
             __import__(module)
-            print_success(f"{name} installed")
+            print_success(f'{name} installed')
         except ImportError:
-            print_error(f"{name} NOT installed (required)")
+            print_error(f'{name} NOT installed (required)')
             all_ok = False
-    
     for module, name in optional.items():
         try:
             __import__(module)
-            print_success(f"{name} installed")
+            print_success(f'{name} installed')
         except ImportError:
-            print_warning(f"{name} not installed (optional)")
-    
+            print_warning(f'{name} not installed (optional)')
     return all_ok
 
-
 def check_simplified_integration():
-    """Check that simplified integration files are present."""
-    print_header("Checking Simplified Integration")
-    
+    print_header('Checking Simplified Integration')
     required_files = [
         'flimkit/utils/xml_utils.py',
-        'flimkit/PTU/decode.py',
-        'flimkit/PTU/stitch.py',
+        'flimkit/formats/flim_file.py',
+        'flimkit/formats/PTU/decode.py',
+        'flimkit/formats/PTU/stitch.py',
+        'flimkit/formats/ISS/reader.py',
     ]
-    
     all_ok = True
-    
     for file_path in required_files:
         path = Path(file_path)
         if path.exists():
-            print_success(f"{file_path} found")
+            print_success(f'{file_path} found')
         else:
-            print_error(f"{file_path} NOT found")
+            print_error(f'{file_path} NOT found')
             all_ok = False
-    
     return all_ok
 
-
 def check_modules_import():
-    """Check that modules can be imported."""
-    print_header("Checking Module Imports")
-    
+    print_header('Checking Module Imports')
     modules = [
         ('flimkit.utils.xml_utils', 'XML/XLIF parsing'),
-        ('flimkit.PTU.decode', 'PTU decoding'),
-        ('flimkit.PTU.stitch', 'Tile stitching'),
-        ('flimkit.PTU.tools', 'PTU signal tools'),
+        ('flimkit.formats.flim_file', 'FLIMFile dispatcher'),
+        ('flimkit.formats.PTU.decode', 'PTU decoding'),
+        ('flimkit.formats.PTU.stitch', 'Tile stitching'),
+        ('flimkit.formats.PTU.tools', 'PTU signal tools'),
+        ('flimkit.formats.ISS.reader', 'ISS TD-FLIM reader'),
     ]
-    
     optional_modules = [
         ('flimkit.interactive', 'Interactive FLIM workflows'),
         ('flimkit.FLIM.fitters', 'FLIM fitting'),
         ('flimkit.FLIM.irf_tools', 'IRF tools'),
-        ('flimkit.PTU.reader', 'PTUFile reader'),
+        ('flimkit.formats.PTU.reader', 'PTUFile reader'),
         ('flimkit.phasor.signal', 'Phasor signal processing'),
         ('flimkit.phasor.interactive', 'Phasor interactive tool'),
         ('flimkit.phasor.peaks', 'Phasor peak detection'),
         ('flimkit.phasor_launcher', 'Phasor launcher'),
     ]
-    
     all_ok = True
-    
     for module, description in modules:
         try:
             __import__(module)
-            print_success(f"{description} ({module})")
+            print_success(f'{description} ({module})')
         except ImportError as e:
-            print_error(f"{description} ({module}): {e}")
+            print_error(f'{description} ({module}): {e}')
             all_ok = False
-    
     for module, description in optional_modules:
         try:
             __import__(module)
-            print_success(f"{description} ({module})")
+            print_success(f'{description} ({module})')
         except ImportError:
-            print_warning(f"{description} ({module}) not available")
-    
+            print_warning(f'{description} ({module}) not available')
     return all_ok
 
-
 def test_xml_parsing():
-    """Test XML/XLIF parsing functionality."""
-    print_header("Testing XML/XLIF Parsing")
-    
+    print_header('Testing XML/XLIF Parsing')
     try:
         from flimkit.utils.xml_utils import parse_xlif_tile_positions, compute_tile_pixel_positions
         import tempfile
         from flimkit_tests.mock_data import generate_mock_xlif
-        
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate mock XLIF
             xlif_path = generate_mock_xlif(
-                Path(temp_dir) / "test.xlif",
+                Path(temp_dir) / 'test.xlif',
                 n_tiles=4,
-                layout="2x2"
+                layout='2x2'
             )
-            
-            # Parse it
-            tiles = parse_xlif_tile_positions(xlif_path, "R 2")
-            
-            assert len(tiles) == 4, "Expected 4 tiles"
-            assert all('file' in t for t in tiles), "Missing file field"
-            
-            # Compute pixel positions
+            tiles = parse_xlif_tile_positions(xlif_path, 'R 2')
+            assert len(tiles) == 4, 'Expected 4 tiles'
+            assert all('file' in t for t in tiles), 'Missing file field'
             tiles, width, height = compute_tile_pixel_positions(
                 tiles, pixel_size_m=3e-7, tile_size=512
             )
-            
-            assert width == 1024, f"Expected width 1024, got {width}"
-            assert height == 1024, f"Expected height 1024, got {height}"
-            
-            print_success("XLIF parsing works correctly")
+            assert width == 1024, f'Expected width 1024, got {width}'
+            assert height == 1024, f'Expected height 1024, got {height}'
+            print_success('XLIF parsing works correctly')
             return True
-            
     except Exception as e:
-        print_error(f"XLIF parsing test failed: {e}")
+        print_error(f'XLIF parsing test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def test_mock_data():
-    """Test mock data generation."""
-    print_header("Testing Mock Data Generation")
-    
+    print_header('Testing Mock Data Generation')
     try:
         from flimkit_tests.mock_data import MockPTUFile, generate_synthetic_decay
         import numpy as np
-        
-        # Test MockPTUFile
         ptu = MockPTUFile(n_y=256, n_x=256, n_bins=128)
         decay = ptu.summed_decay()
         stack = ptu.pixel_stack()
-        
-        assert decay.shape == (128,), f"Wrong decay shape: {decay.shape}"
-        assert stack.shape == (256, 256, 128), f"Wrong stack shape: {stack.shape}"
-        assert decay.sum() > 0, "Decay has no photons"
-        
-        print_success("MockPTUFile works correctly")
-        
-        # Test synthetic decay
+        assert decay.shape == (128,), f'Wrong decay shape: {decay.shape}'
+        assert stack.shape == (256, 256, 128), f'Wrong stack shape: {stack.shape}'
+        assert decay.sum() > 0, 'Decay has no photons'
+        print_success('MockPTUFile works correctly')
         syn_decay = generate_synthetic_decay(
             n_bins=256,
             tau_ns=2.0,
             noise=True
         )
-        
-        assert len(syn_decay) == 256, "Wrong synthetic decay length"
-        assert syn_decay.sum() > 0, "Synthetic decay has no photons"
-        
-        print_success("Synthetic decay generation works correctly")
-        
+        assert len(syn_decay) == 256, 'Wrong synthetic decay length'
+        assert syn_decay.sum() > 0, 'Synthetic decay has no photons'
+        print_success('Synthetic decay generation works correctly')
         return True
-        
     except Exception as e:
-        print_error(f"Mock data test failed: {e}")
+        print_error(f'Mock data test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def test_stitching():
-    """Test tile stitching functionality."""
-    print_header("Testing Tile Stitching")
-    
+    print_header('Testing Tile Stitching')
     try:
-        from flimkit.PTU.stitch import stitch_flim_tiles, load_stitched_flim, _close_memmap
+        from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_stitched_flim, _close_memmap
         import tempfile
-        
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate test project
             project = generate_test_project(
                 Path(temp_dir),
-                roi_name="R 2",
+                roi_name='R 2',
                 n_tiles=4,
-                layout="2x2"
+                layout='2x2'
             )
-            
-            output_dir = project['base_dir'] / "stitched"
-            
+            output_dir = project['base_dir'] / 'stitched'
             result = stitch_flim_tiles(
                 xlif_path=project['xlif_path'],
                 ptu_dir=project['ptu_dir'],
@@ -264,49 +192,37 @@ def test_stitching():
                 rotate_tiles=True,
                 verbose=False
             )
-            
-            assert result['tiles_processed'] == 4, "Not all tiles processed"
+            assert result['tiles_processed'] == 4, 'Not all tiles processed'
             canvas = result['canvas_shape']
-            assert len(canvas) == 2 and canvas[0] > 0 and canvas[1] > 0, "Wrong canvas size"
-            
-            print_success(f"Stitched 4 tiles → {canvas}")
-            
-            # Load back
+            assert len(canvas) == 2 and canvas[0] > 0 and canvas[1] > 0, 'Wrong canvas size'
+            print_success(f'Stitched 4 tiles → {canvas}')
             flim, time_axis, intensity, metadata = load_stitched_flim(output_dir)
-            
-            assert flim.shape[:2] == canvas, f"Wrong FLIM spatial shape: {flim.shape[:2]} vs {canvas}"
-            assert flim.shape[2] == len(time_axis), "FLIM bins != time axis length"
-            assert intensity.shape == canvas, f"Wrong intensity shape: {intensity.shape} vs {canvas}"      
-            print_success("Stitched data loads correctly")
+            assert flim.shape[:2] == canvas, f'Wrong FLIM spatial shape: {flim.shape[:2]} vs {canvas}'
+            assert flim.shape[2] == len(time_axis), 'FLIM bins != time axis length'
+            assert intensity.shape == canvas, f'Wrong intensity shape: {intensity.shape} vs {canvas}'
+            print_success('Stitched data loads correctly')
             _close_memmap(flim)
             del flim
             return True
     except Exception as e:
-        print_error(f"Stitching test failed: {e}")
+        print_error(f'Stitching test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def test_complete_workflow():
-    """Test complete stitch + fit workflow."""
-    print_header("Testing Complete Workflow")
-    
+    print_header('Testing Complete Workflow')
     try:
-        from flimkit.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
+        from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
         import tempfile
         import numpy as np
-        
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate and stitch
             project = generate_test_project(
                 Path(temp_dir),
-                roi_name="R 2",
+                roi_name='R 2',
                 n_tiles=4,
-                layout="2x2"
+                layout='2x2'
             )
-            
-            output_dir = project['base_dir'] / "stitched"
-            
+            output_dir = project['base_dir'] / 'stitched'
             result = stitch_flim_tiles(
                 xlif_path=project['xlif_path'],
                 ptu_dir=project['ptu_dir'],
@@ -314,30 +230,18 @@ def test_complete_workflow():
                 ptu_basename=project['roi_name'],
                 verbose=False
             )
-            
             print_success(f"Step 1: Stitched {result['tiles_processed']} tiles")
-            
-            # Load for fitting
             stack, tcspc_res, n_bins = load_flim_for_fitting(
                 output_dir,
                 load_to_memory=True
             )
-            
-            assert stack.shape[:2] == result['canvas_shape'], "Wrong stack spatial shape"
-            assert tcspc_res > 0, "Invalid TCSPC resolution"
-            assert stack.shape[2] == n_bins, "Stack bins != n_bins"
-            
-            print_success("Step 2: Loaded data for fitting")
-            
-            # Check can extract decay
+            assert stack.shape[:2] == result['canvas_shape'], 'Wrong stack spatial shape'
+            assert tcspc_res > 0, 'Invalid TCSPC resolution'
+            assert stack.shape[2] == n_bins, 'Stack bins != n_bins'
+            print_success('Step 2: Loaded data for fitting')
             decay = stack.sum(axis=(0, 1))
-            assert decay.sum() > 0, "No photons in decay"
-            
-            print_success(f"Step 3: Extracted decay ({decay.sum():.0f} photons)")
-            
-            # Try fitting if available — use a standalone synthetic decay with
-            # realistic photon counts so the fitter works in its intended regime.
-            # (The stitched mosaic has billions of photons which inflates χ².)
+            assert decay.sum() > 0, 'No photons in decay'
+            print_success(f'Step 3: Extracted decay ({decay.sum():.0f} photons)')
             try:
                 from flimkit.FLIM.fitters import fit_summed
                 from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
@@ -346,84 +250,63 @@ def test_complete_workflow():
                     MOCK_IRF_CENTER, MOCK_TCSPC_RES,
                     generate_synthetic_biexp_decay,
                 )
-                
-                fit_n_bins   = 256
-                fit_tcspc    = MOCK_TCSPC_RES
-                irf_fwhm_ns  = MOCK_IRF_FWHM_BINS * fit_tcspc * 1e9
+                fit_n_bins = 256
+                fit_tcspc = MOCK_TCSPC_RES
+                irf_fwhm_ns = MOCK_IRF_FWHM_BINS * fit_tcspc * 1e9
                 irf = gaussian_irf_from_fwhm(fit_n_bins, fit_tcspc, irf_fwhm_ns,
                                              MOCK_IRF_CENTER)
-
                 fit_decay = generate_synthetic_biexp_decay(
                     n_bins=fit_n_bins, tcspc_res=fit_tcspc,
                     peak_counts=100_000.0, noise=True,
                 )
-
                 popt, summary = fit_summed(
                     fit_decay, fit_tcspc, fit_n_bins, irf,
                     has_tail=False, fit_bg=True, fit_sigma=False,
                     n_exp=2, tau_min_ns=0.05, tau_max_ns=15.0,
-                    optimizer="lm_multistart", n_restarts=10, workers=1,
-                    cost_function="poisson",
+                    optimizer='lm_multistart', n_restarts=10, workers=1,
+                    cost_function='poisson',
                 )
-
-                assert summary is not None, "Fit failed"
-                taus   = summary['taus_ns']
+                assert summary is not None, 'Fit failed'
+                taus = summary['taus_ns']
                 chi2_r = summary['reduced_chi2_tail_pearson']
-
-                # Ground-truth comparison (15 % for realistic photon count)
-                rel_long  = abs(taus[0] - MOCK_TAU2_NS) / MOCK_TAU2_NS
+                rel_long = abs(taus[0] - MOCK_TAU2_NS) / MOCK_TAU2_NS
                 rel_short = abs(taus[1] - MOCK_TAU1_NS) / MOCK_TAU1_NS
-                assert rel_long  < 0.15, f"Long τ err {rel_long:.0%}"
-                assert rel_short < 0.15, f"Short τ err {rel_short:.0%}"
-                assert chi2_r < 3.0, f"Pearson tail χ²_r = {chi2_r:.2f}"
-
+                assert rel_long  < 0.15, f'Long τ err {rel_long:.0%}'
+                assert rel_short < 0.15, f'Short τ err {rel_short:.0%}'
+                assert chi2_r < 3.0, f'Pearson tail χ²_r = {chi2_r:.2f}'
                 print_success(
-                    f"Step 4: Bi-exp fit "
-                    f"(τ₁={taus[1]:.2f} vs {MOCK_TAU1_NS} ns [{rel_short:.0%}], "
-                    f"τ₂={taus[0]:.2f} vs {MOCK_TAU2_NS} ns [{rel_long:.0%}], "
-                    f"χ²_r={chi2_r:.2f})"
+                    f'Step 4: Bi-exp fit '
+                    f'(τ₁={taus[1]:.2f} vs {MOCK_TAU1_NS} ns [{rel_short:.0%}], '
+                    f'τ₂={taus[0]:.2f} vs {MOCK_TAU2_NS} ns [{rel_long:.0%}], '
+                    f'χ²_r={chi2_r:.2f})'
                 )
-                                
             except ImportError:
-                print_warning("Step 4: Fitting not available (fitters module missing)")
-            
+                print_warning('Step 4: Fitting not available (fitters module missing)')
             return True
-            
     except Exception as e:
-        print_error(f"Complete workflow test failed: {e}")
+        print_error(f'Complete workflow test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def test_phasor_pipeline():
-    """Test phasor analysis pipeline with synthetic data."""
-    print_header("Testing Phasor Pipeline")
-
+    print_header('Testing Phasor Pipeline')
     try:
         import numpy as np
-
         rng = np.random.default_rng(42)
         shape = (64, 64)
-        # Single-exponential → point ON the semicircle
         tau_ns = 2.5
         frequency = 40.0
         omega = 2 * np.pi * frequency * 1e-3
         g_true = 1 / (1 + (omega * tau_ns) ** 2)
         s_true = omega * tau_ns / (1 + (omega * tau_ns) ** 2)
-
         real_cal = rng.normal(g_true, 0.02, shape)
         imag_cal = rng.normal(s_true, 0.02, shape)
         mean = rng.uniform(5, 50, shape)
-
-        print_success("Step 1: Generated synthetic phasor data")
-
+        print_success('Step 1: Generated synthetic phasor data')
         from flimkit.phasor.peaks import find_phasor_peaks
-
         peaks = find_phasor_peaks(real_cal, imag_cal, mean, frequency)
-        assert peaks['n_peaks'] >= 1, "No peaks found"
+        assert peaks['n_peaks'] >= 1, 'No peaks found'
         print_success(f"Step 2: Found {peaks['n_peaks']} peak(s)")
-
-        # Peak should be near the expected (g_true, s_true)
         best_idx = 0
         best_dist = float('inf')
         for i in range(peaks['n_peaks']):
@@ -432,73 +315,49 @@ def test_phasor_pipeline():
             if d < best_dist:
                 best_dist = d
                 best_idx = i
-        assert best_dist < 0.05, f"Closest peak too far from expected: {best_dist:.3f}"
-        print_success(f"Step 3: Peak distance = {best_dist:.4f} (< 0.05)")
-
-        # Phase lifetime should match input τ within 15 %
+        assert best_dist < 0.05, f'Closest peak too far from expected: {best_dist:.3f}'
+        print_success(f'Step 3: Peak distance = {best_dist:.4f} (< 0.05)')
         tau_phase = peaks['tau_phase'][best_idx]
         rel_err = abs(tau_phase - tau_ns) / tau_ns
-        assert rel_err < 0.15, f"Phase τ = {tau_phase:.3f} vs true {tau_ns} (err {rel_err:.0%})"
-        print_success(f"Step 3b: Phase τ = {tau_phase:.3f} ns vs true {tau_ns} (err {rel_err:.1%})")
-
+        assert rel_err < 0.15, f'Phase τ = {tau_phase:.3f} vs true {tau_ns} (err {rel_err:.0%})'
+        print_success(f'Step 3b: Phase τ = {tau_phase:.3f} ns vs true {tau_ns} (err {rel_err:.1%})')
         from flimkit.phasor_launcher import save_session, load_session
         import tempfile, os
-
         cursors = [dict(center_g=float(peaks['peak_g'][0]),
                         center_s=float(peaks['peak_s'][0]),
                         color='#d62728')]
         params = dict(radius=0.05, radius_minor=0.03, angle_mode='semicircle')
-
         with tempfile.NamedTemporaryFile(suffix='.npz', delete=False) as f:
             tmp_path = f.name
-
         try:
             save_session(tmp_path,
                          real_cal=real_cal, imag_cal=imag_cal, mean=mean,
                          frequency=frequency, cursors=cursors, params=params,
                          ptu_file='synthetic.ptu')
-
             sess = load_session(tmp_path)
             assert sess['frequency'] == frequency
             assert len(sess['cursors']) == 1
             np.testing.assert_array_almost_equal(sess['real_cal'], real_cal)
-            print_success("Step 4: Save / load session round-trip OK")
+            print_success('Step 4: Save / load session round-trip OK')
         finally:
             os.unlink(tmp_path)
-
         return True
-
     except Exception as e:
-        print_error(f"Phasor pipeline test failed: {e}")
+        print_error(f'Phasor pipeline test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def check_gpu_backend():
-    """Check GPU backend detection and free-tau dispatch.
-
-    Notes
-    -----
-    Free-tau fitting always uses parallel CPU threads (scipy TRF via
-    ThreadPoolExecutor) regardless of platform or GPU.  The 'GPU' path
-    provides multi-core parallelism over the sequential CPU loop, not
-    hardware GPU acceleration.  The fixed-tau path *does* use real GPU
-    matrix operations (Metal/MPS on macOS, CUDA on Linux/Windows).
-    """
-    print_header("Checking GPU Backend")
-
+    print_header('Checking GPU Backend')
     try:
         from flimkit.GPU import get_backend
         backend = get_backend()
-
         if backend is None:
-            print_warning("No GPU backend available — GPU path will not be used")
-            print_warning("Install mlx (Apple Silicon) or torch (CUDA) for GPU support")
+            print_warning('No GPU backend available — GPU path will not be used')
+            print_warning('Install mlx (Apple Silicon) or torch (CUDA) for GPU support')
             return True
-
         backend_name = type(backend).__name__
-        print_success(f"GPU backend detected: {backend_name}")
-
+        print_success(f'GPU backend detected: {backend_name}')
         import numpy as np
         from flimkit.FLIM.fitters import fit_per_pixel
         from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm
@@ -507,27 +366,20 @@ def check_gpu_backend():
             MOCK_TCSPC_RES, MOCK_IRF_FWHM_BINS, MOCK_IRF_CENTER,
             generate_synthetic_biexp_decay,
         )
-
-        N_BINS   = 256
-        TCSPC    = MOCK_TCSPC_RES
-        NY, NX   = 4, 4
-
+        N_BINS = 256
+        TCSPC = MOCK_TCSPC_RES
+        NY, NX = 4, 4
         irf_fwhm_ns = MOCK_IRF_FWHM_BINS * TCSPC * 1e9
         irf = gaussian_irf_from_fwhm(N_BINS, TCSPC, irf_fwhm_ns, MOCK_IRF_CENTER)
-
         pixel = generate_synthetic_biexp_decay(N_BINS, TCSPC, peak_counts=5_000, noise=True)
         stack = np.broadcast_to(pixel, (NY, NX, N_BINS)).copy()
-
-        # Approximate global fit result: [tau1, tau2, amp1, amp2, shift]
         TAU1_S = 0.5e-9; TAU2_S = 3.0e-9
         global_popt = np.array([TAU1_S, TAU2_S, 0.4, 0.6, 0.0])
-
         kwargs = dict(
             stack=stack, tcspc_res=TCSPC, n_bins=N_BINS, irf_prompt=irf,
             has_tail=False, fit_bg=False, fit_sigma=False,
             global_popt=global_popt, n_exp=2, min_photons=50, free_tau=True,
         )
-
         call_count = [0]
         orig_fn = type(backend).batch_free_tau_fit
         def _patched(self, *a, **kw):
@@ -541,11 +393,9 @@ def check_gpu_backend():
             gpu_calls = call_count[0]
         finally:
             type(backend).batch_free_tau_fit = orig_fn
-
-        assert cpu_calls == 0,           "batch_free_tau_fit called during CPU run"
-        assert gpu_calls - cpu_calls == 1, "batch_free_tau_fit NOT called during GPU run"
-        print_success("GPU dispatch: batch_free_tau_fit called correctly")
-
+        assert cpu_calls == 0,           'batch_free_tau_fit called during CPU run'
+        assert gpu_calls - cpu_calls == 1, 'batch_free_tau_fit NOT called during GPU run'
+        print_success('GPU dispatch: batch_free_tau_fit called correctly')
         pixel_calls = [0]
         orig_sp = _BackendMixin._scipy_parallel_free_tau_fit
         def _patched_sp(raw_valid, bg_valid, *a, **kw):
@@ -556,44 +406,35 @@ def check_gpu_backend():
             gpu_maps = fit_per_pixel(**kwargs, gpu_backend=backend)
         finally:
             _BackendMixin._scipy_parallel_free_tau_fit = staticmethod(orig_sp)
-
-        n_valid = int((~np.isnan(gpu_maps["tau_mean_amp"])).sum())
-        assert pixel_calls[0] > 0, "No pixels reached the scipy solver"
+        n_valid = int((~np.isnan(gpu_maps['tau_mean_amp'])).sum())
+        assert pixel_calls[0] > 0, 'No pixels reached the scipy solver'
         assert pixel_calls[0] >= n_valid
         print_success(
-            f"Pixel solver: {pixel_calls[0]} pixels fitted, "
-            f"{n_valid} valid in output"
-        )
-
-        print_warning(
-            f"Free-tau fitting uses parallel CPU threads (scipy TRF), "
-            f"not {backend_name} GPU hardware"
+            f'Pixel solver: {pixel_calls[0]} pixels fitted, '
+            f'{n_valid} valid in output'
         )
         print_warning(
-            "Fixed-tau fitting uses real GPU matrix ops — "
-            "GPU acceleration is active for that path"
+            f'Free-tau fitting uses parallel CPU threads (scipy TRF), '
+            f'not {backend_name} GPU hardware'
         )
-
+        print_warning(
+            'Fixed-tau fitting uses real GPU matrix ops — '
+            'GPU acceleration is active for that path'
+        )
         return True
-
     except Exception as e:
-        print_error(f"GPU backend check failed: {e}")
+        print_error(f'GPU backend check failed: {e}')
         traceback.print_exc()
         return False
 
-
 def test_tile_fit_pipeline():
-    """Test the per-tile fit → assemble → save pipeline with mocked PTU I/O."""
-    print_header("Testing Per-Tile Fit Pipeline")
-
+    print_header('Testing Per-Tile Fit Pipeline')
     try:
         import numpy as np
         import tempfile
-
         TILE_H, TILE_W = 64, 64
         TRUE_TAU1_NS = 2.0
         rng = np.random.default_rng(42)
-
         def _pixel_maps(n_exp=1):
             pm = {
                 'intensity': rng.poisson(500, (TILE_H, TILE_W)).astype(np.float32),
@@ -601,23 +442,17 @@ def test_tile_fit_pipeline():
             }
             for k in range(1, n_exp + 1):
                 if k == 1:
-                    # Deterministic synthetic ground truth for validation reporting.
                     pm[f'tau{k}'] = rng.normal(TRUE_TAU1_NS, 0.05, (TILE_H, TILE_W)).astype(np.float32)
-                    pm[f'a{k}']   = np.ones((TILE_H, TILE_W), dtype=np.float32)
+                    pm[f'a{k}'] = np.ones((TILE_H, TILE_W), dtype=np.float32)
                 else:
                     pm[f'tau{k}'] = rng.uniform(1.0, 4.0, (TILE_H, TILE_W)).astype(np.float32)
-                    pm[f'a{k}']   = rng.uniform(0.3, 0.7, (TILE_H, TILE_W)).astype(np.float32)
-            # assemble_tile_maps() reads 'tau_mean_amp' directly from pixel_maps.
-            # Without it the canvas stays all-NaN and make_lifetime_image() crashes.
-            # For n-exp fits this is the amplitude-weighted mean tau per pixel.
+                    pm[f'a{k}'] = rng.uniform(0.3, 0.7, (TILE_H, TILE_W)).astype(np.float32)
             taus = np.stack([pm[f'tau{k}'] for k in range(1, n_exp + 1)])
             amps = np.stack([pm[f'a{k}']   for k in range(1, n_exp + 1)])
             pm['tau_mean_amp'] = (
                 np.sum(taus * amps, axis=0) / np.sum(amps, axis=0)
             ).astype(np.float32)
             return pm
-
-        # 2×2 grid of synthetic tile results
         positions = [(0, 0), (0, TILE_W), (TILE_H, 0), (TILE_H, TILE_W)]
         tile_results = [
             {
@@ -639,33 +474,27 @@ def test_tile_fit_pipeline():
         ]
         canvas_h = 2 * TILE_H
         canvas_w = 2 * TILE_W
-
         from flimkit.FLIM.assemble import assemble_tile_maps, derive_global_tau, save_assembled_maps
-
         canvas = assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp=1)
         assert 'intensity'    in canvas, "canvas missing 'intensity'"
         assert 'tau_mean_amp' in canvas, "canvas missing 'tau_mean_amp'"
         assert canvas['intensity'].shape == (canvas_h, canvas_w)
-        print_success(f"Step 1: Tiles assembled into {canvas_h}×{canvas_w} canvas")
-
+        print_success(f'Step 1: Tiles assembled into {canvas_h}×{canvas_w} canvas')
         gs = derive_global_tau(canvas, n_exp=1)
         assert gs['n_pixels_fitted'] > 0
         tau = gs['tau_mean_amp_global_ns']
-        assert 0.1 < tau < 15.0, f"Unreasonable global τ: {tau}"
+        assert 0.1 < tau < 15.0, f'Unreasonable global τ: {tau}'
         print_success(f"Step 2: Global τ = {tau:.2f} ns ({gs['n_pixels_fitted']} px fitted)")
-
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             save_assembled_maps(canvas, gs, out, roi_name='R_2', n_exp=1)
-
             missing = [f for f in [
                 'R_2_intensity.tif', 'R_2_tau_mean_amp.tif',
                 'R_2_intensity.npy', 'R_2_tau_mean_amp.npy',
                 'R_2_global_summary.txt',
             ] if not (out / f).exists()]
-            assert not missing, f"Missing output files: {missing}"
-            print_success("Step 3: TIFFs, NPYs, and summary text written")
-
+            assert not missing, f'Missing output files: {missing}'
+            print_success('Step 3: TIFFs, NPYs, and summary text written')
         try:
             import argparse
             import numpy as np
@@ -674,7 +503,6 @@ def test_tile_fit_pipeline():
                 Tau_min, Tau_max, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM,
                 channels, lm_restarts, de_population, de_maxiter,
             )
-
             with tempfile.TemporaryDirectory() as tmp:
                 args = argparse.Namespace(
                     xlif='dummy.xlif', ptu_dir='dummy_ptu', ptu_basename='R 2',
@@ -691,8 +519,6 @@ def test_tile_fit_pipeline():
                     xlsx=None, out=None, intensity_threshold=None,
                     tau_display_min=None, tau_display_max=None,
                 )
-
-                # Build synthetic fit_flim_tiles return value (9 elements)
                 pooled_decay = np.random.exponential(scale=100, size=1024).astype(np.float32)
                 pooled_decay = np.maximum(pooled_decay, 1.0)
                 pooled_irf = np.random.exponential(scale=10, size=1024).astype(np.float32)
@@ -714,13 +540,11 @@ def test_tile_fit_pipeline():
                     tile_results, canvas_h, canvas_w, [],
                     pooled_decay, pooled_irf, tcspc_ref, global_popt, global_summary
                 )
-
-                with patch('flimkit.PTU.stitch.fit_flim_tiles',
+                with patch('flimkit.formats.PTU.stitch.fit_flim_tiles',
                            return_value=fit_flim_tiles_return):
                     result = _run_tile_fit(args)
                     result_canvas = result['canvas']
                     result_gs = result['global_summary']
-
                 assert 'intensity' in result_canvas
                 assert result_gs['n_pixels_fitted'] > 0
                 out = Path(tmp)
@@ -728,68 +552,55 @@ def test_tile_fit_pipeline():
                 assert (out / f'{roi}_intensity.tif').exists()
                 assert (out / f'{roi}_tau_mean_amp.tif').exists()
                 tau1_fit = result_gs.get('tau1_mean_ns')
-                assert tau1_fit is not None, "tau1_mean_ns missing from tile-fit summary"
+                assert tau1_fit is not None, 'tau1_mean_ns missing from tile-fit summary'
                 rel_tau1 = abs(tau1_fit - TRUE_TAU1_NS) / TRUE_TAU1_NS
-                assert rel_tau1 < 0.10, f"Tile-fit tau1 error too high: {rel_tau1:.0%}"
+                assert rel_tau1 < 0.10, f'Tile-fit tau1 error too high: {rel_tau1:.0%}'
                 print_success(
-                    f"Step 4: Tile-fit summary "
-                    f"(τ₁={tau1_fit:.2f} vs {TRUE_TAU1_NS} ns [{rel_tau1:.0%}])"
+                    f'Step 4: Tile-fit summary '
+                    f'(τ₁={tau1_fit:.2f} vs {TRUE_TAU1_NS} ns [{rel_tau1:.0%}])'
                 )
-
         except ImportError as e:
-            print_warning(f"Step 4: _run_tile_fit unavailable ({e})")
-
+            print_warning(f'Step 4: _run_tile_fit unavailable ({e})')
         return True
-
     except Exception as e:
-        print_error(f"Per-tile fit pipeline test failed: {e}")
+        print_error(f'Per-tile fit pipeline test failed: {e}')
         traceback.print_exc()
         return False
 
-
 def main():
-    """Run all validation checks."""
-    print(f"\n{Colors.BOLD}FLIM Pipeline Installation Validation{Colors.END}")
+    print(f'\n{Colors.BOLD}FLIM Pipeline Installation Validation{Colors.END}')
     print(f"{Colors.BOLD}{'='*60}{Colors.END}\n")
-    
     results = []
-    
-    results.append(("Dependencies", check_dependencies()))
-    results.append(("Simplified Integration Files", check_simplified_integration()))
-    results.append(("Module Imports", check_modules_import()))
-    results.append(("GPU Backend", check_gpu_backend()))
-    results.append(("XML/XLIF Parsing", test_xml_parsing()))
-    results.append(("Mock Data Generation", test_mock_data()))
-    results.append(("Tile Stitching", test_stitching()))
-    results.append(("Complete Workflow", test_complete_workflow()))
-    results.append(("Phasor Pipeline", test_phasor_pipeline()))
-    results.append(("Per-Tile Fit Pipeline", test_tile_fit_pipeline()))
-    
-    print_header("Validation Summary")
-    
+    results.append(('Dependencies', check_dependencies()))
+    results.append(('Simplified Integration Files', check_simplified_integration()))
+    results.append(('Module Imports', check_modules_import()))
+    results.append(('GPU Backend', check_gpu_backend()))
+    results.append(('XML/XLIF Parsing', test_xml_parsing()))
+    results.append(('Mock Data Generation', test_mock_data()))
+    results.append(('Tile Stitching', test_stitching()))
+    results.append(('Complete Workflow', test_complete_workflow()))
+    results.append(('Phasor Pipeline', test_phasor_pipeline()))
+    results.append(('Per-Tile Fit Pipeline', test_tile_fit_pipeline()))
+    print_header('Validation Summary')
     passed = sum(1 for _, result in results if result)
     total = len(results)
-    
     for name, result in results:
         if result:
-            print_success(f"{name}: PASSED")
+            print_success(f'{name}: PASSED')
         else:
-            print_error(f"{name}: FAILED")
-    
-    print(f"\n{Colors.BOLD}Results: {passed}/{total} checks passed{Colors.END}\n")
-    
+            print_error(f'{name}: FAILED')
+    print(f'\n{Colors.BOLD}Results: {passed}/{total} checks passed{Colors.END}\n')
     if passed == total:
-        print(f"{Colors.GREEN}{Colors.BOLD}✓ All checks passed! Your installation is working correctly.{Colors.END}\n")
+        print(f'{Colors.GREEN}{Colors.BOLD}✓ All checks passed! Your installation is working correctly.{Colors.END}\n')
         return 0
     else:
-        print(f"{Colors.RED}{Colors.BOLD}✗ Some checks failed. See errors above.{Colors.END}\n")
-        print("Common fixes:")
-        print("- Ensure you have installed all the required dependencies (see the first check).")
-        print("- Check that you are using the correct Python environment where the package is installed.")
-        print("- Pray that the error messages above give a clue about what is missing or misconfigured.")
-        print("- Consider all your life choices that led to this moment. Just kidding, but seriously, check the error messages and fix the issues.")
+        print(f'{Colors.RED}{Colors.BOLD}✗ Some checks failed. See errors above.{Colors.END}\n')
+        print('Common fixes:')
+        print('- Ensure you have installed all the required dependencies (see the first check).')
+        print('- Check that you are using the correct Python environment where the package is installed.')
+        print('- Pray that the error messages above give a clue about what is missing or misconfigured.')
+        print('- Consider all your life choices that led to this moment. Just kidding, but seriously, check the error messages and fix the issues.')
         return 1
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import json
-from ..PTU.reader import PTUFile, read_pck
+from ..formats.PTU.reader import PTUFile, read_pck
+from ..formats import FLIMFile
 from ..utils.xlsx_tools import load_xlsx
 from ..configs import MACHINE_IRF_DIR as _DEFAULT_MACHINE_IRF_DIR
 
@@ -89,7 +90,7 @@ def build_machine_irf_from_folder(
     tcspc_all = []
 
     for name, ptu_path, xlsx_path in pairs:
-        ptu_f = PTUFile(str(ptu_path), verbose=False)
+        ptu_f = FLIMFile(str(ptu_path), verbose=False)
         xlsx = load_xlsx(str(xlsx_path))
         irf = irf_from_xlsx(xlsx, ptu_f.n_bins, ptu_f.tcspc_res)
         irfs.append(irf)
@@ -193,7 +194,7 @@ def gaussian_irf_from_fwhm(n_bins: int,
 
 def irf_from_scatter_ptu(path: str, ptu_ref: PTUFile,
                          channel: int | None = None) -> np.ndarray:
-    scatter = PTUFile(path, verbose=False)
+    scatter = FLIMFile(path, verbose=False)
     decay   = scatter.summed_decay(channel=channel)
     s       = decay.sum()
     if s == 0 and channel is not None:

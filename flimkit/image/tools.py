@@ -1,11 +1,11 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from ..PTU import reader as ptufile
+from flimkit.formats import FLIMFile
 
 
 def make_intensity_image(ptu_path, rotate_90_cw=True, save_image=False):
-    ptu = ptufile.PTUFile(ptu_path, verbose=False)
+    ptu = FLIMFile(ptu_path, verbose=False)
     stack = ptu.raw_pixel_stack(channel=ptu.photon_channel)
     intensity = stack.sum(axis=-1)
     if rotate_90_cw:

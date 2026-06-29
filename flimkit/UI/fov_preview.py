@@ -128,9 +128,9 @@ class FOVPreviewPanel:
             return
         try:
             self._ptu_path = ptu_path
-            from flimkit.PTU.reader import PTUFile
+            from flimkit.formats import FLIMFile
             import numpy as np
-            ptu = PTUFile(ptu_path, verbose=False)
+            ptu = FLIMFile(ptu_path, verbose=False)
             stack = ptu.pixel_stack(channel=None, binning=1)
             intensity = stack.sum(axis=2)
             decay = ptu.summed_decay(channel=None)
@@ -167,7 +167,7 @@ class FOVPreviewPanel:
             self._status.set(f"Error loading FOV: {str(e)[:50]}")
     def display_fit_results(self, ptu_path: str, fit_result: dict):
         try:
-            from flimkit.PTU.reader import PTUFile
+            from flimkit.formats import FLIMFile
             import numpy as np
             global_summary = fit_result.get('global_summary', {})
             global_popt = fit_result.get('global_popt')
@@ -183,7 +183,7 @@ class FOVPreviewPanel:
                 time_ns = time_ns_from_result
             else:
                 if ptu_path and Path(ptu_path).exists():
-                    ptu = PTUFile(ptu_path, verbose=False)
+                    ptu = FLIMFile(ptu_path, verbose=False)
                     decay = ptu.summed_decay(channel=None)
                     time_ns = ptu.time_ns
                 else:
@@ -196,7 +196,7 @@ class FOVPreviewPanel:
             elif 'intensity' in fit_result:
                 intensity = fit_result['intensity']
             elif ptu_path and Path(ptu_path).exists():
-                ptu = PTUFile(ptu_path, verbose=False)
+                ptu = FLIMFile(ptu_path, verbose=False)
                 stack = ptu.pixel_stack(channel=None, binning=1)
                 intensity = stack.sum(axis=2)
             if intensity is None:

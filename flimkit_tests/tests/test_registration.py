@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from flimkit.PTU.stitch import _register_tile_columns
+from flimkit.formats.PTU.stitch import _register_tile_columns
 
 
 def create_tile_results(positions, tile_h=512, tile_w=512):

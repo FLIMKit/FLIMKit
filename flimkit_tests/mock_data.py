@@ -197,7 +197,7 @@ def generate_mock_ptu_tiles(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    from flimkit.PTU.reader import PTUFile as _PTUFile
+    from flimkit.formats.PTU.reader import PTUFile as _PTUFile
 
     ptu_files = []
 
@@ -439,7 +439,7 @@ def generate_synthetic_gaussian_dist_decay(
 
 def load_mock_ptu_file(ptu_path: Path):
     """Load a PTU file written by generate_mock_ptu_tiles() and return an object with .summed_decay()."""
-    from flimkit.PTU.reader import PTUFile
+    from flimkit.formats.PTU.reader import PTUFile
     ptu = PTUFile(str(ptu_path), verbose=False)
     class _Wrapper:
         def __init__(self, ptu):

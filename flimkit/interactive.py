@@ -12,8 +12,8 @@ from .configs import (
     TAU_DISPLAY_MIN, TAU_DISPLAY_MAX, INTENSITY_DISPLAY_MIN, INTENSITY_DISPLAY_MAX,
     MACHINE_IRF_DEFAULT_PATH, MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
     MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF)
-from .PTU.reader import PTUFile
-from .PTU.stitch import stitch_flim_tiles, load_flim_for_fitting  
+from flimkit.formats import FLIMFile
+from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting  
 from .utils.xml_utils import parse_xlif_tile_positions 
 from .FLIM.fit_tools import find_irf_peak_bin
 from .FLIM.irf_tools import irf_from_scatter_ptu, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical
@@ -810,7 +810,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f'  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}')
     print(f"{'='*60}")
     print(f'\n[1] PTU: {args.ptu}')
-    ptu = PTUFile(args.ptu, verbose=True)
+    ptu = FLIMFile(args.ptu, verbose=True)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
@@ -1330,7 +1330,7 @@ def tile_fit_inquire():
     args.tau_display_max = tau_max_display
     return args
 def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
-    from .PTU.stitch import fit_flim_tiles
+    from .formats.PTU.stitch import fit_flim_tiles
     from .FLIM.assemble import assemble_tile_maps, derive_global_tau, save_assembled_maps
     roi_name = args.ptu_basename.replace(' ', '_')
     print(f"\n{'='*60}")

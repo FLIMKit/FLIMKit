@@ -4,7 +4,7 @@ import pytest
 
 def test_get_ptu_active_channels(monkeypatch):
     from flimkit import phasor_launcher
-    from flimkit.PTU import reader
+    from flimkit.formats.PTU import reader
 
     class FakePTUFile:
         def __init__(self, path, verbose=False):
