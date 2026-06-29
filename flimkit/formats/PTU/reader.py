@@ -47,7 +47,7 @@ def _read_ptu_header(path):
         buf.extend(fh.read())
     pos = 0
     while pos + 48 <= len(buf):
-        ident  = buf[pos:pos+32].decode('ascii', errors='replace').rstrip('\x00')
+        ident = buf[pos:pos+32].decode('ascii', errors='replace').rstrip('\x00')
         tagidx = struct.unpack_from('<i', buf, pos+32)[0]
         tagtyp = struct.unpack_from('<I', buf, pos+36)[0]
         tagval = buf[pos+40:pos+48]
@@ -120,23 +120,23 @@ def read_pck(path):
     return hist, tags
 class PTUFile:
     def __init__(self, path, verbose=True):
-        self.path    = str(path)
+        self.path = str(path)
         self.verbose = verbose
         self.tags, self._data_offset = _read_ptu_header(path)
         self._parse_meta()
     def _parse_meta(self):
         t = self.tags
-        self.tcspc_res  = float(t.get('MeasDesc_Resolution', 9.697e-11))
-        global_res      = float(t.get('MeasDesc_GlobalResolution',
+        self.tcspc_res = float(t.get('MeasDesc_Resolution', 9.697e-11))
+        global_res = float(t.get('MeasDesc_GlobalResolution',
                                        1 / t.get('TTResult_SyncRate', 20e6)))
-        self.sync_rate  = 1.0 / global_res
-        self.period_ns  = global_res * 1e9
-        self.n_bins     = int(math.ceil(global_res / self.tcspc_res))
-        self.n_x        = int(t.get('ImgHdr_PixX', t.get('$ReqHdr_PixelNumber_X', 256)))
-        self.n_y        = int(t.get('ImgHdr_PixY', t.get('$ReqHdr_PixelNumber_Y', 256)))
-        self.rec_type   = int(t.get('TTResultFormat_TTTRRecType', 0x00010303))
-        self.n_records  = int(t.get('TTResult_NumberOfRecords', 0))
-        self.time_ns    = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
+        self.sync_rate = 1.0 / global_res
+        self.period_ns = global_res * 1e9
+        self.n_bins = int(math.ceil(global_res / self.tcspc_res))
+        self.n_x = int(t.get('ImgHdr_PixX', t.get('$ReqHdr_PixelNumber_X', 256)))
+        self.n_y = int(t.get('ImgHdr_PixY', t.get('$ReqHdr_PixelNumber_Y', 256)))
+        self.rec_type = int(t.get('TTResultFormat_TTTRRecType', 0x00010303))
+        self.n_records = int(t.get('TTResult_NumberOfRecords', 0))
+        self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
         self.photon_channel = None
         self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
         self._total_photons = None
@@ -155,23 +155,20 @@ class PTUFile:
             print(' ')
     def _load_records(self):
         size = Path(self.path).stat().st_size - self._data_offset
-        n    = size // 4
+        n = size // 4
         with open(self.path, 'rb') as fh:
             fh.seek(self._data_offset)
             return np.frombuffer(fh.read(n * 4), dtype='<u4')
     def _decode_picoharp_t3(self, records: np.ndarray):
-        ch    = (records >> 28) & 0xF
+        ch = (records >> 28) & 0xF
         dtime = (records >> 16) & 0xFFF
         nsync = records & 0xFFFF
         return ch, dtime, nsync
-    # Record types sharing the generic HydraHarp-style T3 layout:
-    # HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic.
     _HT3_RECTYPES = frozenset({0x00010304, 0x01010304, 0x00010305, 0x01010305,
                                0x00010306, 0x01010306, 0x00010307, 0x01010307})
     def _is_ht3(self):
         return self.rec_type in self._HT3_RECTYPES
     def _decode_records(self, records):
-        # Dispatch on record type: HydraHarp-style HT3 vs PicoHarp T3 bit layout.
         if self._is_ht3():
             special = ((records >> 31) & 0x1).astype(bool)
             ch = (records >> 25) & 0x3F
@@ -226,8 +223,8 @@ class PTUFile:
         records = self._load_records()
         special, ch, dtime, nsync = self._decode_records(records)
         nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
-        ph_mask  = (~special) & (ch == ch_use)
-        ph_idx   = np.where(ph_mask)[0]
+        ph_mask = (~special) & (ch == ch_use)
+        ph_idx = np.where(ph_mask)[0]
         ph_dtime = dtime[ph_mask].astype(np.int32)
         line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
         n_lines = min(len(line_start_abs), len(line_stop_abs))
@@ -235,7 +232,7 @@ class PTUFile:
             raise RuntimeError('No valid line markers found.')
         ny_out = self.n_y // binning
         nx_out = self.n_x // binning
-        stack  = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
+        stack = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
         for line_num in range(n_lines):
             ls = line_start_abs[line_num]
             le = line_stop_abs[line_num]
@@ -244,23 +241,21 @@ class PTUFile:
             row = (line_num % self.n_y) // binning
             if row >= ny_out:
                 continue
-            # Find photons belonging to this line (by record index)
             lo = np.searchsorted(ph_idx, ls, side='right')
             hi = np.searchsorted(ph_idx, le, side='left')
             if hi <= lo:
                 continue
             dt_in = ph_dtime[lo:hi]
-            # Pixel column from overflow-corrected nsync (proportional to time)
             nsync_start = nsync_corrected[ls]
-            nsync_end   = nsync_corrected[le]
-            nsync_span  = nsync_end - nsync_start
+            nsync_end = nsync_corrected[le]
+            nsync_span = nsync_end - nsync_start
             if nsync_span <= 0:
                 continue
             ph_nsync = nsync_corrected[ph_idx[lo:hi]]
             rel_nsync = ph_nsync - nsync_start
-            px      = np.clip((rel_nsync * self.n_x) // nsync_span,
+            px = np.clip((rel_nsync * self.n_x) // nsync_span,
                               0, self.n_x - 1).astype(np.int32)
-            px_bin  = px // binning
+            px_bin = px // binning
             for i in range(len(dt_in)):
                 tb = dt_in[i]
                 if tb < self.n_bins:
@@ -279,19 +274,18 @@ class PTUFile:
         ch_use = channel if channel is not None else self.photon_channel
         if self.verbose:
             print(f"  Building pixel stack (channel={ch_use}, binning={binning}) ...")
-            # pass
         t0 = time.time()
-        records  = self._load_records()
+        records = self._load_records()
         special, ch, dtime, nsync = self._decode_records(records)
         nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
-        ph_mask  = (~special) & (ch == ch_use)
-        ph_idx   = np.where(ph_mask)[0]
+        ph_mask = (~special) & (ch == ch_use)
+        ph_idx = np.where(ph_mask)[0]
         ph_dtime = dtime[ph_mask].astype(np.int32)
         line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
         n_lines = min(len(line_start_abs), len(line_stop_abs))
-        ny_out  = self.n_y  // binning
-        nx_out  = self.n_x  // binning
-        stack   = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
+        ny_out = self.n_y  // binning
+        nx_out = self.n_x  // binning
+        stack = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
         for line_num in range(n_lines):
             ls = line_start_abs[line_num]
             le = line_stop_abs[line_num]
@@ -302,24 +296,23 @@ class PTUFile:
             hi = np.searchsorted(ph_idx, le, side='left')
             if hi <= lo:
                 continue
-            dt_in    = ph_dtime[lo:hi]
-            # Pixel column from overflow-corrected nsync
+            dt_in = ph_dtime[lo:hi]
             nsync_start = nsync_corrected[ls]
-            nsync_end   = nsync_corrected[le]
-            nsync_span  = nsync_end - nsync_start
+            nsync_end = nsync_corrected[le]
+            nsync_span = nsync_end - nsync_start
             if nsync_span <= 0:
                 continue
             ph_nsync = nsync_corrected[ph_idx[lo:hi]]
             rel_nsync = ph_nsync - nsync_start
-            px       = np.clip((rel_nsync * self.n_x) // nsync_span,
+            px = np.clip((rel_nsync * self.n_x) // nsync_span,
                                0, self.n_x - 1).astype(np.int32)
-            px_bin   = px // binning
+            px_bin = px // binning
             for i in range(len(dt_in)):
                 tb = dt_in[i]
                 if tb < self.n_bins:
                     stack[row, px_bin[i], tb] += 1
         elapsed = time.time() - t0
-        total   = stack.sum()
+        total = stack.sum()
         if self.verbose:
             pass
         return stack.astype(float)
@@ -338,14 +331,13 @@ class PTUFile:
                 f"histogram must be (Y, X, H), got shape {histogram.shape}"
             )
         n_y, n_x, n_bins = histogram.shape
-        global_res      = 1.0 / frequency
+        global_res = 1.0 / frequency
         syncs_per_pixel = max(1, int(round(global_res / tcspc_res / n_bins)))
-        syncs_per_line  = syncs_per_pixel * n_x
-        T3WRAPAROUND    = 65536
-        # Tag encoding helpers
-        TYPE_INT   = 0x10000008
+        syncs_per_line = syncs_per_pixel * n_x
+        T3WRAPAROUND = 65536
+        TYPE_INT = 0x10000008
         TYPE_FLOAT = 0x20000008
-        TYPE_STR   = 0x4001FFFF
+        TYPE_STR = 0x4001FFFF
         TYPE_EMPTY = 0xFFFF0008
         def _tag(ident, tagtyp, value, idx=-1):
             head = (
@@ -362,8 +354,7 @@ class PTUFile:
                 return head + struct.pack('<q', 0)
             else:
                 return head + struct.pack('<q', int(value))
-        # Encode TTTR records 
-        records     = []
+        records = []
         nsync_floor = 0
         def _advance(target):
             nonlocal nsync_floor
@@ -395,8 +386,8 @@ class PTUFile:
                 np.uint32(0xF0020000 | ((line_end - nsync_floor) & 0xFFFF))
             )
         records_arr = np.array(records, dtype=np.uint32)
-        n_records   = len(records_arr)
-        tags  = b''
+        n_records = len(records_arr)
+        tags = b''
         tags += _tag('Measurement_Mode',             TYPE_INT,   3)
         tags += _tag('TTResultFormat_TTTRRecType',   TYPE_INT,   0x00010303)
         tags += _tag('TTResultFormat_BitsPerRecord', TYPE_INT,   32)
@@ -425,25 +416,20 @@ class PTUArray5D:
                      dtime):
         frame_starts = np.array([0], dtype=np.int64)
         frame_ends = np.array([len(records)], dtype=np.int64)
-        # TODO: Implement actual frame detection for multi-frame acquisitions
         return frame_starts, frame_ends
     def _load_and_process(self):
         records = self.ptu._load_records()
         ch, dtime, nsync = self.ptu._decode_picoharp_t3(records)
-        # 1. Identify frames
         frame_starts, frame_ends = self._find_frames(records, ch, dtime)
         self.n_frames = len(frame_starts)
-        # 2. Identify active channels (excluding marker 0xF)
         active_channels = np.unique(ch[ch != 0xF])
         self.n_channels = len(active_channels)
         self.active_channels = active_channels
-        # 3. Allocate 5D array
         ny = self.n_y_out
         nx = self.n_x_out
         nb = self.ptu.n_bins
-        self.array = np.zeros((self.n_frames, ny, nx, self.n_channels, nb), 
+        self.array = np.zeros((self.n_frames, ny, nx, self.n_channels, nb),
                               dtype=np.uint32)
-        # 4. Fill array
         for frame_idx, (fs, fe) in enumerate(zip(frame_starts, frame_ends)):
             self._fill_frame(frame_idx, fs, fe, ch, dtime, active_channels)
     def _fill_frame(self, frame_idx, start, end, ch, dtime, active_channels):
@@ -482,7 +468,6 @@ class PTUArray5D:
             line_ph_idx = photon_idx[lo:hi]
             line_ph_ch = photon_ch[lo:hi]
             line_ph_dt = photon_dtime[lo:hi]
-            # Column from record-index position within the line
             line_len = le - ls
             rel_pos = line_ph_idx - ls
             col_full = (rel_pos * self.ptu.n_x) // line_len
@@ -508,11 +493,10 @@ class PTUArray5D:
     @property
     def frequency(self):
         return 1.0 / (self.n_bins * self.tcspc_res)
-    
+
 def read_ptu(path, binning=1, channel=None,
              verbose=False):
     ptu = PTUFile(path, verbose=verbose)
-    # Get pixel stack (Y, X, H)
     data = ptu.pixel_stack(channel=channel, binning=binning)
     metadata = {
         'frequency': ptu.sync_rate,
@@ -543,39 +527,26 @@ def read_ptu_5d(path, binning=1, verbose=False):
         'channel_list': list(builder.active_channels),
     }
     if verbose:
-        # print(f"\n5D Array Summary:")
-        # print(f"  Shape: {data.shape}")
-        # print(f"  Dims:  {builder.dims}")
-        # print(f"  Channels: {list(builder.active_channels)}")
-        # print(f"  Total photons: {data.sum():,.0f}")
         pass
     return data, metadata
 def get_intensity_image(path, binning=1, channel=None):
     data, metadata = read_ptu(path, binning=binning, channel=channel, verbose=False)
-    # Sum over histogram dimension (axis 2)
     img = data.sum(axis=2)
     return img, metadata
 def get_flim_data(path, binning=1, channel=None):
-    # This is identical to read_ptu, just provided for API compatibility
     return read_ptu(path, binning=binning, channel=channel, verbose=False)
 def normalise_flim(flim):
     if flim is None:
         return None
-    # If the array has 5 dims (T, Y, X, C, H), take first frame and first channel
     if flim.ndim == 5:
         return flim[0, :, :, 0, :]
-    # If the array has 4 dims, assume (frame, Y, X, H) or (Y, X, C, H)
     if flim.ndim == 4:
-        # Check if first dimension is 1 (likely frame)
         if flim.shape[0] == 1:
             return flim[0]
-        # Otherwise assume (Y, X, C, H) and take first channel
         else:
             return flim[:, :, 0, :]
-    # If already (Y, X, H), return as-is
     if flim.ndim == 3:
         return flim
-    # If 2D or 1D (no spatial info), cannot normalise
     return None
 def create_time_axis(n_bins, tcspc_resolution):
     return np.arange(n_bins) * tcspc_resolution * 1e9
@@ -588,23 +559,18 @@ def decode_t3_record(ptu_path):
     if not Path(ptu_path).exists():
         raise FileNotFoundError(f"PTU file not found: {ptu_path}")
     ptu = PTUFile(ptu_path, verbose=False)
-    # Check that the file contains T3 records (PicoHarp format)
     if ptu.rec_type != 0x00010303:
         raise ValueError(
             f"Unsupported record type: 0x{ptu.rec_type:08X}. "
             'Expected PicoHarp T3 (0x00010303).'
         )
-    # Load all raw 4-byte records
     records = ptu._load_records()
-    # Decode into channel, dtime, nsync
     ch, dtime, nsync = ptu._decode_picoharp_t3(records)
     return ch, dtime, nsync
 def decode_ptu_raw_cube(ptu_path, n_bins=None,
                         tile_shape=None,
                         channel=None):
-    # Read the file with binning=1 to preserve full resolution
     cube, metadata = read_ptu(ptu_path, binning=1, channel=channel, verbose=False)
-    # Optionally truncate to n_bins
     if n_bins is not None:
         cube = cube[..., :n_bins]
     return cube
@@ -621,22 +587,17 @@ def get_flim_histogram_from_ptufile(
     binning: int = 1,
     channel: int = None
 ) -> Tuple[np.ndarray, Dict[str, Any]]:
-    # Attempt with custom PTUFile
     try:
         from .reader import PTUFile
         ptu = PTUFile(str(ptu_path), verbose=False)
-        # Use raw_pixel_stack if available; else pixel_stack (but we prefer raw)
         if hasattr(ptu, 'raw_pixel_stack'):
             stack = ptu.raw_pixel_stack(channel=channel, binning=binning)
         else:
             stack = ptu.pixel_stack(channel=channel, binning=binning)
-            # If pixel_stack returns normalized floats, treat as failure
             if stack.max() <= 1.0 and stack.sum() > 0:
                 raise ValueError('Custom class returned normalized data')
-        # Check if stack has any photons
         if stack.sum() == 0:
             raise ValueError('Custom class returned zero photons')
-        # Success: rotate if needed and build metadata
         if rotate_cw:
             stack = np.rot90(stack, k=-1, axes=(0, 1))
         metadata = {
@@ -649,20 +610,12 @@ def get_flim_histogram_from_ptufile(
         }
         return stack, metadata
     except Exception as e:
-        # Fallback to ptufile 
-        # print(f"Custom PTUFile failed for {ptu_path.name}: {e}. Falling back to ptufile.")
         from .decode import get_raw_flim_histogram
         stack, meta = get_raw_flim_histogram(ptu_path, rotate_cw=rotate_cw)
-        # If binning requested, bin the full-resolution stack
         if binning > 1:
             from scipy.ndimage import zoom
             zoom_factors = (1/binning, 1/binning, 1)
             stack = zoom(stack, zoom_factors, order=0, mode='nearest')
-        # Rotate already applied in get_raw_flim_histogram if requested,
-        # but we already passed rotate_cw, so no extra rotation needed.
-        # However, get_raw_flim_histogram may not apply rotation unless we pass it,
-        # which we did, so stack is already rotated.
-        # Build metadata
         metadata = {
             'tcspc_resolution': meta['tcspc_resolution'],
             'n_time_bins': meta['n_time_bins'],

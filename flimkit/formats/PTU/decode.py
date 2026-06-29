@@ -11,24 +11,16 @@ def get_flim_histogram_from_ptufile(
     binning=1,
     channel=None
 ):
-    # Attempt with custom PTUFile
-
     from .reader import PTUFile
     ptu = PTUFile(str(ptu_path), verbose=False)
-    # Use raw_pixel_stack if available; else pixel_stack (but we prefer raw)
     if hasattr(ptu, 'raw_pixel_stack'):
         stack = ptu.raw_pixel_stack(channel=channel, binning=binning)
     else:
         stack = ptu.pixel_stack(channel=channel, binning=binning)
-        # If pixel_stack returns normalized floats, treat as failure
         if stack.max() <= 1.0 and stack.sum() > 0:
             raise ValueError('Custom class returned normalized data')
-
-    # Check if stack has any photons
     if stack.sum() == 0:
         raise ValueError('Custom class returned zero photons')
-
-    # Success: rotate if needed and build metadata
     if rotate_cw:
         stack = np.rot90(stack, k=-1, axes=(0, 1))
     metadata = {
@@ -59,9 +51,6 @@ def get_raw_flim_histogram2(ptu_path, rotate_cw=True):
     ptu = ptufile.PtuFile(str(ptu_path))
     data = ptu[:].squeeze()
     if data.ndim != 3:
-        # If there are extra dims (e.g., T, C), sum over them
-        # For simplicity, assume H is last and others are singletons or to be summed
-        # This matches typical FLIM microscope data: (T, Y, X, C, H) with T=1, C=1
         data = data.reshape((data.shape[0], data.shape[1], -1))
     if rotate_cw:
         data = np.rot90(data, k=-1, axes=(0, 1))
