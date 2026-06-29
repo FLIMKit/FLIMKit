@@ -7,7 +7,7 @@ from tqdm import tqdm
 # Disable tqdm globally - all progress is shown via progress windows instead
 tqdm.disable = True
 
-from ..utils.xml_utils import (
+from ...utils.xml_utils import (
     parse_xlif_tile_positions,
     get_pixel_size_from_xlif,
     compute_tile_pixel_positions,
@@ -15,7 +15,7 @@ from ..utils.xml_utils import (
 from .decode import get_flim_histogram_from_ptufile, create_time_axis
 
 try:
-    from ..UI.gui import GUI_MODE
+    from ...UI.gui import GUI_MODE
 except (ImportError, AttributeError):
     GUI_MODE = False
 
@@ -724,10 +724,10 @@ def fit_flim_tiles(
     progress_callback=None,
     cancel_event=None,
 ):
-    from ..PTU.reader import PTUFile
-    from ..FLIM.fitters import fit_summed, fit_per_pixel
-    from ..FLIM.bg_tools import tvb_from_decay
-    from ..configs import (
+    from .reader import PTUFile
+    from ...FLIM.fitters import fit_summed, fit_per_pixel
+    from ...FLIM.bg_tools import tvb_from_decay
+    from ...configs import (
         MACHINE_IRF_DEFAULT_PATH,
         MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
         MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF,

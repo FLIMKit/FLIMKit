@@ -32,7 +32,7 @@ class TestBuildMachineIRF:
         with pytest.raises(ValueError, match="at least 2"):
             build_machine_irf_from_folder(ptu_dir)
 
-    @patch('flimkit.FLIM.irf_tools.PTUFile')
+    @patch('flimkit.FLIM.irf_tools.FLIMFile')
     @patch('flimkit.FLIM.irf_tools.load_xlsx')
     def test_build_machine_irf_success(self, mock_load_xlsx, mock_ptu, paired_folder):
         mock_ptu.return_value.n_bins = 256
@@ -47,7 +47,7 @@ class TestBuildMachineIRF:
         assert result['metadata']['n_pairs'] == 3
         assert result['irf'].sum() == pytest.approx(1.0)
 
-    @patch('flimkit.FLIM.irf_tools.PTUFile')
+    @patch('flimkit.FLIM.irf_tools.FLIMFile')
     @patch('flimkit.FLIM.irf_tools.load_xlsx')
     def test_save_requires_confirm(self, mock_load_xlsx, mock_ptu, paired_folder, tmp_path):
         mock_ptu.return_value.n_bins = 256
@@ -57,7 +57,7 @@ class TestBuildMachineIRF:
         with pytest.raises(RuntimeError, match="confirm_save=False"):
             build_machine_irf_from_folder(paired_folder, save=True, confirm_save=False, output_dir=out_dir)
 
-    @patch('flimkit.FLIM.irf_tools.PTUFile')
+    @patch('flimkit.FLIM.irf_tools.FLIMFile')
     @patch('flimkit.FLIM.irf_tools.load_xlsx')
     def test_save_writes_files(self, mock_load_xlsx, mock_ptu, paired_folder, tmp_path):
         mock_ptu.return_value.n_bins = 256
