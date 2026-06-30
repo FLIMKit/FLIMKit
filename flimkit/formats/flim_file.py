@@ -33,8 +33,16 @@ def _sniff_magic(p):
         return 'iss_image'
     return 'unknown'
 
+def _clean_path(path):
+    # tolerate paths pasted with surrounding quotes or stray whitespace
+    # (e.g. drag-and-drop or "Copy as Pathname" into an input prompt)
+    s = str(path).strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        s = s[1:-1].strip()
+    return s
+
 def detect_format(path):
-    p = Path(path)
+    p = Path(_clean_path(path))
     ext = p.suffix.lower()
     if ext in _PTU_EXTS:
         return 'ptu'
@@ -52,6 +60,7 @@ def detect_format(path):
 
 class FLIMFile:
     def __new__(cls, path, **kwargs):
+        path = _clean_path(path)
         fmt = detect_format(path)
         if fmt == 'ptu':
             from flimkit.formats.PTU.reader import PTUFile
@@ -59,8 +68,12 @@ class FLIMFile:
         if fmt == 'iss_tdflim':
             from flimkit.formats.ISS.reader import ISSFile
             return ISSFile(str(path), **kwargs)
-        if fmt in ('iss_fdflim', 'iss_image'):
-            raise NotImplementedError(f"ISS '{fmt}' decoding is not implemented yet; see issue #19")
+        if fmt == 'iss_image':
+            from flimkit.formats.ISS.image import ISSImage
+            return ISSImage(str(path), **kwargs)
+        if fmt == 'iss_fdflim':
+            raise NotImplementedError("ISS '.ifli' (frequency-domain) decoding is not implemented yet; see issue #19")
         if fmt == 'bh_sdt':
-            raise NotImplementedError('Becker & Hickl .sdt decoding is not implemented yet')
+            from flimkit.formats.BH.reader import BHFile
+            return BHFile(str(path), **kwargs)
         raise ValueError(f'Unrecognised FLIM file format: {path}')
