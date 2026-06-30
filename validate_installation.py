@@ -46,6 +46,7 @@ def check_dependencies():
         'ipywidgets': 'ipywidgets (notebook interactive)',
         'ipympl': 'ipympl (notebook matplotlib backend)',
         'pandas': 'Pandas (IRF Excel reading)',
+        'lz4': 'lz4 (LZ4-compressed Becker & Hickl .sdt blocks)',
     }
     all_ok = True
     for module, name in required.items():
@@ -71,6 +72,7 @@ def check_simplified_integration():
         'flimkit/formats/PTU/decode.py',
         'flimkit/formats/PTU/stitch.py',
         'flimkit/formats/ISS/reader.py',
+        'flimkit/formats/BH/reader.py',
     ]
     all_ok = True
     for file_path in required_files:
@@ -91,6 +93,8 @@ def check_modules_import():
         ('flimkit.formats.PTU.stitch', 'Tile stitching'),
         ('flimkit.formats.PTU.tools', 'PTU signal tools'),
         ('flimkit.formats.ISS.reader', 'ISS TD-FLIM reader'),
+        ('flimkit.formats.ISS.image', 'ISS intensity image reader'),
+        ('flimkit.formats.BH.reader', 'Becker & Hickl .sdt reader'),
     ]
     optional_modules = [
         ('flimkit.interactive', 'Interactive FLIM workflows'),
