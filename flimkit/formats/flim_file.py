@@ -34,8 +34,7 @@ def _sniff_magic(p):
     return 'unknown'
 
 def _clean_path(path):
-    # tolerate paths pasted with surrounding quotes or stray whitespace
-    # (e.g. drag-and-drop or "Copy as Pathname" into an input prompt)
+    # strip surrounding quotes/whitespace from a pasted path (drag-and-drop, Copy as Pathname)
     s = str(path).strip()
     if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
         s = s[1:-1].strip()

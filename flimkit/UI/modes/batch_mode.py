@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from flimkit.UI.modes.base import BaseMode
-from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _browse_dir, _tog
+from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _browse_dir, _tog, FLIM_FILETYPES
 
 
 class BatchMode(BaseMode):
@@ -186,7 +186,7 @@ class BatchMode(BaseMode):
         ttk.Button(fm, text='Browse...',
                    command=lambda: _browse_file(self.b.sv_batch_tvb_ptu,
                                                 'Background reference PTU',
-                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+                                                FLIM_FILETYPES)).grid(
             row=2, column=2, sticky='w', padx=4)
         ttk.Label(fm, text='(optional: applied to every FOV in the batch)',
                   foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)

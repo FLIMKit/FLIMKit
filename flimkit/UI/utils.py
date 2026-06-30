@@ -268,6 +268,16 @@ class _FileTailer:
 
 PAD = dict(padx=8, pady=4)
 
+# default open-dialog filter: every format FLIMFile can route, not just .ptu
+FLIM_FILETYPES = [
+    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi'),
+    ('PicoQuant PTU', '*.ptu'),
+    ('Becker & Hickl SDT', '*.sdt'),
+    ('ISS time-tag', '*.tagtime *.tagchannel *.tagdecay'),
+    ('ISS image', '*.ifi'),
+    ('All', '*.*'),
+]
+
 
 def _browse_file(var, title='Select file', filetypes=(('All', '*.*'),)):
     p = filedialog.askopenfilename(title=title, filetypes=filetypes)

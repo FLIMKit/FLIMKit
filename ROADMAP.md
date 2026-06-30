@@ -5,7 +5,7 @@
 ## In Progress
 
 ### ISS file format support
-Read ISS (FastFLIM / Vista) data so FLIMKit works with the ISS lifetime platform alongside PicoQuant. New `flimkit/ISS/` package mirroring `flimkit/PTU/`, returning the same `(Y, X, H)` decay cube + metadata so the rest of the pipeline is unchanged. Primary target is the time-domain triplet (`.TAGTIME`/`.TAGCHANNEL`/`.TAGDECAY`); secondary is the frequency-domain phasor `.ifli` (feeds the phasor module). Being developed on branch `feature/iss-format-support` (version `0.9.15.dev0+iss`). Blocked on real ISS sample files for validation. Tracked in issue #19. Came from a CONFOCALMICROSCOPY listserv thread with Anand Yethiraj (Guelph) and Jeff Liao (ISS), who provided the format specs. Thank you both.
+Read ISS (FastFLIM / Vista) data so FLIMKit works with the ISS lifetime platform alongside PicoQuant. New `flimkit/ISS/` package mirroring `flimkit/PTU/`, returning the same `(Y, X, H)` decay cube + metadata so the rest of the pipeline is unchanged. Primary target is the time-domain triplet (`.TAGTIME`/`.TAGCHANNEL`/`.TAGDECAY`); secondary is the frequency-domain phasor `.ifli` (feeds the phasor module). Being developed on branch `feature/iss-format-support` (version `0.9.15.dev0+iss`). Blocked on real ISS sample files for validation. Tracked in issue #19. Came from a CONFOCALMICROSCOPY listserv thread where Jeff Liao (ISS), who provided the format specs. Thank you both.
 
 ## High Priority - To Do
 
@@ -30,7 +30,7 @@ Automatic boundary detection for regions of interest based on intensity or lifet
 Decode PicoQuant T2-mode records (used for FCS and point timing) alongside the current T3 modes, by deriving each photon's microtime from the recorded sync events. Blocked on a real T2 test file, ideally a matched T2/T3 pair of the same sample to validate against. Could later extend to older PicoQuant formats (`.pt3`/`.ht3`/`.phu`).
 
 ### 3. Becker & Hickl format support
-Read Becker & Hickl `.sdt`/`.spc` TCSPC FLIM data (SPCImage), broadening FLIMKit beyond PicoQuant and Leica to B&H instruments. Thank you for the help, Becker & Hickl.
+Read Becker & Hickl TCSPC FLIM data (SPCImage), broadening FLIMKit beyond PicoQuant and Leica to B&H instruments. The `.sdt` reader is now in development on branch `feature/bh-format-support` (version `0.9.15.dev0+bh`): a new `flimkit/formats/BH/` package decodes the SPC histogram/image blocks into the same `(Y, X, H)` cube + metadata as the PTU/ISS readers, wired through `FLIMFile`, and is validated against real B&H sample files (SPC-150NX/150N/180NX). Written from B&H's official SPCM file-structure documentation. Still to come: raw `.spc` FIFO photon-stream decoding (a record-level decoder per module family, like the PTU reader). Thank you to Becker & Hickl (Dr. Jens Balke and Enzo Marscheck) for the documentation and sample data.
 
 ## Completed 
 

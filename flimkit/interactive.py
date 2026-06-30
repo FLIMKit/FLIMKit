@@ -632,7 +632,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
 def single_FOV_flim_fit_inquire():
     print('\n Interactive FLIM Fit Setup')
     import inquirer
-    ptu_path = input('Enter path to PTU file for this FOV: ').strip()
+    ptu_path = input('Enter path to PTU file for this FOV: ').strip().strip('\'"').strip()
     if not ptu_path:
         raise ValueError('PTU file path is required.')
     xlsxq = yes_no_question('Do you have an XLSX file for this FOV? (Recommended for pixel size info)')

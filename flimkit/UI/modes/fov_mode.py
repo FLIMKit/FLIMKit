@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from flimkit.UI.modes.base import BaseMode
-from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _tog
+from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _tog, FLIM_FILETYPES
 from flimkit.UI.irf_widget import IRFWidget
 
 
@@ -21,8 +21,8 @@ class FovMode(BaseMode):
         self.b.sv_ptu.trace_add('write', self.b._on_fov_ptu_changed)
         
         _row(ff, 'PTU file *', self.b.sv_ptu, 0,
-             lambda: _browse_file(self.b.sv_ptu, 'PTU file',
-                                  [('PTU', '*.ptu'), ('All', '*.*')]))
+             lambda: _browse_file(self.b.sv_ptu, 'FLIM file',
+                                  FLIM_FILETYPES))
         _row(ff, 'XLSX file (optional)', self.b.sv_xlsx, 1,
              lambda: _browse_file(self.b.sv_xlsx, 'XLSX file',
                                   [('Excel', '*.xlsx'), ('All', '*.*')]))
@@ -126,7 +126,7 @@ class FovMode(BaseMode):
         ttk.Button(fm, text='Browse...',
                    command=lambda: _browse_file(self.b.sv_tvb_ptu_fov,
                                                 'Background reference PTU',
-                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+                                                FLIM_FILETYPES)).grid(
             row=3, column=2, sticky='w', padx=4)
         ttk.Label(fm, text='(optional: fits a measured fluorophore-free background decay, FLIMfit-style)',
                   foreground='grey').grid(row=4, column=0, columnspan=3, sticky='w', padx=8)

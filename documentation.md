@@ -31,7 +31,7 @@
 
 ## Overview
 
-FLIMKit handles FLIM data from FLIM microscope systems (or any PTU-based setup). It's designed as a replacement for FLIM microscope software, with two main workflows:
+FLIMKit handles FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag). It's designed as a replacement for FLIM microscope software, with two main workflows:
 
 | Workflow | Description |
 |---|---|
@@ -40,6 +40,21 @@ FLIMKit handles FLIM data from FLIM microscope systems (or any PTU-based setup).
 | **Phasor analysis** | Calibrated phasor plots with interactive elliptical cursors, automatic peak detection, two-component decomposition, and session save/load |
 
 Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or the Python API.
+
+### Input formats
+
+FLIMKit auto-detects the file type and routes everything through one loader (`FLIMFile` in `flimkit.formats`), so every workflow behaves the same regardless of instrument:
+
+| Format | Notes |
+|---|---|
+| PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic |
+| Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned); decoder written from B&H's SPCM docs and verified on sample data (`flimkit/formats/BH/NOTICE.md`) |
+| ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
+| ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor) |
+
+Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their scan / frame / line / pixel markers, and the intensity image is that cube summed over the time axis. Files without imaging markers (point, single-spot, FCS) are fit as a single decay with no image.
+
+Not decoded yet: ISS frequency-domain `.ifli` (recognised but not implemented, issue #19), T2-mode PTUs, older PicoQuant `.pt3` / `.ht3` / `.phu`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
 
 ---
 

@@ -2595,9 +2595,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showerror('Missing input', 'Please specify an output directory.')
             return
 
-        ptu_files = sorted(Path(ptu_dir).glob('*.ptu'))
+        ptu_files = sorted(p for ext in ('*.ptu', '*.sdt') for p in Path(ptu_dir).glob(ext))
         if not ptu_files:
-            messagebox.showerror('No PTU files', f"No .ptu files found in:\n{ptu_dir}")
+            messagebox.showerror('No FLIM files', f"No .ptu or .sdt files found in:\n{ptu_dir}")
             return
 
         cfg      = _C()
@@ -3557,6 +3557,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             except Exception as e:
                 import traceback
                 traceback.print_exc()
+        # photon-starved: tell the user to bin instead of leaving them a blank image
+        sug = fit_result.get('suggested_binning') if fit_result else None
+        if sug:
+            messagebox.showwarning(
+                'Photon-starved image',
+                'Most pixels have too few photons for a reliable per-pixel fit, so '
+                'the FLIM image is mostly empty.\n\n'
+                f'Try binning {sug}×{sug} (Expert settings → binning), or use '
+                'the summed-fit result / phasor analysis for this image.')
         npz_file_path = None
         if ptu_path or output_dir:
             try:

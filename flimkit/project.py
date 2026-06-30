@@ -101,7 +101,9 @@ class ProjectFile:
     #  scan discovery
 
     def _scan_folder(self):
-        for ptu in sorted(self.project_dir.glob('*.ptu')):
+        flim_files = sorted(p for ext in ('*.ptu', '*.sdt')
+                            for p in self.project_dir.glob(ext))
+        for ptu in flim_files:
             if ptu.name.startswith('._'):
                 continue
             if ptu.stem not in self.scans:

@@ -2,7 +2,7 @@
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
-FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems (or any PTU-based system). Built as a drop-in for FLIM microscope software, with two workflows:
+FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag). Built as a drop-in for FLIM microscope software, with two workflows:
 
 - **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
 - **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
@@ -98,16 +98,24 @@ state = launch_phasor('data.ptu', irf_path='irf.xlsx',
 
 ## Supported formats
 
-**FLIM data (PicoQuant `.ptu`, T3 mode):**
+FLIMKit auto-detects the file type and routes every format through one loader (`FLIMFile` in `flimkit.formats`), so the fitting, phasor, stitching, and ROI workflows are identical whatever the instrument wrote.
+
+**PicoQuant `.ptu` (T3 mode):**
 
 - PicoHarp T3 (Leica FALCON / STELLARIS)
 - HydraHarp v1/v2 T3
 - TimeHarp 260 N / P T3
 - MultiHarp / generic T3
 
-Imaging PTUs are reconstructed into per-pixel decays from their scan line markers.
+**Becker & Hickl `.sdt` (SPC TCSPC):** the histogram / image `.sdt` files SPCM saves (per-pixel decays already binned). The decoder was written from Becker & Hickl's official SPCM file-structure documentation and verified against sample files. Thanks to Becker & Hickl for supporting this (see `flimkit/formats/BH/NOTICE.md`).
 
-**Read as a decay only (no image):** image reconstruction needs scan line markers, so FLIMKit fits the decay but cannot rebuild a FLIM image from a PTU that has none. This covers single-spot, point, and FCS acquisitions (for example PicoQuant TimeHarp 260P point measurements), and any PTU exported without imaging markers.
+**ISS `.TAGTIME` + `.TAGCHANNEL` + `.TAGDECAY` (FastFLIM / Vista, time-domain):** the three time-tag files are read together (point the loader at any one of them or their shared basename). ISS records explicit frame, line, and pixel markers, so the per-pixel reconstruction is exact. The decoder was written from ISS's format specs and is experimental: it has not yet been validated against real ISS data (issue #19), so cross-check results.
+
+**ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). This carries no lifetime data, so it loads as an intensity image only (no fitting or phasor).
+
+Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers); the intensity image is that cube summed over the time axis.
+
+**Read as a decay only (no image):** image reconstruction needs scan / line markers, so FLIMKit fits the decay but cannot rebuild a FLIM image from a file that has none. This covers single-spot, point, and FCS acquisitions (for example PicoQuant TimeHarp 260P point measurements), and any file exported without imaging markers.
 
 **IRF sources:**
 
@@ -118,10 +126,11 @@ Imaging PTUs are reconstructed into per-pixel decays from their scan line marker
 
 A `.pck` IRF must come from the same instrument and TCSPC resolution as the data being fit.
 
-**Not supported:**
+**Not supported yet:**
 
+- ISS frequency-domain `.ifli` (phasor): the loader recognises it but decoding is not implemented yet (issue #19).
 - **T2-mode PTUs.** FLIMKit decodes T3 mode only (one TCSPC histogram per sync period). T2 records are raw global timestamps with no per-period decay, so a T2 `.ptu` will not produce a meaningful decay.
-- Older PicoQuant formats (`.pt3`, `.ht3`, `.phu`, `.pt2`) and non-PicoQuant TCSPC (Becker and Hickl `.sdt` / `.spc`).
+- Older PicoQuant formats (`.pt3`, `.ht3`, `.phu`, `.pt2`) and Becker & Hickl raw `.spc` photon streams.
 - Leica `.lif` and proprietary LMSCOMPRESSED blocks. Export `.ptu` from LAS X instead.
 
 ## Machine IRF (do this first)

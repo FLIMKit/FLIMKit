@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from flimkit.UI.modes.base import BaseMode
-from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _browse_dir, _tog
+from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _browse_dir, _tog, FLIM_FILETYPES
 from flimkit.UI.irf_widget import IRFWidget
 
 
@@ -188,7 +188,7 @@ class StitchMode(BaseMode):
         ttk.Button(fm, text='Browse...',
                    command=lambda: _browse_file(self.b.sv_tvb_ptu_st,
                                                 'Background reference PTU',
-                                                [('PTU', '*.ptu'), ('All', '*.*')])).grid(
+                                                FLIM_FILETYPES)).grid(
             row=2, column=2, sticky='w', padx=4)
         ttk.Label(fm, text='(optional: measured background, aligned per tile)',
                   foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)

@@ -45,6 +45,21 @@ def make_lifetime_image(
     _tau_label = {'tau_mean_amp': 'τ_amp', 'tau_mean_int': 'τ_int'}.get(tau_key, 'τ')
     valid   = np.isfinite(tau_map) & (int_map > 0)
 
+    if not valid.any():
+        # photon-starved: bail before empty-array reductions crash, but still write blank files
+        if verbose:
+            print('  [!] No valid pixels (photon-starved) - lifetime image is empty. '
+                  'Increase binning so pixels clear min_photons.')
+        blank = np.zeros(tau_map.shape, dtype=np.float32)
+        if _has_tifffile:
+            _tifffile.imwrite(str(output_dir / f"{roi_name}_tau_intensity_weighted.tif"),
+                              blank.astype(np.uint16))
+            _tifffile.imwrite(str(output_dir / f"{roi_name}_tau_intensity_weighted_fullrange.tif"),
+                              np.full(tau_map.shape, np.nan, dtype=np.float32))
+        png_path = output_dir / f"{roi_name}_tau_intensity_weighted.png"
+        plt.imsave(str(png_path), np.zeros((*tau_map.shape, 3), dtype=float))
+        return png_path
+
     if smooth_sigma_px > 0:
         tau_filled = np.where(valid, tau_map, 0.0)
         w          = valid.astype(float)

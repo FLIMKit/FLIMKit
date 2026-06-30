@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from flimkit.UI.modes.base import BaseMode
-from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file
+from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, FLIM_FILETYPES
 from flimkit.UI.phasor_panel import PhasorViewPanel
 
 
@@ -40,7 +40,7 @@ class PhasorMode(BaseMode):
             value=str(_C()['MACHINE_IRF_DEFAULT_PATH']))
         _row(fn, 'PTU file *',             self.b.sv_ph_ptu,  0,
              lambda: _browse_file(self.b.sv_ph_ptu, 'PTU file',
-                                  [('PTU', '*.ptu'), ('All', '*.*')]))
+                                  FLIM_FILETYPES))
         _row(fn, 'IRF XLSX (optional)',    self.b.sv_ph_irf,  1,
              lambda: _browse_file(self.b.sv_ph_irf, 'IRF XLSX',
                                   [('Excel', '*.xlsx'), ('All', '*.*')]))

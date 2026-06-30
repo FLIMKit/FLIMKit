@@ -48,7 +48,7 @@ class IRFWidget:
                          [('NumPy array', '*.npy'), ('All', '*.*')])
         else:
             _browse_file(self.sv_path, 'Select IRF file',
-                         [('PTU / XLSX', '*.ptu *.xlsx'), ('All', '*.*')])
+                         [('FLIM / XLSX', '*.ptu *.sdt *.xlsx'), ('All', '*.*')])
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
