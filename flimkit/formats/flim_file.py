@@ -57,6 +57,17 @@ def detect_format(path):
         return 'iss_tdflim'
     return _sniff_magic(p)
 
+_MODALITY = {
+    'ptu': 'time',
+    'iss_tdflim': 'time',
+    'bh_sdt': 'time',
+    'iss_fdflim': 'frequency',
+    'iss_image': 'intensity',
+}
+
+def file_modality(path):
+    return _MODALITY.get(detect_format(path), 'unknown')
+
 class FLIMFile:
     def __new__(cls, path, **kwargs):
         path = _clean_path(path)

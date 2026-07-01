@@ -50,7 +50,9 @@ FLIMKit auto-detects the file type and routes everything through one loader (`FL
 | PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic |
 | Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned); decoder written from B&H's SPCM docs and verified on sample data (`flimkit/formats/BH/NOTICE.md`) |
 | ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
-| ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor) |
+| ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor). Experimental, not yet validated on real ISS files (issue #19) |
+
+> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and checked only against synthetic files - **not yet validated against real ISS acquisitions** (byte order and marker conventions are assumptions). Treat ISS results as unverified and cross-check them (issue #19). PicoQuant `.ptu` and Becker & Hickl `.sdt` are validated against real files; ISS is not yet.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their scan / frame / line / pixel markers, and the intensity image is that cube summed over the time axis. Files without imaging markers (point, single-spot, FCS) are fit as a single decay with no image.
 

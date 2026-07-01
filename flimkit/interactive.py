@@ -984,6 +984,14 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         fit_sigma = True
         fit_bg = True
         print(f'  IRF: {strategy} + tail + σ as free params')
+    else:
+        fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
+        irf_prompt = gaussian_irf_from_fwhm(ptu.n_bins, ptu.tcspc_res, fwhm_ns, decay_peak_bin)
+        strategy = f'gaussian FWHM={fwhm_ns*1000:.1f}ps'
+        has_tail = False
+        fit_sigma = False
+        fit_bg = True
+        print(f'  IRF: {strategy}')
     if not args.no_plots and xlsx is not None:
         matplotlib.use('Agg')
         print(f'\n[4b] IRF comparison')

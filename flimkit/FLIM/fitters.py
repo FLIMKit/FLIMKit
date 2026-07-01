@@ -17,6 +17,10 @@ from ..configs import MIN_PHOTONS_PERPIX
 
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
+# cubes above this are handed to MLX whole and blow up unified GPU memory;
+# the CPU path is row-by-row and safe, so route large stacks there instead
+_GPU_MAX_STACK_BYTES = 1_000_000_000
+_FREE_TAU_WARN_PIXELS = 50_000
 
 def _init_gpu_backend():
     global _gpu_backend_cache
@@ -299,6 +303,11 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   gpu_backend=None,
                   tvb_profile=None, fit_tvb=False):
     ny, nx, _ = stack.shape
+    if free_tau:
+        n_valid = int((stack.sum(axis=2) >= min_photons).sum())
+        if n_valid > _FREE_TAU_WARN_PIXELS:
+            print(f'  [!] free-tau per-pixel on {n_valid:,} pixels is slow (iterative fit each); '
+                  f'fixed-tau is ~100x faster - untick free-tau or draw a smaller ROI')
     _n_sync_px = int(n_sync / max(ny * nx, 1)) if correct_pileup and n_sync > 0 else 0
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     idx = 2 * n_exp
@@ -323,7 +332,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         )
         if _backend is not None:
             if not free_tau:
-                if n_exp == 1:
+                if stack.nbytes > _GPU_MAX_STACK_BYTES:
+                    print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
+                          f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
+                elif n_exp == 1:
                     _lo = (tau_min_ns if tau_min_ns is not None
                            else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
                     _hi = (tau_max_ns if tau_max_ns is not None
@@ -930,6 +942,10 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         backend = gpu_backend if gpu_backend is not None else (
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
         )
+        if backend is not None and stack.nbytes > _GPU_MAX_STACK_BYTES:
+            print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
+                  f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
+            backend = None
         if backend is not None:
             return backend.batch_dist_scan_unimodal(
                 stack, basis, bb_grid, param_pairs,

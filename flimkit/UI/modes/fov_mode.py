@@ -20,7 +20,7 @@ class FovMode(BaseMode):
         # Track PTU file changes to auto-load preview
         self.b.sv_ptu.trace_add('write', self.b._on_fov_ptu_changed)
         
-        _row(ff, 'PTU file *', self.b.sv_ptu, 0,
+        _row(ff, 'Data file *', self.b.sv_ptu, 0,
              lambda: _browse_file(self.b.sv_ptu, 'FLIM file',
                                   FLIM_FILETYPES))
         _row(ff, 'XLSX file (optional)', self.b.sv_xlsx, 1,

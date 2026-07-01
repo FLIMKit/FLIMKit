@@ -109,9 +109,11 @@ FLIMKit auto-detects the file type and routes every format through one loader (`
 
 **Becker & Hickl `.sdt` (SPC TCSPC):** the histogram / image `.sdt` files SPCM saves (per-pixel decays already binned). The decoder was written from Becker & Hickl's official SPCM file-structure documentation and verified against sample files. Thanks to Becker & Hickl for supporting this (see `flimkit/formats/BH/NOTICE.md`).
 
-**ISS `.TAGTIME` + `.TAGCHANNEL` + `.TAGDECAY` (FastFLIM / Vista, time-domain):** the three time-tag files are read together (point the loader at any one of them or their shared basename). ISS records explicit frame, line, and pixel markers, so the per-pixel reconstruction is exact. The decoder was written from ISS's format specs and is experimental: it has not yet been validated against real ISS data (issue #19), so cross-check results.
+**ISS `.TAGTIME` + `.TAGCHANNEL` + `.TAGDECAY` (FastFLIM / Vista, time-domain):** the three time-tag files are read together (point the loader at any one of them or their shared basename). ISS records explicit frame, line, and pixel markers, so the per-pixel reconstruction is exact.
 
-**ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). This carries no lifetime data, so it loads as an intensity image only (no fitting or phasor).
+**ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). No lifetime data, so it loads as an intensity image only (no fitting or phasor).
+
+> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and so far checked only against synthetic files - they have **not yet been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat ISS results as unverified and cross-check them; see issue #19. If you have ISS `.TAGTIME`/`.ifi` data, trying it and reporting back is very welcome. PicoQuant `.ptu` and Becker & Hickl `.sdt` are validated against real files; ISS is not yet.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers); the intensity image is that cube summed over the time axis.
 

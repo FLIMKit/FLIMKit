@@ -2971,6 +2971,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             return
 
         self._last_loaded_ptu = ptu_path
+
+        import os
+        from flimkit.formats import file_modality
+        if os.path.exists(ptu_path):
+            modality = file_modality(ptu_path)
+            if modality != 'time':
+                msgs = {
+                    'frequency': 'ISS .ifli is frequency-domain (phasor) data; phasor-mode loading is not wired up yet (issue #19).',
+                    'intensity': 'ISS .ifi is an intensity image with no lifetime data; FOV loading for it is not wired up yet.',
+                }
+                messagebox.showinfo('Not supported yet',
+                                    msgs.get(modality, f'Unsupported file for FOV fitting:\n{ptu_path}'))
+                return
+
         self._loading_ptu = True
         self._add_to_recent(ptu_path, 'file')
 
