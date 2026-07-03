@@ -22,7 +22,7 @@ def _has_iss_triplet(p):
 def _sniff_magic(p):
     try:
         with open(p, 'rb') as fh:
-            head = fh.read(16)
+            head = fh.read(64)
     except OSError:
         return 'unknown'
     if b'PQTTTR' in head or b'PTU' in head:
@@ -31,6 +31,8 @@ def _sniff_magic(p):
         return 'iss_fdflim'
     if head[:10] == b'VISTAIMAGE':
         return 'iss_image'
+    if b'D7 Photons Data' in head:
+        return 'ps'
     return 'unknown'
 
 def _clean_path(path):
@@ -53,6 +55,8 @@ def detect_format(path):
         return 'iss_image'
     if ext == '.sdt':
         return 'bh_sdt'
+    if ext == '.photons':
+        return 'ps'
     if _has_iss_triplet(p):
         return 'iss_tdflim'
     return _sniff_magic(p)
@@ -63,6 +67,7 @@ _MODALITY = {
     'bh_sdt': 'time',
     'iss_fdflim': 'frequency',
     'iss_image': 'intensity',
+    'ps': 'time',
 }
 
 def file_modality(path):
@@ -86,4 +91,7 @@ class FLIMFile:
         if fmt == 'bh_sdt':
             from flimkit.formats.BH.reader import BHFile
             return BHFile(str(path), **kwargs)
+        if fmt == 'ps':
+            from flimkit.formats.PS.reader import PSFile
+            return PSFile(str(path), **kwargs)
         raise ValueError(f'Unrecognised FLIM file format: {path}')

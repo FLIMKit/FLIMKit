@@ -95,6 +95,7 @@ def check_modules_import():
         ('flimkit.formats.ISS.reader', 'ISS TD-FLIM reader'),
         ('flimkit.formats.ISS.image', 'ISS intensity image reader'),
         ('flimkit.formats.BH.reader', 'Becker & Hickl .sdt reader'),
+        ('flimkit.formats.PS.reader', 'Photonscore .photons reader'),
     ]
     optional_modules = [
         ('flimkit.interactive', 'Interactive FLIM workflows'),

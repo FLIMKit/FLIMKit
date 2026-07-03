@@ -68,7 +68,7 @@ def _reconstruct_dict_from_session(session_data: dict, key: str) -> dict:
             json_str = json_str.item() if hasattr(json_str, 'item') else json_str.decode()
         try:
             result = json.loads(json_str)
-        except:
+        except Exception:
             pass
     
     prefix = f"{key}_arr_"
@@ -98,7 +98,7 @@ def _safe_array_from_json(value) -> np.ndarray:
             value = re.sub(r'\s+', ' ', value.strip())
             value = value.replace('e+', 'e+').replace('e-', 'e-')
             return np.fromstring(value.strip('[]'), sep=' ')
-        except:
+        except Exception:
             pass
     return np.asarray(value)
 
@@ -270,11 +270,12 @@ PAD = dict(padx=8, pady=4)
 
 # default open-dialog filter: every format FLIMFile can route, not just .ptu
 FLIM_FILETYPES = [
-    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi'),
+    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi *.photons'),
     ('PicoQuant PTU', '*.ptu'),
     ('Becker & Hickl SDT', '*.sdt'),
     ('ISS time-tag', '*.tagtime *.tagchannel *.tagdecay'),
     ('ISS image', '*.ifi'),
+    ('Photonscore .photons', '*.photons'),
     ('All', '*.*'),
 ]
 
