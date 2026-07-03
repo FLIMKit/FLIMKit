@@ -31,7 +31,7 @@
 
 ## Overview
 
-FLIMKit handles FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag). It's designed as a replacement for FLIM microscope software, with two main workflows:
+FLIMKit handles FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag, Photonscore `.photons`). It's designed as a replacement for FLIM microscope software, with two main workflows:
 
 | Workflow | Description |
 |---|---|
@@ -49,10 +49,11 @@ FLIMKit auto-detects the file type and routes everything through one loader (`FL
 |---|---|
 | PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic |
 | Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned); decoder written from B&H's SPCM docs and verified on sample data (`flimkit/formats/BH/NOTICE.md`) |
+| Photonscore `.photons` | Photonscore LINCam D7 container (position-sensitive). Pure-Python reader, no native dependency, validated bit-exact against the Photonscore SDK; `dt` calibration from the `TacChannel` attribute (`flimkit/formats/PS/NOTICE.md`) |
 | ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
 | ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor). Experimental, not yet validated on real ISS files (issue #19) |
 
-> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and checked only against synthetic files - **not yet validated against real ISS acquisitions** (byte order and marker conventions are assumptions). Treat ISS results as unverified and cross-check them (issue #19). PicoQuant `.ptu` and Becker & Hickl `.sdt` are validated against real files; ISS is not yet.
+> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and checked only against synthetic files - **not yet validated against real ISS acquisitions** (byte order and marker conventions are assumptions). Treat ISS results as unverified and cross-check them (issue #19). PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their scan / frame / line / pixel markers, and the intensity image is that cube summed over the time axis. Files without imaging markers (point, single-spot, FCS) are fit as a single decay with no image.
 
@@ -64,7 +65,7 @@ Not decoded yet: ISS frequency-domain `.ifli` (recognised but not implemented, i
 
 ### System Requirements
 
-- Python ≥ 3.12 (3.14 recommended — official builds use 3.14)
+- Python ≥ 3.12 (3.14 recommended, official builds use 3.14)
 - macOS, Linux, or Windows
 
 ### Dependencies
@@ -77,7 +78,6 @@ Not decoded yet: ISS frequency-domain `.ifli` (recognised but not implemented, i
 | `xarray` | Labelled N-D arrays for FLIM signals |
 | `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
 | `PyWavelets` | Wavelet-based phasor denoising |
-| `ptufile` | Low-level PTU file reading |
 | `inquirer` | Interactive terminal prompts |
 | `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
 | `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |

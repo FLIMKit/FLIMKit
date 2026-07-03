@@ -2,7 +2,7 @@
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
-FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag). Built as a drop-in for FLIM microscope software, with two workflows:
+FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag, Photonscore `.photons`). Built as a drop-in for FLIM microscope software, with two workflows:
 
 - **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
 - **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
@@ -14,7 +14,7 @@ Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
 ## Installation
 
-Python ≥ 3.12 required (3.14 recommended — official builds use 3.14).
+Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
 
 ```bash
 git clone https://github.com/alex1075/FLIMKit.git
@@ -109,13 +109,15 @@ FLIMKit auto-detects the file type and routes every format through one loader (`
 
 **Becker & Hickl `.sdt` (SPC TCSPC):** the histogram / image `.sdt` files SPCM saves (per-pixel decays already binned). The decoder was written from Becker & Hickl's official SPCM file-structure documentation and verified against sample files. Thanks to Becker & Hickl for supporting this (see `flimkit/formats/BH/NOTICE.md`).
 
+**Photonscore `.photons` (LINCam, D7 container):** the position-sensitive photon-counting files from Photonscore's LINCam systems. Pure-Python reader for the D7 container (paged protobuf, seed plus delta-coded photon streams), decoded with no native dependency and validated bit-exact against the Photonscore SDK. Each photon carries an (x, y) position and a TCSPC micro-time, so the image is formed by binning the positions into a pixel grid and the decay by histogramming the micro-time; `dt` calibration comes from the file's `TacChannel` attribute. Thanks to Photonscore for supporting this and for open-sourcing the D7 format (see `flimkit/formats/PS/NOTICE.md`).
+
 **ISS `.TAGTIME` + `.TAGCHANNEL` + `.TAGDECAY` (FastFLIM / Vista, time-domain):** the three time-tag files are read together (point the loader at any one of them or their shared basename). ISS records explicit frame, line, and pixel markers, so the per-pixel reconstruction is exact.
 
 **ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). No lifetime data, so it loads as an intensity image only (no fitting or phasor).
 
-> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and so far checked only against synthetic files - they have **not yet been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat ISS results as unverified and cross-check them; see issue #19. If you have ISS `.TAGTIME`/`.ifi` data, trying it and reporting back is very welcome. PicoQuant `.ptu` and Becker & Hickl `.sdt` are validated against real files; ISS is not yet.
+> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and so far checked only against synthetic files - they have **not yet been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat ISS results as unverified and cross-check them; see issue #19. If you have ISS `.TAGTIME`/`.ifi` data, trying it and reporting back is very welcome. PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
 
-Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers); the intensity image is that cube summed over the time axis.
+Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers) or, for Photonscore, from each photon's (x, y) position; the intensity image is that cube summed over the time axis.
 
 **Read as a decay only (no image):** image reconstruction needs scan / line markers, so FLIMKit fits the decay but cannot rebuild a FLIM image from a file that has none. This covers single-spot, point, and FCS acquisitions (for example PicoQuant TimeHarp 260P point measurements), and any file exported without imaging markers.
 
@@ -222,6 +224,8 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 ## Acknowledgements
 
 FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+
+FLIMKit reads several instrument formats. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported their readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. The PicoQuant `.ptu` reader was written from PicoQuant's published format documentation, without direct input from PicoQuant. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
 ## Contact
 

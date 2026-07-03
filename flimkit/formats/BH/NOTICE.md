@@ -1,4 +1,4 @@
-# Becker & Hickl `.sdt` support — provenance and acknowledgement
+# Becker & Hickl `.sdt` support, provenance and acknowledgement
 
 This reader decodes Becker & Hickl SPC FLIM data files (`.sdt`).
 

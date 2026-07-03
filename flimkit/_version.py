@@ -1,4 +1,4 @@
-__version__ = '0.9.15.dev0+formats'
+__version__ = '0.9.15'
 fitter_version = '17'
 
 roadmap = '''Flim program roadmap:
@@ -29,6 +29,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.12 -> changed masking to use cellpose-SAM
 0.9.13 -> added Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2)
 0.9.14 -> bug fixes galore
-0.9.15.dev0+formats -> [in development, feature/new-file-formats branch] new file format support: ISS (TD-FLIM .TAGTIME/.TAGCHANNEL/.TAGDECAY, FD-FLIM phasor .ifli; see issue #19) and Becker & Hickl .sdt (SPC TCSPC FLIM, FIFO-image histograms; decoder written from B&H SPCM file-structure docs)
+0.9.15 -> new file format support: ISS (TD-FLIM .TAGTIME/.TAGCHANNEL/.TAGDECAY, FD-FLIM phasor .ifli; see issue #19), Becker & Hickl .sdt (SPC TCSPC FLIM, FIFO-image histograms; decoder written from B&H SPCM file-structure docs) and Photonscore .photons (LINCam D7 container; pure-Python, no native dependency, validated bit-exact vs the Photonscore SDK; see issue #20)
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''
