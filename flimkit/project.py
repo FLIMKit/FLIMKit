@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-#  FLIM microscope .sptw sub-folder names to search for tile PTUs
 _SPTW_CANDIDATES = [
     '{stem}.sptw',
     'PTU.sptw',
@@ -12,18 +11,15 @@ _SPTW_CANDIDATES = [
 PROJECT_FILENAME = 'project.json'
 DEFAULT_OUTPUT_SUBDIR = 'output'
 
-
 @dataclass
 class ScanRecord:
-    stem:          str
-    scan_type:     str
-    source_path:   str
-    ptu_dir:       str | None = None
-    out_st:        str | None = None
+    stem: str
+    scan_type: str
+    source_path: str
+    ptu_dir: str | None = None
+    out_st: str | None = None
     output_prefix: str | None = None
-    xlsx_path:     str | None = None
-
-    #  derived helpers 
+    xlsx_path: str | None = None
 
     @property
     def roi_clean(self):
@@ -65,8 +61,6 @@ class ProjectFile:
         self.scans = {}
         self.config = {}
 
-    # persistence
-
     @classmethod
     def load_or_create(cls, project_dir):
         pf = cls(project_dir)
@@ -82,7 +76,6 @@ class ProjectFile:
                     pf.scans[stem] = ScanRecord(**rec_dict)
                 pf.config = data.get('config', {})
             except Exception as exc:
-                # Corrupted project.json - start fresh, log the error
                 print(f"[Project] Warning: could not read {json_path.name}: {exc}")
         pf._scan_folder()
         return pf
@@ -98,42 +91,37 @@ class ProjectFile:
         with open(self.project_dir / PROJECT_FILENAME, 'w', encoding='utf-8') as fh:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
 
-    #  scan discovery
-
     def _scan_folder(self):
-        flim_files = sorted(p for ext in ('*.ptu', '*.sdt')
+        flim_files = sorted(p for ext in ('*.ptu', '*.sdt', '*.photons')
                             for p in self.project_dir.glob(ext))
         for ptu in flim_files:
             if ptu.name.startswith('._'):
                 continue
             if ptu.stem not in self.scans:
-                # Check for paired .xlsx file (same name, different extension)
                 xlsx_file = self.project_dir / f"{ptu.stem}.xlsx"
                 xlsx_path = str(xlsx_file) if xlsx_file.exists() and not xlsx_file.name.startswith('._') else None
-                
                 self.scans[ptu.stem] = ScanRecord(
-                    stem          = ptu.stem,
-                    scan_type     = 'fov',
-                    source_path   = str(ptu),
-                    ptu_dir       = None,
-                    out_st        = None,
-                    output_prefix = None,
-                    xlsx_path     = xlsx_path,
+                    stem=ptu.stem,
+                    scan_type='fov',
+                    source_path=str(ptu),
+                    ptu_dir=None,
+                    out_st=None,
+                    output_prefix=None,
+                    xlsx_path=xlsx_path,
                 )
-
         for xlif in sorted(self.project_dir.glob('*.xlif')):
             if xlif.name.startswith('._'):
                 continue
             if xlif.stem not in self.scans:
                 ptu_dir = self._find_sptw(xlif)
                 self.scans[xlif.stem] = ScanRecord(
-                    stem          = xlif.stem,
-                    scan_type     = 'xlif',
-                    source_path   = str(xlif),
-                    ptu_dir       = str(ptu_dir) if ptu_dir else None,
-                    out_st        = str(self.output_base),
-                    output_prefix = None,
-                    xlsx_path     = None,
+                    stem=xlif.stem,
+                    scan_type='xlif',
+                    source_path=str(xlif),
+                    ptu_dir=str(ptu_dir) if ptu_dir else None,
+                    out_st=str(self.output_base),
+                    output_prefix=None,
+                    xlsx_path=None,
                 )
 
     def _find_sptw(self, xlif):
@@ -143,8 +131,6 @@ class ProjectFile:
             if candidate.is_dir():
                 return candidate
         return None
-
-    #  post-fit update 
 
     def update_after_fit(
         self,
@@ -166,8 +152,6 @@ class ProjectFile:
 
     def update_after_phasor(self, stem: str):
         pass
-
-    #  convenience
 
     def default_out_st(self, stem):
         rec = self.scans.get(stem)

@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-
-
 from __future__ import annotations
-
 import re
 import sys
 import time
@@ -74,7 +70,6 @@ from flimkit.UI.app_state import AppState
 from flimkit.UI.mode_controller import ModeController
 from flimkit.UI.controller import FLIMKitController
 
-
 class _UIBuilder:
 
     def __getattr__(self, nam):
@@ -87,14 +82,11 @@ class _UIBuilder:
         outer = ttk.Frame(parent)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(0, weight=1)
-
         canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0)
         vbar = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
         canvas.configure(yscrollcommand=vbar.set)
-
         canvas.grid(row=0, column=0, sticky='nsew')
         vbar.grid(row=0, column=1, sticky='ns')
-
         inner = ttk.Frame(canvas, padding=10)
         window_id = canvas.create_window((0, 0), window=inner, anchor='nw')
 
@@ -124,12 +116,10 @@ class _UIBuilder:
         inner.bind('<MouseWheel>', _on_mousewheel)
         inner.bind('<Button-4>', _on_mousewheel)
         inner.bind('<Button-5>', _on_mousewheel)
-
         inner._canvas = canvas
         inner._window_id = window_id
         outer._canvas = canvas
         outer._window_id = window_id
-
         return outer, inner
 
     def _fit_window_to_screen(self):
@@ -861,7 +851,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             _outer.grid(row=0, column=0, sticky='nsew')
             _outer.grid_remove()
             self._form_inner_frames[_fid] = (_outer, _inner)
-            self._form_frames[_fid]       = (_outer, _inner)
+            self._form_frames[_fid] = (_outer, _inner)
 
         form_list = [
             ('fov', 'Single FOV Fit'),
@@ -924,7 +914,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._phasor_panel.frame.grid_remove()
 
         self._phasor_panel.run_with_progress = self.run_with_progress
-        self._phasor_panel.get_fit_params    = self._get_roi_fit_params
+        self._phasor_panel.get_fit_params = self._get_roi_fit_params
         self._preview_frame_label = preview_frame
 
         self._switch_form('fov')
@@ -1231,12 +1221,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if arr.dtype != object:
                             session_data[key] = arr
                             print(f"  ✓ Saved list: {key} {arr.shape}")
-                    except:
+                    except Exception:
                         pass
                 elif val is not None and not callable(val):
                     try:
                         session_data[key] = val
-                    except:
+                    except Exception:
                         pass
 
             if summary_rows:
@@ -1367,7 +1357,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                 if isinstance(cs, bytes):
                                     cs = cs.decode('utf-8')
                                 self._fov_preview._flim_color_scale = json.loads(cs)
-                            except:
+                            except Exception:
                                 pass
                         if 'fov_n_exp' in session_data:
                             n_exp = session_data['fov_n_exp']
@@ -1382,7 +1372,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             ax_decay = self._fov_preview._ax_decay
                             ax_decay.clear()
                             if 'decay' in session_data and 'time_ns' in session_data:
-                                decay   = session_data['decay']
+                                decay = session_data['decay']
                                 time_ns = session_data['time_ns']
                                 if isinstance(decay, np.ndarray) and isinstance(time_ns, np.ndarray):
                                     ax_decay.semilogy(time_ns, decay, 'o-', color='steelblue',
@@ -1539,7 +1529,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     if isinstance(cs, bytes):
                         cs = cs.decode('utf-8')
                     self._fov_preview._flim_color_scale = json.loads(cs)
-                except:
+                except Exception:
                     pass
 
             if 'fov_n_exp' in loaded:
@@ -1731,7 +1721,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if isinstance(cs, bytes):
                             cs = cs.decode('utf-8')
                         self._fov_preview._flim_color_scale = json.loads(cs)
-                    except:
+                    except Exception:
                         pass
             except Exception:
                 import traceback
@@ -1764,11 +1754,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     from flimkit.UI import flim_display
 
                     intensity = self._fov_preview._intensity_map
-                    lifetime  = self._fov_preview._lifetime_map
-                    ax_img  = self._fov_preview._ax_img
+                    lifetime = self._fov_preview._lifetime_map
+                    ax_img = self._fov_preview._ax_img
                     ax_flim = self._fov_preview._ax_flim
                     ax_cbar = self._fov_preview._ax_cbar
-                    fig     = self._fov_preview._fig
+                    fig = self._fov_preview._fig
 
                     ax_img.clear()
                     intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
@@ -1806,7 +1796,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
                     ax_decay = self._fov_preview._ax_decay
                     ax_decay.clear()
-                    decay   = fit_result.get('decay')
+                    decay = fit_result.get('decay')
                     time_ns = fit_result.get('time_ns')
                     if decay is not None and time_ns is not None:
                         ax_decay.semilogy(time_ns, decay, 'o-', color='steelblue',
@@ -2207,7 +2197,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 break
 
         bar_px = bar_um / pixel_size_um
-        bar_h  = max(3, img_h_px * 0.015)
+        bar_h = max(3, img_h_px * 0.015)
 
         margin_x = img_w_px * 0.03
         margin_y = img_h_px * 0.03
@@ -2381,7 +2371,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             outer, inner = self._form_inner_frames[form_id]
             if not hasattr(outer, '_canvas'):
                 return
-            canvas    = outer._canvas
+            canvas = outer._canvas
             window_id = outer._window_id
 
             def _refresh():
@@ -2392,7 +2382,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 bbox = canvas.bbox('all')
                 if bbox:
                     canvas.configure(scrollregion=bbox)
-                new_h    = inner.winfo_reqheight()
+                new_h = inner.winfo_reqheight()
                 canvas_h = canvas.winfo_height()
                 target_h = max(new_h, canvas_h if canvas_h > 1 else 0)
                 if target_h > 0:
@@ -2475,24 +2465,24 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             )
             return
 
-        cfg    = _C()
-        mirf   = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
-        n_exp  = self.iv_nexp_batch.get()
+        cfg = _C()
+        mirf = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
+        n_exp = self.iv_nexp_batch.get()
         tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
         tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
-        thr     = _thresh(self.bv_batch_thr, self.sv_batch_thr)
-        correct_pileup  = self.bv_batch_correct_pileup.get()
-        save_stack      = self.bv_batch_save_stack.get()
-        save_lifetime   = self.bv_batch_save_lifetime.get()
-        save_rgb        = self.bv_batch_save_rgb.get()
-        save_intensity  = self.bv_batch_save_intensity.get()
-        save_npy        = self.bv_batch_save_npy.get()
-        save_ind        = self.bv_batch_save_ind.get()
-        tau_lo          = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN']
-        tau_hi          = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX']
-        gamma           = float(self.sv_batch_gamma.get() or 0.4)
-        int_max         = _flt(self.sv_batch_int_max) or None
-        pool_positions  = self.bv_tl_pool_positions.get()
+        thr = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        correct_pileup = self.bv_batch_correct_pileup.get()
+        save_stack = self.bv_batch_save_stack.get()
+        save_lifetime = self.bv_batch_save_lifetime.get()
+        save_rgb = self.bv_batch_save_rgb.get()
+        save_intensity = self.bv_batch_save_intensity.get()
+        save_npy = self.bv_batch_save_npy.get()
+        save_ind = self.bv_batch_save_ind.get()
+        tau_lo = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN']
+        tau_hi = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX']
+        gamma = float(self.sv_batch_gamma.get() or 0.4)
+        int_max = _flt(self.sv_batch_int_max) or None
+        pool_positions = self.bv_tl_pool_positions.get()
         compute_bound_fraction = self.bv_tl_bound_fraction.get()
         expert_overrides = dict(self._expert_overrides)
 
@@ -2595,21 +2585,21 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showerror('Missing input', 'Please specify an output directory.')
             return
 
-        ptu_files = sorted(p for ext in ('*.ptu', '*.sdt') for p in Path(ptu_dir).glob(ext))
+        ptu_files = sorted(p for ext in ('*.ptu', '*.sdt', '*.photons') for p in Path(ptu_dir).glob(ext))
         if not ptu_files:
-            messagebox.showerror('No FLIM files', f"No .ptu or .sdt files found in:\n{ptu_dir}")
+            messagebox.showerror('No FLIM files', f"No .ptu, .sdt or .photons files found in:\n{ptu_dir}")
             return
 
-        cfg      = _C()
-        mirf     = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
+        cfg = _C()
+        mirf = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
         _batch_model = self.sv_fit_model_batch.get()
-        n_exp    = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
-        tau_min  = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
-        tau_max  = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
-        tau_lo   = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
-        tau_hi   = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX'] or 10.0
+        n_exp = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
+        tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
+        tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
+        tau_lo = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
+        tau_hi = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX'] or 10.0
         save_npy = self.bv_batch_save_npy.get()
-        thr      = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        thr = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
@@ -2627,7 +2617,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     print('\nBatch cancelled.')
                     break
                 progress_callback(idx, n_total)
-                stem    = ptu_path.stem
+                stem = ptu_path.stem
                 fov_out = Path(out_dir) / stem.replace(' ', '_')
                 fov_out.mkdir(parents=True, exist_ok=True)
                 print(f"\n{'='*50}\n  [{idx+1}/{n_total}] {stem}\n{'='*50}")
@@ -2671,10 +2661,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         tvb_ptu=tvb_ptu_batch,
                         tvb_channel=None,
                     )
-                    result  = _run_flim_fit(a)
+                    result = _run_flim_fit(a)
                     summary = result.get('global_summary', {})
-                    pu_pct  = result.get('pileup_pct')
-                    cr_mhz  = result.get('count_rate_mhz')
+                    pu_pct = result.get('pileup_pct')
+                    cr_mhz = result.get('count_rate_mhz')
                     if not save_npy:
                         for f_ in fov_out.glob('*.npy'):
                             if not f_.name.endswith('_time_axis_ns.npy'):
@@ -2711,7 +2701,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _run_batch(self):
         xlif_dir = self.sv_batch_xlif_dir.get().strip()
-        ptu_dir  = self.sv_batch_ptu_dir.get().strip()
+        ptu_dir = self.sv_batch_ptu_dir.get().strip()
         for val, name in [(xlif_dir, 'XLIF folder'), (ptu_dir, 'PTU folder')]:
             if not val or not Path(val).is_dir():
                 messagebox.showerror('Missing input', f"Please select a valid {name}.")
@@ -2725,25 +2715,25 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showerror('No XLIF files', f"No .xlif files found in:\n{xlif_dir}")
             return
 
-        cfg       = _C()
-        mirf      = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
+        cfg = _C()
+        mirf = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
         _batch_model = self.sv_fit_model_batch.get()
-        n_exp     = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
-        tau_min   = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
-        tau_max   = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
-        tau_lo        = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
-        tau_hi        = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX'] or 10.0
+        n_exp = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
+        tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
+        tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
+        tau_lo = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
+        tau_hi = _flt(self.sv_batch_tau_hi) or cfg['TAU_DISPLAY_MAX'] or 10.0
         save_lifetime = self.bv_batch_save_lifetime.get()
-        save_rgb      = self.bv_batch_save_rgb.get()
-        save_npy      = self.bv_batch_save_npy.get()
-        save_ind      = self.bv_batch_save_ind.get()
-        gamma         = float(self.sv_batch_gamma.get() or 0.4)
-        int_max       = _flt(self.sv_batch_int_max) or None
+        save_rgb = self.bv_batch_save_rgb.get()
+        save_npy = self.bv_batch_save_npy.get()
+        save_ind = self.bv_batch_save_ind.get()
+        gamma = float(self.sv_batch_gamma.get() or 0.4)
+        int_max = _flt(self.sv_batch_int_max) or None
         tau_weighting = self.sv_batch_tau_weighting.get()
-        tau_key       = 'tau_mean_int' if tau_weighting == 'intensity' else 'tau_mean_amp'
-        register  = self.bv_batch_register.get()
+        tau_key = 'tau_mean_int' if tau_weighting == 'intensity' else 'tau_mean_amp'
+        register = self.bv_batch_register.get()
         reg_shift = int(self.sv_batch_reg_shift.get() or 120)
-        thr       = _thresh(self.bv_batch_thr, self.sv_batch_thr)
+        thr = _thresh(self.bv_batch_thr, self.sv_batch_thr)
         correct_pileup = self.bv_batch_correct_pileup.get()
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
@@ -2765,8 +2755,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     break
                 progress_callback(idx, n_total)
                 ptu_basename = xlif_path.stem
-                roi_clean    = ptu_basename.replace(' ', '_')
-                roi_out      = Path(out_dir) / roi_clean
+                roi_clean = ptu_basename.replace(' ', '_')
+                roi_out = Path(out_dir) / roi_clean
                 roi_out.mkdir(parents=True, exist_ok=True)
                 print(f"\n{'='*50}\n  [{idx+1}/{n_total}] {ptu_basename}\n{'='*50}")
 
@@ -2889,7 +2879,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showwarning('No data', 'Load a PTU file first.')
             return
         try:
-            sigma  = float(self.sv_ph_pk_sigma.get() or 3.0)
+            sigma = float(self.sv_ph_pk_sigma.get() or 3.0)
             thresh = float(self.sv_ph_pk_thresh.get() or 0.10)
             min_ph = float(self.sv_ph_minph.get() or 0.01)
         except ValueError:
@@ -2911,9 +2901,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showwarning('No data', 'Load a PTU file first.')
             return
         try:
-            tau_d    = float(self.sv_ph_fret_taud.get())
+            tau_d = float(self.sv_ph_fret_taud.get())
             taua_str = self.sv_ph_fret_taua.get().strip()
-            tau_a    = float(taua_str) if taua_str else None
+            tau_a = float(taua_str) if taua_str else None
             fretting = float(self.sv_ph_fret_fretting.get() or 1.0)
         except ValueError:
             messagebox.showerror('Invalid input', 'Lifetimes must be numeric.')
@@ -2935,15 +2925,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showwarning('No data', 'Load a PTU file first.')
             return
         try:
-            tau_d    = float(self.sv_ph_fret_taud.get())
+            tau_d = float(self.sv_ph_fret_taud.get())
             fretting = float(self.sv_ph_fret_fretting.get() or 1.0)
-            min_ph   = float(self.sv_ph_minph.get() or 0.01)
+            min_ph = float(self.sv_ph_minph.get() or 0.01)
         except ValueError:
             messagebox.showerror('Invalid input', 'Lifetimes must be numeric.')
             return
         from flimkit.phasor.fret import (
             FRETChannelData, FRETModelParameters, fit_donor_fret)
-        donor  = FRETChannelData(
+        donor = FRETChannelData(
             panel._real, panel._imag, panel._mean,
             panel._freq, min_photons=min_ph)
         params = FRETModelParameters(
@@ -3117,8 +3107,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         )
 
     def _run_stitch(self):
-        xlif     = self.sv_xlif.get().strip()
-        ptu_dir  = self.sv_ptu_dir.get().strip()
+        xlif = self.sv_xlif.get().strip()
+        ptu_dir = self.sv_ptu_dir.get().strip()
         out_base = self.sv_out_st.get().strip()
 
         for val, name in [(xlif, 'XLIF file'),
@@ -3171,8 +3161,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if xlif_stem:
                             self._proj_browser.on_fit_done(
                                 xlif_stem,
-                                out_st   = str(Path(a.output_dir).parent),
-                                ptu_dir  = getattr(a, 'ptu_dir',    None),
+                                out_st = str(Path(a.output_dir).parent),
+                                ptu_dir = getattr(a, 'ptu_dir',    None),
                             )
                 except Exception as e:
                     import traceback
@@ -3181,7 +3171,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 try:
                     if hasattr(self, '_stitch_roi_panel'):
                         self._stitch_roi_panel._refresh_region_list()
-                except:
+                except Exception:
                     pass
             else:
                 try:
@@ -3222,7 +3212,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _run_phasor(self):
         try:
-            min_ph  = float(self.sv_ph_minph.get() or 0.01)
+            min_ph = float(self.sv_ph_minph.get() or 0.01)
             max_cur = int(self.sv_ph_maxc.get() or 6)
         except ValueError:
             messagebox.showerror('Invalid input',
@@ -3288,7 +3278,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     min_photons=min_ph,
                 )
                 self._phasor_panel._ptu_path = ptu
-                self._phasor_panel._channel  = channel
+                self._phasor_panel._channel = channel
                 self._auto_save_phasor(ptu)
                 self._res.set_status(
                     f"✓  Phasor data loaded from channel {channel} - click the phasor to place cursors.")
@@ -3440,7 +3430,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._res.set_status('✓  Machine IRF built.')
             if result is None or not isinstance(result, dict):
                 return
-            irf  = result.get('irf')
+            irf = result.get('irf')
             meta = result.get('metadata', {})
             if irf is None:
                 return
@@ -3456,7 +3446,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 self._irf_plot_frame = _ttk.Frame(preview_parent)
                 self._irf_plot_frame.grid(row=0, column=0, sticky='nsew')
                 self._irf_fig = Figure(figsize=(6, 4), dpi=100, facecolor='#1e1e1e')
-                self._irf_ax  = self._irf_fig.add_subplot(111)
+                self._irf_ax = self._irf_fig.add_subplot(111)
                 self._irf_canvas_mpl = FigureCanvasTkAgg(self._irf_fig, master=self._irf_plot_frame)
                 self._irf_canvas_mpl.get_tk_widget().pack(fill='both', expand=True)
             ax = self._irf_ax
@@ -3464,7 +3454,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ax.set_facecolor('#1e1e1e')
             self._irf_fig.patch.set_facecolor('#1e1e1e')
             n_pairs = meta.get('n_pairs', '?')
-            anchor  = meta.get('align_anchor', '')
+            anchor = meta.get('align_anchor', '')
             reducer = meta.get('reducer', '')
             ax.plot(time_ns, irf, color='#00d4ff', linewidth=2, label=f"Machine IRF ({reducer})")
             ax.set_xlabel('Time (ns)', color='white')
@@ -3524,7 +3514,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 else:
                     result = fn()
                 captured = ''.join(self._buf)
-                rows     = _parse_summary(captured)
+                rows = _parse_summary(captured)
                 if _on_done_override is not None:
                     self.root.after(0, lambda r=result: _on_done_override(r))
                 else:
@@ -3612,12 +3602,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if tau_centers is not None:
             import numpy as _np
             tau_centers = list(_np.atleast_1d(tau_centers))
-            widths_ns   = list(_np.atleast_1d(global_summary.get('widths_ns', [])))
-            fwhms_ns    = list(_np.atleast_1d(global_summary.get('fwhms_ns',  [])))
-            amps_d      = list(_np.atleast_1d(global_summary.get('amps',      [])))
-            fracs_d     = list(_np.atleast_1d(global_summary.get('fractions', [])))
-            dist_type   = global_summary.get('dist_type', 'gaussian')
-            dist_label  = dist_type.capitalize()
+            widths_ns = list(_np.atleast_1d(global_summary.get('widths_ns', [])))
+            fwhms_ns = list(_np.atleast_1d(global_summary.get('fwhms_ns',  [])))
+            amps_d = list(_np.atleast_1d(global_summary.get('amps',      [])))
+            fracs_d = list(_np.atleast_1d(global_summary.get('fractions', [])))
+            dist_type = global_summary.get('dist_type', 'gaussian')
+            dist_label = dist_type.capitalize()
             width_label = 'σ' if dist_type == 'gaussian' else 'Γ (FWHM)'
             for i in range(len(tau_centers)):
                 rows.append((f"τ̄{i+1} ({dist_label} center)", f"{tau_centers[i]:.4f}", 'ns'))
@@ -3630,14 +3620,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if i < len(fracs_d):
                     rows.append((f"f{i+1} (int. frac.)", f"{fracs_d[i]:.4f}", ''))
 
-        taus  = global_summary.get('taus_ns', []) if tau_centers is None else None
-        amps  = global_summary.get('amps',    []) if tau_centers is None else None
+        taus = global_summary.get('taus_ns', []) if tau_centers is None else None
+        amps = global_summary.get('amps',    []) if tau_centers is None else None
         fracs = global_summary.get('fractions', []) if tau_centers is None else None
 
         if taus is not None and len(taus) > 0:
             import numpy as np
-            taus  = list(np.atleast_1d(taus))
-            amps  = list(np.atleast_1d(amps))  if amps  is not None else []
+            taus = list(np.atleast_1d(taus))
+            amps = list(np.atleast_1d(amps))  if amps  is not None else []
             fracs = list(np.atleast_1d(fracs)) if fracs is not None else []
             for i in range(len(taus)):
                 rows.append((f"τ{i+1}", f"{taus[i]:.4f}", 'ns'))

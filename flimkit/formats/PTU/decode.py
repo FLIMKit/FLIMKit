@@ -45,19 +45,3 @@ def get_raw_flim_histogram(ptu_path, rotate_cw=True):
         'frequency': ptu.sync_rate,
     }
     return stack, metadata
-
-def get_raw_flim_histogram2(ptu_path, rotate_cw=True):
-    import ptufile
-    ptu = ptufile.PtuFile(str(ptu_path))
-    data = ptu[:].squeeze()
-    if data.ndim != 3:
-        data = data.reshape((data.shape[0], data.shape[1], -1))
-    if rotate_cw:
-        data = np.rot90(data, k=-1, axes=(0, 1))
-    metadata = {
-        'tcspc_resolution': ptu.tcspc_resolution,
-        'n_time_bins': data.shape[2],
-        'tile_shape': (data.shape[0], data.shape[1]),
-        'frequency': ptu.frequency,
-    }
-    return data.astype(np.uint32), metadata

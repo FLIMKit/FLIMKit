@@ -171,7 +171,6 @@ def build_app():
         "--hidden-import", "scipy",
         "--hidden-import", "xarray",
         "--hidden-import", "tifffile",
-        "--hidden-import", "ptufile",
         "--hidden-import", "openpyxl",
         "--hidden-import", "tkinterdnd2",
         "--hidden-import", "TKinterModernThemes",

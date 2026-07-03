@@ -925,7 +925,7 @@ class FOVPreviewPanel:
             if self._temp_line is not None:
                 try:
                     self._temp_line.remove()
-                except:
+                except Exception:
                     pass
                 self._temp_line = None
             x0, y0 = self._draw_coords[0]
@@ -957,7 +957,7 @@ class FOVPreviewPanel:
         if self._temp_line is not None:
             try:
                 self._temp_line.remove()
-            except:
+            except Exception:
                 pass
             self._temp_line = None
         self._is_drawing = False
