@@ -92,6 +92,54 @@ def _known_cube(iy=2, ix=3, nh=8):
             cube[y, x, (y * ix + x) % nh] = (y + 1) * 10 + (x + 1)
     return cube
 
+def _write_sdt_multi(path, cubes, tac_r=25.0e-9, tac_g=2, module_code=0x080):
+    cubes = [np.asarray(c, dtype='<u2') for c in cubes]
+    iy, ix, nh = cubes[0].shape
+    mi = _build_measure_info(nh, tac_r, tac_g, ix, iy)
+    ident = ('*IDENTIFICATION\r\n  ID : SPC Setup & Data File\r\n'
+             '  Title : synthetic\r\n*END\r\n').encode('ascii')
+    info_offs = bd._FILE_HEADER.size
+    info_length = len(ident)
+    mdb_offs = info_offs + info_length
+    mdb_len = len(mi)
+    data_block_offs = mdb_offs + mdb_len
+    blocks = b''
+    offset = data_block_offs
+    block_type = bd.IMG_BLOCK | 0x0001
+    for i, cube in enumerate(cubes):
+        data_bytes = cube.tobytes()
+        data_offset = offset + bd._BLOCK_HEADER.size
+        next_offset = data_offset + len(data_bytes)
+        block_header = bd._BLOCK_HEADER.pack(
+            0, 0, data_offset, next_offset,
+            block_type, 0, i + 1, len(data_bytes))
+        blocks += block_header + data_bytes
+        offset = next_offset
+    revision = (module_code << 4) | bd.SOFTWARE_REV_CURRENT
+    header = bd._FILE_HEADER.pack(
+        revision, info_offs, info_length, mdb_offs, 0,
+        data_block_offs, len(cubes), len(cubes[0].tobytes()),
+        mdb_offs, 1, mdb_len, bd.HEADER_VALID, 1, 0, 0)
+    with open(path, 'wb') as fh:
+        fh.write(header)
+        fh.write(ident)
+        fh.write(mi)
+        fh.write(blocks)
+
+def test_channel_auto_select_brightest(tmp_path):
+    path = tmp_path / 'twochan.sdt'
+    dim = _known_cube()
+    bright = _known_cube() * 100
+    _write_sdt_multi(path, [dim, bright])
+    bh = BHFile(str(path), verbose=False)
+    assert bh.n_channels == 2
+    assert bh.photon_channel is None
+    decay = bh.summed_decay(channel=None)
+    assert bh.photon_channel == 2
+    assert np.array_equal(decay, bright.sum(axis=(0, 1)))
+    assert np.array_equal(bh.summed_decay(channel=1), dim.sum(axis=(0, 1)))
+    bh.close()
+
 def test_detect_and_dispatch(tmp_path):
     path = tmp_path / 'sample.sdt'
     _write_sdt(path, _known_cube())

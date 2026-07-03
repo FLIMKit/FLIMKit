@@ -5,9 +5,10 @@ from . import decode as bd
 _LASER_RATES_HZ = (20e6, 50e6, 80e6)
 
 class BHFile:
-    def __init__(self, path, verbose=True, channel=None):
+    def __init__(self, path, verbose=True, channel=None, sync_rate=None):
         self.path = str(path)
         self.verbose = verbose
+        self._sync_override = float(sync_rate) if sync_rate else None
         self._fh = open(self.path, 'rb')
         self.header = bd.read_file_header(self._fh)
         if not self.header['valid'] and self.verbose:
@@ -47,7 +48,10 @@ class BHFile:
 
     def _parse_meta(self, channel):
         self.n_channels = len(self._img_blocks)
-        self.photon_channel = int(channel) if channel is not None else 1
+        if channel is not None:
+            self.photon_channel = int(channel)
+        else:
+            self.photon_channel = 1 if self.n_channels == 1 else None
         mi = self.measure_info[self._img_blocks[0]['meas_desc_block_no']]
         self.module_type = mi['mod_type'] or self.header['module_type']
         self.n_bins = mi['adc_resolution']
@@ -56,8 +60,15 @@ class BHFile:
         else:
             self.tcspc_res = 0.0
         self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
-        sync = mi['max_sync_rate'] if mi['max_sync_rate'] > 0 else mi['min_sync_rate']
-        self.sync_rate = float(sync) if sync and sync > 0 else 0.0
+        self.min_sync_rate = float(mi['min_sync_rate'] or 0.0)
+        self.max_sync_rate = float(mi['max_sync_rate'] or 0.0)
+        if self._sync_override and self._sync_override > 0:
+            self.sync_rate = self._sync_override
+            self.sync_source = 'user'
+        else:
+            sync = self.max_sync_rate if self.max_sync_rate > 0 else self.min_sync_rate
+            self.sync_rate = float(sync) if sync and sync > 0 else 0.0
+            self.sync_source = 'measured'
         self.period_ns = (1e9 / self.sync_rate) if self.sync_rate > 0 else 0.0
         self.n_records = 0
         self.tags = {
@@ -75,6 +86,8 @@ class BHFile:
             'BH_CollectionTime_s': mi['collection_time'],
             'BH_MinSyncRate_Hz': mi['min_sync_rate'],
             'BH_MaxSyncRate_Hz': mi['max_sync_rate'],
+            'BH_SyncRate_Hz': self.sync_rate,
+            'BH_SyncRateSource': self.sync_source,
             'BH_Channels': self.n_channels,
         }
         if self.verbose:
@@ -82,7 +95,18 @@ class BHFile:
             print(f"  Module   : {self.module_type}  ({self.n_channels} channel(s))")
             print(f"  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps")
             sync_mhz = self.sync_rate / 1e6
-            print(f"  Sync     : {sync_mhz:.2f} MHz  (period {self.period_ns:.3f} ns)")
+            print(f"  Sync     : {sync_mhz:.2f} MHz  (period {self.period_ns:.3f} ns, {self.sync_source})")
+            if (self.sync_source == 'measured' and self.min_sync_rate > 0
+                    and self.max_sync_rate > 0
+                    and abs(self.max_sync_rate - self.min_sync_rate) > 0.01 * self.max_sync_rate):
+                print(f"  WARNING: min/max sync differ "
+                      f"({self.min_sync_rate/1e6:.3f} vs {self.max_sync_rate/1e6:.3f} MHz), using max")
+            if self.sync_rate > 0:
+                nearest = min(_LASER_RATES_HZ, key=lambda r: abs(r - self.sync_rate))
+                if abs(nearest - self.sync_rate) > 0.02 * nearest:
+                    print(f"  NOTE     : {sync_mhz:.2f} MHz is non-standard "
+                          f"(period {self.period_ns:.3f} ns from measured sync); "
+                          f"pass sync_rate=<Hz> to override if the laser differs")
             print(' ')
 
     @property
@@ -91,8 +115,30 @@ class BHFile:
 
     def _norm_channel(self, channel):
         if channel is None or int(channel) < 1:
-            return self.photon_channel
+            return self._ensure_photon_channel()
         return int(channel)
+
+    def _ensure_photon_channel(self):
+        if self.photon_channel is None:
+            self.photon_channel = self._select_photon_channel() if self.n_channels > 1 else 1
+        return self.photon_channel
+
+    def _select_photon_channel(self):
+        best_idx, best_sum, total_all = 1, -1, 0
+        for idx in range(1, self.n_channels + 1):
+            block = self._img_blocks[idx - 1]
+            cube = bd.decode_image_block(self.fh, block, self._measure_info_for(block))
+            total = int(cube.sum())
+            total_all += total
+            if total > best_sum:
+                self._cube_cache.pop(best_idx, None)
+                best_idx, best_sum = idx, total
+                self._cube_cache[idx] = cube
+        if self.verbose:
+            share = (100.0 * best_sum / total_all) if total_all > 0 else 0.0
+            print(f"  Channel  : auto-selected {best_idx}/{self.n_channels} "
+                  f"({best_sum:,} photons, {share:.1f}% of total)")
+        return best_idx
 
     def _img_block(self, channel):
         idx = self._norm_channel(channel) - 1
@@ -162,18 +208,18 @@ def _metadata(bh, data):
         'photon_channel': bh.photon_channel,
     }
 
-def read_bh(path, binning=1, channel=None, verbose=False):
-    bh = BHFile(path, verbose=verbose, channel=channel)
+def read_bh(path, binning=1, channel=None, verbose=False, sync_rate=None):
+    bh = BHFile(path, verbose=verbose, channel=channel, sync_rate=sync_rate)
     data = bh.pixel_stack(channel=channel, binning=binning)
     metadata = _metadata(bh, data)
     bh.close()
     return data, metadata
 
-def get_flim_data(path, binning=1, channel=None):
-    return read_bh(path, binning=binning, channel=channel, verbose=False)
+def get_flim_data(path, binning=1, channel=None, sync_rate=None):
+    return read_bh(path, binning=binning, channel=channel, verbose=False, sync_rate=sync_rate)
 
-def get_intensity_image(path, binning=1, channel=None):
-    bh = BHFile(path, verbose=False, channel=channel)
+def get_intensity_image(path, binning=1, channel=None, sync_rate=None):
+    bh = BHFile(path, verbose=False, channel=channel, sync_rate=sync_rate)
     img = bh.intensity_image(channel=channel, binning=binning)
     cube_shape = (bh.n_y, bh.n_x, bh.n_bins)
     metadata = _metadata(bh, np.empty(0))
