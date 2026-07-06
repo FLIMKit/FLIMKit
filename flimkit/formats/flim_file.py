@@ -87,7 +87,8 @@ class FLIMFile:
             from flimkit.formats.ISS.image import ISSImage
             return ISSImage(str(path), **kwargs)
         if fmt == 'iss_fdflim':
-            raise NotImplementedError("ISS '.ifli' (frequency-domain) decoding is not implemented yet; see issue #19")
+            from flimkit.formats.ISS.fdflim import ISSFdFlim
+            return ISSFdFlim(str(path), **kwargs)
         if fmt == 'bh_sdt':
             from flimkit.formats.BH.reader import BHFile
             return BHFile(str(path), **kwargs)

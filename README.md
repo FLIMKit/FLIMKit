@@ -115,6 +115,8 @@ FLIMKit auto-detects the file type and routes every format through one loader (`
 
 **ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). No lifetime data, so it loads as an intensity image only (no fitting or phasor).
 
+**ISS `.ifli` (frequency-domain / FD-FLIM):** ISS's FD-FLIM lifetime-image export (`VistaFLImage` header). This is already phasor data (per-pixel phase and modulation at each modulation frequency), so it loads straight into phasor analysis with fitting disabled - there is no decay to fit. The reader applies the file's reference-sample calibration. Written from ISS's `.ifli` specification and checked against synthetic files; not yet validated against a real acquisition.
+
 > **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and so far checked only against synthetic files - they have **not yet been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat ISS results as unverified and cross-check them; see issue #19. If you have ISS `.TAGTIME`/`.ifi` data, trying it and reporting back is very welcome. PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers) or, for Photonscore, from each photon's (x, y) position; the intensity image is that cube summed over the time axis.
@@ -132,7 +134,6 @@ A `.pck` IRF must come from the same instrument and TCSPC resolution as the data
 
 **Not supported yet:**
 
-- ISS frequency-domain `.ifli` (phasor): the loader recognises it but decoding is not implemented yet (issue #19).
 - **T2-mode PTUs.** FLIMKit decodes T3 mode only (one TCSPC histogram per sync period). T2 records are raw global timestamps with no per-period decay, so a T2 `.ptu` will not produce a meaningful decay.
 - Older PicoQuant formats (`.pt3`, `.ht3`, `.phu`, `.pt2`) and Becker & Hickl raw `.spc` photon streams.
 - Leica `.lif` and proprietary LMSCOMPRESSED blocks. Export `.ptu` from LAS X instead.

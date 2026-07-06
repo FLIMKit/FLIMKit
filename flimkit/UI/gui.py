@@ -2968,7 +2968,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             modality = file_modality(ptu_path)
             if modality != 'time':
                 msgs = {
-                    'frequency': 'ISS .ifli is frequency-domain (phasor) data; phasor-mode loading is not wired up yet (issue #19).',
+                    'frequency': 'ISS .ifli is frequency-domain (FD-FLIM) data. It has no decay to fit; open it in the Phasor tab instead.',
                     'intensity': 'ISS .ifi is an intensity image with no lifetime data; FOV loading for it is not wired up yet.',
                 }
                 messagebox.showinfo('Not supported yet',

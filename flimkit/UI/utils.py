@@ -270,11 +270,12 @@ PAD = dict(padx=8, pady=4)
 
 # default open-dialog filter: every format FLIMFile can route, not just .ptu
 FLIM_FILETYPES = [
-    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi *.photons'),
+    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi *.ifli *.photons'),
     ('PicoQuant PTU', '*.ptu'),
     ('Becker & Hickl SDT', '*.sdt'),
     ('ISS time-tag', '*.tagtime *.tagchannel *.tagdecay'),
     ('ISS image', '*.ifi'),
+    ('ISS FD-FLIM (phasor)', '*.ifli'),
     ('Photonscore .photons', '*.photons'),
     ('All', '*.*'),
 ]

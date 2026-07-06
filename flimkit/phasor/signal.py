@@ -10,6 +10,31 @@ def return_phasor_from_PTUFile(ptu_file):
     mean, real, imag = phasor_from_signal(signal, axis='H')
     return mean, real, imag
 
+def process_ifli(ifli_path, phasor_filter=None, filter_kwargs=None, channel=None):
+    from ..formats.ISS.fdflim import ISSFdFlim
+    print(f"Loading ISS FD-FLIM file: {ifli_path}")
+    iss = ISSFdFlim(str(ifli_path), verbose=True, channel=channel)
+    mean, real, imag, frequency = iss.phasor(channel=channel)
+    print(f"  FD-FLIM phasor coordinates (frequency = {frequency:.2f} MHz)")
+    real_cal, imag_cal = real, imag
+    if phasor_filter:
+        from .filters import phasor_filter as _filter_fn
+        real_cal, imag_cal = _filter_fn(
+            np.asarray(real_cal, dtype=float),
+            np.asarray(imag_cal, dtype=float),
+            phasor_filter,
+            mean=np.asarray(mean, dtype=float),
+            **(filter_kwargs or {}),
+        )
+    return dict(
+        real_cal=np.asarray(real_cal),
+        imag_cal=np.asarray(imag_cal),
+        mean=np.asarray(mean),
+        frequency=float(frequency),
+        channel=channel,
+        display_image=np.asarray(mean, dtype=float),
+    )
+
 def get_phasor_irf(irf_xlsx):
     df = pd.read_excel(irf_xlsx, sheet_name='Fit', header=None)
     irf_time_ns = pd.to_numeric(df.iloc[2:, 2], errors='coerce').dropna().values

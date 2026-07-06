@@ -52,12 +52,13 @@ FLIMKit auto-detects the file type and routes everything through one loader (`FL
 | Photonscore `.photons` | Photonscore LINCam D7 container (position-sensitive). Pure-Python reader, no native dependency, validated bit-exact against the Photonscore SDK; `dt` calibration from the `TacChannel` attribute (`flimkit/formats/PS/NOTICE.md`) |
 | ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
 | ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor). Experimental, not yet validated on real ISS files (issue #19) |
+| ISS `.ifli` | FD-FLIM lifetime image (`VistaFLImage`); per-pixel phase / modulation. Frequency-domain, so it loads straight into phasor analysis with fitting disabled; the reader applies the file's reference calibration. Written from the ISS spec, checked on synthetic files, not yet validated on real ISS data (issue #19) |
 
 > **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and checked only against synthetic files - **not yet validated against real ISS acquisitions** (byte order and marker conventions are assumptions). Treat ISS results as unverified and cross-check them (issue #19). PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their scan / frame / line / pixel markers, and the intensity image is that cube summed over the time axis. Files without imaging markers (point, single-spot, FCS) are fit as a single decay with no image.
 
-Not decoded yet: ISS frequency-domain `.ifli` (recognised but not implemented, issue #19), T2-mode PTUs, older PicoQuant `.pt3` / `.ht3` / `.phu`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
+Not decoded yet: T2-mode PTUs, older PicoQuant `.pt3` / `.ht3` / `.phu`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
 
 ---
 

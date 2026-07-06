@@ -246,8 +246,6 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
         display_image=np.asarray(display_image, dtype=float),
     )
 
-
-
 def launch_phasor(ptu_path=None,
                   irf_path=None,
                   machine_irf_path=None,
@@ -307,6 +305,10 @@ def launch_phasor(ptu_path=None,
         src_irf = sess.get('irf_file')
         print(f"  frequency = {data['frequency']:.2f} MHz, "
               f"{len(sess['cursors'])} cursor(s) restored")
+    elif ptu_path and str(ptu_path).lower().endswith('.ifli'):
+        from .phasor.signal import process_ifli
+        data = process_ifli(ptu_path, phasor_filter=phasor_filter,
+                            filter_kwargs=filter_kwargs, channel=channel)
     else:
         if irf_path is None and machine_irf_path is None:
             choices = [
