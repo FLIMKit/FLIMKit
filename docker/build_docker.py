@@ -8,9 +8,9 @@ VERSION = __version__
 PLATFORM = 'linux/amd64'
 
 VARIANTS = [
-    ('Dockerfile', 'latest', 'CPU'),
-    ('Dockerfile.cuda', 'cuda', 'NVIDIA  (docker run --gpus all ...)'),
-    ('Dockerfile.rocm', 'rocm', 'AMD     (docker run --device /dev/kfd --device /dev/dri ...)'),
+    ('docker/Dockerfile', 'latest', 'CPU'),
+    ('docker/Dockerfile.cuda', 'cuda', 'NVIDIA  (docker run --gpus all ...)'),
+    ('docker/Dockerfile.rocm', 'rocm', 'AMD     (docker run --device /dev/kfd --device /dev/dri ...)'),
 ]
 
 def run(cmd):

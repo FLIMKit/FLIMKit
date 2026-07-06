@@ -50,14 +50,14 @@ Then open **http://localhost:14500** in your browser. PTU files and data should 
 **TrueNAS SCALE (Custom App):**
 
 1. Apps → Discover Apps → Custom App
-2. Paste the contents of `docker-compose.yaml` from this repo
+2. Paste the contents of `docker/docker-compose.yaml` from this repo
 3. Edit the volume paths to match your pool (e.g. `/mnt/tank/microscopy:/data`)
 4. Deploy - TrueNAS will pull the image automatically
 
 **Build from source** (required if you want to push your own changes):
 
 ```bash
-python build_docker.py        # builds linux/amd64, pushes to Docker Hub
+python docker/build_docker.py        # builds linux/amd64, pushes to Docker Hub
 ```
 
 Requires Docker Desktop with buildx. On Apple Silicon, buildx cross-compiles for `linux/amd64` automatically.
