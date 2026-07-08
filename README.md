@@ -1,5 +1,9 @@
 # FLIMKit
 
+<div align="center">
+  <img src="flimkit/UI/icon.png" alt="FLIMKit" width="200">
+</div>
+
 [![tests](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml)
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
