@@ -1,28 +1,60 @@
 import numpy as np
 from pathlib import Path
-from . import decode as bd
 
 _LASER_RATES_HZ = (20e6, 50e6, 80e6)
+_DECAY_CONTENT = (0x10, 0x60)
+_INT_CONTENT = 0xa0
+
+def _load_sdtfile():
+    try:
+        import sdtfile
+    except ImportError:
+        raise ImportError('sdtfile is required to read Becker & Hickl .sdt files '
+                          '(pip install sdtfile)')
+    return sdtfile
+
+def _next_pow2(n):
+    return 1 << (int(n) - 1).bit_length() if n > 1 else 1
+
+def _reshape_cube(arr, image_x, image_y, adc_re):
+    flat = np.ascontiguousarray(arr).reshape(-1)
+    per_pixel = adc_re if adc_re > 0 else 1
+    n_pixels = flat.size // per_pixel
+    if n_pixels == image_x * image_y:
+        out = flat[:image_y * image_x * per_pixel].reshape(image_y, image_x, per_pixel)
+    else:
+        xpad, ypad = _next_pow2(image_x), _next_pow2(image_y)
+        out = flat[:ypad * xpad * per_pixel].reshape(ypad, xpad, per_pixel)
+        out = out[:image_y, :image_x, :]
+    return np.ascontiguousarray(out)
+
+def _reshape_intensity(arr, image_x, image_y):
+    flat = np.ascontiguousarray(arr).reshape(-1)
+    if flat.size == image_x * image_y:
+        out = flat.reshape(image_y, image_x)
+    else:
+        xpad, ypad = _next_pow2(image_x), _next_pow2(image_y)
+        out = flat[:ypad * xpad].reshape(ypad, xpad)[:image_y, :image_x]
+    return np.ascontiguousarray(out)
+
+def _decode_str(value):
+    if isinstance(value, bytes):
+        return value.split(b'\x00', 1)[0].decode('ascii', 'replace').strip()
+    return str(value).strip().strip('\x04').strip()
 
 class BHFile:
     def __init__(self, path, verbose=True, channel=None, sync_rate=None):
         self.path = str(path)
         self.verbose = verbose
         self._sync_override = float(sync_rate) if sync_rate else None
-        self._fh = open(self.path, 'rb')
-        self.header = bd.read_file_header(self._fh)
-        if not self.header['valid'] and self.verbose:
-            print(f"  WARNING: BH header_valid=0x{self.header['header_valid']:04x} "
-                  f"(expected 0x5555)")
-        self.identification = bd.read_identification(
-            self._fh, self.header['info_offs'], self.header['info_length'])
-        self.measure_info = bd.read_all_measure_info(self._fh, self.header)
-        self.blocks = bd.read_block_headers(self._fh, self.header)
-        self._img_blocks = [b for b in self.blocks
-                            if b['content_type'] in (bd.IMG_BLOCK, bd.PAGE_BLOCK)]
-        self._int_blocks = [b for b in self.blocks
-                            if b['content_type'] == bd.IMG_INT_BLOCK]
-        if not self._img_blocks:
+        sdtfile = _load_sdtfile()
+        self._sdt = sdtfile.SdtFile(self.path)
+        headers = self._sdt.block_headers
+        self._decay_idx = [i for i, b in enumerate(headers)
+                           if (int(b['block_type']) & 0x00f0) in _DECAY_CONTENT]
+        self._int_idx = [i for i, b in enumerate(headers)
+                         if (int(b['block_type']) & 0x00f0) == _INT_CONTENT]
+        if not self._decay_idx:
             raise ValueError(f'No FLIM image/decay blocks found in {self.path}')
         self._cube_cache = {}
         self.n_x = None
@@ -30,15 +62,16 @@ class BHFile:
         self._total_photons = None
         self._parse_meta(channel)
 
-    @property
-    def fh(self):
-        if self._fh is None or self._fh.closed:
-            self._fh = open(self.path, 'rb')
-        return self._fh
+    def _measure_info(self, data_idx):
+        mi = self._sdt.measure_info
+        no = int(self._sdt.block_headers[data_idx]['meas_desc_block_no'])
+        return mi[no] if no < len(mi) else mi[0]
 
     def close(self):
-        if self._fh is not None and not self._fh.closed:
-            self._fh.close()
+        try:
+            self._sdt.close()
+        except Exception:
+            pass
 
     def __enter__(self):
         return self
@@ -47,21 +80,25 @@ class BHFile:
         self.close()
 
     def _parse_meta(self, channel):
-        self.n_channels = len(self._img_blocks)
+        self.n_channels = len(self._decay_idx)
         if channel is not None:
             self.photon_channel = int(channel)
         else:
             self.photon_channel = 1 if self.n_channels == 1 else None
-        mi = self.measure_info[self._img_blocks[0]['meas_desc_block_no']]
-        self.module_type = mi['mod_type'] or self.header['module_type']
-        self.n_bins = mi['adc_resolution']
-        if mi['tac_g'] and self.n_bins:
-            self.tcspc_res = mi['tac_r'] / (mi['tac_g'] * self.n_bins)
+        mi = self._measure_info(self._decay_idx[0])
+        self.module_type = _decode_str(mi['mod_type'])
+        adc_re = int(mi['adc_re'])
+        self.n_bins = adc_re if adc_re != 0 else 65536
+        tac_r = float(mi['tac_r'])
+        tac_g = int(mi['tac_g'])
+        if tac_g and self.n_bins:
+            self.tcspc_res = tac_r / (tac_g * self.n_bins)
         else:
             self.tcspc_res = 0.0
         self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
-        self.min_sync_rate = float(mi['min_sync_rate'] or 0.0)
-        self.max_sync_rate = float(mi['max_sync_rate'] or 0.0)
+        stop = mi['StopInfo']
+        self.min_sync_rate = float(stop['min_sync_rate'])
+        self.max_sync_rate = float(stop['max_sync_rate'])
         if self._sync_override and self._sync_override > 0:
             self.sync_rate = self._sync_override
             self.sync_source = 'user'
@@ -71,21 +108,22 @@ class BHFile:
             self.sync_source = 'measured'
         self.period_ns = (1e9 / self.sync_rate) if self.sync_rate > 0 else 0.0
         self.n_records = 0
+        info = self._sdt.info
         self.tags = {
-            'BH_ID': self.identification.get('id'),
-            'BH_Title': self.identification.get('title'),
-            'BH_Date': self.identification.get('date'),
-            'BH_Time': self.identification.get('time'),
+            'BH_ID': _decode_str(getattr(info, 'id', '')),
+            'BH_Title': _decode_str(getattr(info, 'title', '')),
+            'BH_Date': _decode_str(getattr(info, 'date', '')),
+            'BH_Time': _decode_str(getattr(info, 'time', '')),
             'BH_ModuleType': self.module_type,
-            'BH_MeasMode': mi['meas_mode'],
+            'BH_MeasMode': int(mi['meas_mode']),
             'BH_ADCResolution': self.n_bins,
-            'BH_TACRange_s': mi['tac_r'],
-            'BH_TACGain': mi['tac_g'],
-            'BH_ImageX': mi['image_x'],
-            'BH_ImageY': mi['image_y'],
-            'BH_CollectionTime_s': mi['collection_time'],
-            'BH_MinSyncRate_Hz': mi['min_sync_rate'],
-            'BH_MaxSyncRate_Hz': mi['max_sync_rate'],
+            'BH_TACRange_s': tac_r,
+            'BH_TACGain': tac_g,
+            'BH_ImageX': int(mi['image_x']),
+            'BH_ImageY': int(mi['image_y']),
+            'BH_CollectionTime_s': float(mi['col_t']),
+            'BH_MinSyncRate_Hz': self.min_sync_rate,
+            'BH_MaxSyncRate_Hz': self.max_sync_rate,
             'BH_SyncRate_Hz': self.sync_rate,
             'BH_SyncRateSource': self.sync_source,
             'BH_Channels': self.n_channels,
@@ -126,8 +164,7 @@ class BHFile:
     def _select_photon_channel(self):
         best_idx, best_sum, total_all = 1, -1, 0
         for idx in range(1, self.n_channels + 1):
-            block = self._img_blocks[idx - 1]
-            cube = bd.decode_image_block(self.fh, block, self._measure_info_for(block))
+            cube = self._decode_cube_for(idx)
             total = int(cube.sum())
             total_all += total
             if total > best_sum:
@@ -140,28 +177,26 @@ class BHFile:
                   f"({best_sum:,} photons, {share:.1f}% of total)")
         return best_idx
 
-    def _img_block(self, channel):
-        idx = self._norm_channel(channel) - 1
-        if idx < 0 or idx >= len(self._img_blocks):
-            raise ValueError(f'Channel {channel} out of range 1..{len(self._img_blocks)}')
-        return self._img_blocks[idx]
-
-    def _measure_info_for(self, block):
-        return self.measure_info[block['meas_desc_block_no']]
+    def _decode_cube_for(self, idx):
+        data_idx = self._decay_idx[idx - 1]
+        mi = self._measure_info(data_idx)
+        return _reshape_cube(self._sdt.data[data_idx], int(mi['image_x']),
+                             int(mi['image_y']), self.n_bins)
 
     def _decode_cube(self, channel):
         idx = self._norm_channel(channel)
         if idx in self._cube_cache:
             return self._cube_cache[idx]
-        block = self._img_block(idx)
-        cube = bd.decode_image_block(self.fh, block, self._measure_info_for(block))
+        if idx < 1 or idx > self.n_channels:
+            raise ValueError(f'Channel {channel} out of range 1..{self.n_channels}')
+        cube = self._decode_cube_for(idx)
         self._cube_cache[idx] = cube
         return cube
 
     def pixel_stack(self, channel=None, binning=1):
         cube = self._decode_cube(channel)
         if binning > 1:
-            cube = bd.bin_cube(cube, binning)
+            cube = _bin_cube(cube, binning)
         self.n_y, self.n_x = cube.shape[0], cube.shape[1]
         self._total_photons = int(cube.sum())
         self.n_records = self._total_photons
@@ -178,21 +213,30 @@ class BHFile:
 
     def intensity_image(self, channel=None, binning=1):
         idx = self._norm_channel(channel)
-        block = self._img_block(idx)
-        mi = self._measure_info_for(block)
-        match = [b for b in self._int_blocks
-                 if b['meas_desc_block_no'] == block['meas_desc_block_no']]
+        decay_idx = self._decay_idx[idx - 1]
+        md = int(self._sdt.block_headers[decay_idx]['meas_desc_block_no'])
+        match = [i for i in self._int_idx
+                 if int(self._sdt.block_headers[i]['meas_desc_block_no']) == md]
         if match:
-            img = bd.decode_intensity_block(self.fh, match[0], mi).astype(np.uint64)
+            mi = self._measure_info(match[0])
+            img = _reshape_intensity(self._sdt.data[match[0]],
+                                     int(mi['image_x']), int(mi['image_y'])).astype(np.uint64)
         else:
-            img = self.pixel_stack(channel=idx, binning=binning).sum(axis=2)
-            return img
+            return self.pixel_stack(channel=idx, binning=binning).sum(axis=2)
         if binning > 1:
             ny, nx = img.shape
             ny2, nx2 = (ny // binning) * binning, (nx // binning) * binning
             img = img[:ny2, :nx2].reshape(ny2 // binning, binning,
                                           nx2 // binning, binning).sum(axis=(1, 3))
         return img
+
+def _bin_cube(cube, binning):
+    if binning <= 1:
+        return cube
+    ny, nx, nh = cube.shape
+    ny2, nx2 = (ny // binning) * binning, (nx // binning) * binning
+    cube = cube[:ny2, :nx2, :]
+    return cube.reshape(ny2 // binning, binning, nx2 // binning, binning, nh).sum(axis=(1, 3))
 
 def _metadata(bh, data):
     return {

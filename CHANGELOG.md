@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- PicoQuant `.ptu` and Becker & Hickl `.sdt` reading now delegate to Christoph Gohlke's maintained, cited `ptufile` and `sdtfile` libraries. Before switching, both were validated against FLIMKit's own decoders on real data: `.ptu` matched `ptufile` across 32 files (Leica, PicoQuant, Chroma, Zeiss; image and point-mode) and `.sdt` cubes were bit-identical to `sdtfile`. This puts format correctness on established libraries and, for `.ptu`, is faster and handles large multi-frame files that were slow or memory-heavy before (a Zeiss 1442-frame file that previously took ~18 min / ~5 GB now decodes in ~3 s). Same `(Y, X, H)` cube and metadata, so the fitter, phasor, stitching and GUI are unchanged; the full test suite (464 tests) passes.
+- FLIMKit's original hand-rolled `.ptu` and `.sdt` decoders are preserved as an independent reference and cross-check in the separate `flim-native-decoders` repository, with the comparison scripts that reproduce the match.
+- `.pck` Check / IRF files are still read by FLIMKit's own `read_pck` (`ptufile` exposes only their tags). ISS and Photonscore keep their own readers, since no published library covers them.
+
+### Added
+- `ptufile` and `sdtfile` dependencies (both ship wheels; `sdtfile` is pure-Python), also added to the PyInstaller hidden imports and `validate_installation.py`.
+
 ## [0.9.15] - 2026-07-03
 
 ### Added

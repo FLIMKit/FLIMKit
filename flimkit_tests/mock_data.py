@@ -196,8 +196,8 @@ def generate_mock_ptu_tiles(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    from flimkit.formats.PTU.reader import PTUFile as _PTUFile
+
+    from ptu_writer import write_ptu
 
     ptu_files = []
 
@@ -211,7 +211,7 @@ def generate_mock_ptu_tiles(
 
         filepath = output_dir / f"{ptu_basename}_s{tile_idx + 1}.ptu"
 
-        _PTUFile.write(
+        write_ptu(
             filepath,
             mock_ptu._stack.astype(np.uint16),
             tcspc_res=mock_ptu.tcspc_res,

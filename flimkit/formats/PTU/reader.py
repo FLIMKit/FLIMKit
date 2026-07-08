@@ -1,9 +1,7 @@
 import math
 import struct
-import time
 import numpy as np
 from pathlib import Path
-from typing import Any, Dict, Tuple
 
 _TAG_TYPES = {
     0xFFFF0008: ('Empty8',      None),
@@ -19,6 +17,14 @@ _TAG_TYPES = {
     0xFFFFFFFF: ('BinaryBlob',  'blob'),
 }
 
+def _load_ptufile():
+    try:
+        import ptufile
+    except ImportError:
+        raise ImportError('ptufile is required to read PicoQuant .ptu files '
+                          '(pip install ptufile)')
+    return ptufile
+
 def _norm_channel(channel):
     if not isinstance(channel, str):
         return channel
@@ -28,52 +34,34 @@ def _norm_channel(channel):
     if channel.isdigit():
         return int(channel)
     return None
-def _read_ptu_header(path):
-    tags = {}
-    data_offset = 0
-    with open(path, 'rb') as fh:
-        magic = fh.read(8)
-        if b'PTU' not in magic and b'PQTTTR' not in magic:
-            raise ValueError(f"Not a PTU/PQTTTR file: magic={magic!r}")
-        fh.read(8)
-        buf = bytearray()
-        while True:
-            chunk = fh.read(65536)
-            if not chunk:
-                break
-            buf.extend(chunk)
-            if b'Header_End' in buf:
-                break
-        buf.extend(fh.read())
-    pos = 0
-    while pos + 48 <= len(buf):
-        ident = buf[pos:pos+32].decode('ascii', errors='replace').rstrip('\x00')
-        tagidx = struct.unpack_from('<i', buf, pos+32)[0]
-        tagtyp = struct.unpack_from('<I', buf, pos+36)[0]
-        tagval = buf[pos+40:pos+48]
-        pos   += 48
-        if ident == 'Header_End':
-            data_offset = 16 + pos
-            break
-        info = _TAG_TYPES.get(tagtyp)
-        if info is None:
-            continue
-        name, fmt = info
-        if fmt in ('arr', 'str', 'blob'):
-            blen = struct.unpack('<q', tagval)[0]
-            blob = bytes(buf[pos:pos+blen])
-            pos += blen
-            val = blob.decode('utf-8', errors='replace').rstrip('\x00') \
-                          if fmt == 'str' else blob
-        elif fmt:
-            val = struct.unpack(f"<{fmt}", tagval)[0]
-            if tagtyp == 0x00000008:
-                val = bool(val)
-        else:
-            val = None
-        key = f"{ident}[{tagidx}]" if tagidx >= 0 else ident
-        tags[key] = val
-    return tags, data_offset
+
+def _fit_bins(arr, n_bins):
+    h = arr.shape[-1]
+    if h == n_bins:
+        return arr
+    if h > n_bins:
+        return arr[..., :n_bins]
+    pad = [(0, 0)] * (arr.ndim - 1) + [(0, n_bins - h)]
+    return np.pad(arr, pad)
+
+def _reduce_yxh(arr, dims):
+    d = list(dims)
+    if arr.ndim != len(d):
+        d = d[-arr.ndim:]
+    drop = tuple(i for i, x in enumerate(d) if x not in ('Y', 'X', 'H'))
+    if drop:
+        arr = arr.sum(axis=drop)
+    d = [x for x in d if x in ('Y', 'X', 'H')]
+    return np.transpose(arr, [d.index(x) for x in ('Y', 'X', 'H') if x in d])
+
+def _bin_cube(cube, binning):
+    if binning <= 1:
+        return cube
+    ny, nx, nh = cube.shape
+    ny2, nx2 = (ny // binning) * binning, (nx // binning) * binning
+    cube = cube[:ny2, :nx2, :]
+    return cube.reshape(ny2 // binning, binning, nx2 // binning, binning, nh).sum(axis=(1, 3))
+
 def read_pck(path):
     with open(path, 'rb') as fh:
         magic = fh.read(8)
@@ -118,423 +106,149 @@ def read_pck(path):
     else:
         hist = hist.reshape(1, hist.size)
     return hist, tags
+
 class PTUFile:
     def __init__(self, path, verbose=True):
         self.path = str(path)
         self.verbose = verbose
-        self.tags, self._data_offset = _read_ptu_header(path)
+        ptufile = _load_ptufile()
+        self._ptu = ptufile.PtuFile(self.path)
         self._parse_meta()
+
     def _parse_meta(self):
-        t = self.tags
-        self.tcspc_res = float(t.get('MeasDesc_Resolution', 9.697e-11))
-        global_res = float(t.get('MeasDesc_GlobalResolution',
-                                       1 / t.get('TTResult_SyncRate', 20e6)))
-        self.sync_rate = 1.0 / global_res
-        self.period_ns = global_res * 1e9
-        self.n_bins = int(math.ceil(global_res / self.tcspc_res))
-        self.n_x = int(t.get('ImgHdr_PixX', t.get('$ReqHdr_PixelNumber_X', 256)))
-        self.n_y = int(t.get('ImgHdr_PixY', t.get('$ReqHdr_PixelNumber_Y', 256)))
-        self.rec_type = int(t.get('TTResultFormat_TTTRRecType', 0x00010303))
-        self.n_records = int(t.get('TTResult_NumberOfRecords', 0))
+        p = self._ptu
+        dims = dict(zip(p.dims, p.shape))
+        self.tcspc_res = float(p.tcspc_resolution)
+        gr = float(p.global_resolution) if p.global_resolution else 0.0
+        self.global_resolution = gr
+        self.sync_rate = (1.0 / gr) if gr else 0.0
+        self.period_ns = gr * 1e9
+        if self.tcspc_res > 0 and gr > 0:
+            self.n_bins = int(math.ceil(gr / self.tcspc_res))
+        else:
+            self.n_bins = int(dims.get('H', 0))
+        self.n_x = int(dims.get('X', 0))
+        self.n_y = int(dims.get('Y', 0))
+        self.is_image = bool(getattr(p, 'is_image', self.n_x > 0 and self.n_y > 0))
+        self._active = [int(c) for c in p.active_channels]
+        self.n_channels = len(self._active)
+        self.n_records = int(getattr(p, 'number_records', 0) or 0)
         self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
         self.photon_channel = None
-        self.global_resolution = float(self.tags.get('MeasDesc_GlobalResolution', 1.0 / self.sync_rate))
+        self.tags = dict(p.tags)
+        self.rec_type = int(self.tags.get('TTResultFormat_TTTRRecType', 0))
         self._total_photons = None
-        pixel_time_ms = self.tags.get('ImgHdr_TimePerPixel', 1.0)
-        self.pixel_time = pixel_time_ms * 1e-3
-        if self.pixel_time <= 0:
-            line_time = self.global_line_time * self.global_resolution
-            self.pixel_time = line_time / self.n_x
         if self.verbose:
-            print(f"  HW type  : {t.get('HW_Type','?')}")
-            print(f"  RecType  : 0x{self.rec_type:08X}  "f"({'PicoHarpT3' if self.rec_type==0x00010303 else 'other'})")
-            print(f"  TCSPC    : {self.n_bins} bins × {self.tcspc_res*1e12:.2f} ps")
+            print(f"  PTU      : {Path(self.path).name}")
+            print(f"  RecType  : 0x{self.rec_type:08X}")
+            print(f"  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps")
             print(f"  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)")
-            print(f"  Image    : {self.n_x} × {self.n_y} px")
+            if self.is_image:
+                print(f"  Image    : {self.n_x} x {self.n_y} px, {self.n_channels} channel(s)")
+            else:
+                print(f"  Point    : {self.n_channels} channel(s)")
             print(f"  Records  : {self.n_records:,}")
             print(' ')
-    def _load_records(self):
-        size = Path(self.path).stat().st_size - self._data_offset
-        n = size // 4
-        with open(self.path, 'rb') as fh:
-            fh.seek(self._data_offset)
-            return np.frombuffer(fh.read(n * 4), dtype='<u4')
-    def _decode_picoharp_t3(self, records: np.ndarray):
-        ch = (records >> 28) & 0xF
-        dtime = (records >> 16) & 0xFFF
-        nsync = records & 0xFFFF
-        return ch, dtime, nsync
-    _HT3_RECTYPES = frozenset({0x00010304, 0x01010304, 0x00010305, 0x01010305,
-                               0x00010306, 0x01010306, 0x00010307, 0x01010307})
-    def _is_ht3(self):
-        return self.rec_type in self._HT3_RECTYPES
-    def _decode_records(self, records):
-        if self._is_ht3():
-            special = ((records >> 31) & 0x1).astype(bool)
-            ch = (records >> 25) & 0x3F
-            dtime = (records >> 10) & 0x7FFF
-            nsync = records & 0x3FF
-        else:
-            ch = (records >> 28) & 0xF
-            dtime = (records >> 16) & 0xFFF
-            nsync = records & 0xFFFF
-            special = ch == 0xF
-        return special, ch, dtime, nsync
-    def _overflow_cumsum(self, special, ch, dtime, nsync):
-        if self._is_ht3():
-            ovf = special & (ch == 0x3F)
-            mult = np.where(nsync > 0, nsync, 1).astype(np.int64)
-            return np.cumsum(np.where(ovf, mult, 0)) * 1024
-        ovf = special & (dtime == 0)
-        return np.cumsum(ovf.astype(np.int64)) * 65536
-    def _line_markers(self, special, ch, dtime):
-        if self._is_ht3():
-            mk = special & (ch >= 1) & (ch <= 15)
-            mbits = ch[mk]
-        else:
-            mk = special & (dtime != 0)
-            mbits = dtime[mk]
-        midx = np.where(mk)[0]
-        return midx[(mbits & 1) != 0], midx[(mbits & 2) != 0]
-    def summed_decay(self, channel=None):
-        channel = _norm_channel(channel)
-        records = self._load_records()
-        special, ch, dtime, _ = self._decode_records(records)
-        photon = ~special
-        if channel is None:
-            ch_counts = np.bincount(ch[photon], minlength=64)
-            channel = int(np.argmax(ch_counts))
-            self.photon_channel = channel
-        ph_mask = photon & (ch == channel)
-        dt_ph = dtime[ph_mask].astype(np.int32)
-        decay = np.bincount(dt_ph, minlength=self.n_bins).astype(float)
-        self._total_photons = int(decay.sum())
-        return decay[:self.n_bins]
+
+    def close(self):
+        try:
+            self._ptu.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
     @property
     def pileup_fraction(self):
         if self._total_photons is None or self.n_records == 0:
             return None
         return self._total_photons / self.n_records
-    def raw_pixel_stack(self, channel=None, binning=1):
-        channel = _norm_channel(channel)
-        if self.photon_channel is None:
-            self.summed_decay(channel=channel)
-        ch_use = channel if channel is not None else self.photon_channel
-        records = self._load_records()
-        special, ch, dtime, nsync = self._decode_records(records)
-        nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
-        ph_mask = (~special) & (ch == ch_use)
-        ph_idx = np.where(ph_mask)[0]
-        ph_dtime = dtime[ph_mask].astype(np.int32)
-        line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
-        n_lines = min(len(line_start_abs), len(line_stop_abs))
-        if n_lines == 0:
-            raise RuntimeError('No valid line markers found.')
-        ny_out = self.n_y // binning
-        nx_out = self.n_x // binning
-        stack = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
-        for line_num in range(n_lines):
-            ls = line_start_abs[line_num]
-            le = line_stop_abs[line_num]
-            if le <= ls:
-                continue
-            row = (line_num % self.n_y) // binning
-            if row >= ny_out:
-                continue
-            lo = np.searchsorted(ph_idx, ls, side='right')
-            hi = np.searchsorted(ph_idx, le, side='left')
-            if hi <= lo:
-                continue
-            dt_in = ph_dtime[lo:hi]
-            nsync_start = nsync_corrected[ls]
-            nsync_end = nsync_corrected[le]
-            nsync_span = nsync_end - nsync_start
-            if nsync_span <= 0:
-                continue
-            ph_nsync = nsync_corrected[ph_idx[lo:hi]]
-            rel_nsync = ph_nsync - nsync_start
-            px = np.clip((rel_nsync * self.n_x) // nsync_span,
-                              0, self.n_x - 1).astype(np.int32)
-            px_bin = px // binning
-            for i in range(len(dt_in)):
-                tb = dt_in[i]
-                if tb < self.n_bins:
-                    stack[row, px_bin[i], tb] += 1
-        total = stack.sum()
-        if self.verbose:
-            n_photons = ph_idx.shape[0]
-            if total != n_photons:
-                print(f"  WARNING: stack sum ({total}) != photon events ({n_photons})")
-        return stack
-    def pixel_stack(self, channel=None,
-                    binning=1):
-        channel = _norm_channel(channel)
-        if self.photon_channel is None:
-            self.summed_decay(channel=channel)
-        ch_use = channel if channel is not None else self.photon_channel
-        if self.verbose:
-            print(f"  Building pixel stack (channel={ch_use}, binning={binning}) ...")
-        t0 = time.time()
-        records = self._load_records()
-        special, ch, dtime, nsync = self._decode_records(records)
-        nsync_corrected = nsync.astype(np.int64) + self._overflow_cumsum(special, ch, dtime, nsync)
-        ph_mask = (~special) & (ch == ch_use)
-        ph_idx = np.where(ph_mask)[0]
-        ph_dtime = dtime[ph_mask].astype(np.int32)
-        line_start_abs, line_stop_abs = self._line_markers(special, ch, dtime)
-        n_lines = min(len(line_start_abs), len(line_stop_abs))
-        ny_out = self.n_y  // binning
-        nx_out = self.n_x  // binning
-        stack = np.zeros((ny_out, nx_out, self.n_bins), dtype=np.uint32)
-        for line_num in range(n_lines):
-            ls = line_start_abs[line_num]
-            le = line_stop_abs[line_num]
-            if le <= ls:
-                continue
-            row = (line_num % self.n_y) // binning
-            lo = np.searchsorted(ph_idx, ls, side='right')
-            hi = np.searchsorted(ph_idx, le, side='left')
-            if hi <= lo:
-                continue
-            dt_in = ph_dtime[lo:hi]
-            nsync_start = nsync_corrected[ls]
-            nsync_end = nsync_corrected[le]
-            nsync_span = nsync_end - nsync_start
-            if nsync_span <= 0:
-                continue
-            ph_nsync = nsync_corrected[ph_idx[lo:hi]]
-            rel_nsync = ph_nsync - nsync_start
-            px = np.clip((rel_nsync * self.n_x) // nsync_span,
-                               0, self.n_x - 1).astype(np.int32)
-            px_bin = px // binning
-            for i in range(len(dt_in)):
-                tb = dt_in[i]
-                if tb < self.n_bins:
-                    stack[row, px_bin[i], tb] += 1
-        elapsed = time.time() - t0
-        total = stack.sum()
-        if self.verbose:
-            pass
-        return stack.astype(float)
-    @classmethod
-    def write(
-        cls,
-        path,
-        histogram,
-        tcspc_res,
-        frequency,
-        channel=1,
-    ):
-        histogram = np.asarray(histogram, dtype=np.uint32)
-        if histogram.ndim != 3:
-            raise ValueError(
-                f"histogram must be (Y, X, H), got shape {histogram.shape}"
-            )
-        n_y, n_x, n_bins = histogram.shape
-        global_res = 1.0 / frequency
-        syncs_per_pixel = max(1, int(round(global_res / tcspc_res / n_bins)))
-        syncs_per_line = syncs_per_pixel * n_x
-        T3WRAPAROUND = 65536
-        TYPE_INT = 0x10000008
-        TYPE_FLOAT = 0x20000008
-        TYPE_STR = 0x4001FFFF
-        TYPE_EMPTY = 0xFFFF0008
-        def _tag(ident, tagtyp, value, idx=-1):
-            head = (
-                ident.encode('ascii')[:32].ljust(32, b'\x00')
-                + struct.pack('<i', idx)
-                + struct.pack('<I', tagtyp)
-            )
-            if tagtyp == TYPE_STR:
-                s = value.encode('utf-8') + b'\x00'
-                return head + struct.pack('<q', len(s)) + s
-            elif tagtyp == TYPE_FLOAT:
-                return head + struct.pack('<d', float(value))
-            elif tagtyp == TYPE_EMPTY:
-                return head + struct.pack('<q', 0)
-            else:
-                return head + struct.pack('<q', int(value))
-        records = []
-        nsync_floor = 0
-        def _advance(target):
-            nonlocal nsync_floor
-            while target - nsync_floor >= T3WRAPAROUND:
-                records.append(np.uint32(0xF0000000))
-                nsync_floor += T3WRAPAROUND
-        for row in range(n_y):
-            line_start = row * syncs_per_line
-            _advance(line_start)
-            records.append(
-                np.uint32(0xF0010000 | ((line_start - nsync_floor) & 0xFFFF))
-            )
-            for px in range(n_x):
-                px_nsync = line_start + px * syncs_per_pixel
-                _advance(px_nsync)
-                ns_px = (px_nsync - nsync_floor) & 0xFFFF
-                for tbin in range(n_bins):
-                    count = int(histogram[row, px, tbin])
-                    if count:
-                        rec = (
-                            ((channel & 0xF)   << 28) |
-                            ((tbin    & 0xFFF) << 16) |
-                            ns_px
-                        )
-                        records.extend([np.uint32(rec)] * count)
-            line_end = line_start + syncs_per_line - 1
-            _advance(line_end)
-            records.append(
-                np.uint32(0xF0020000 | ((line_end - nsync_floor) & 0xFFFF))
-            )
-        records_arr = np.array(records, dtype=np.uint32)
-        n_records = len(records_arr)
-        tags = b''
-        tags += _tag('Measurement_Mode',             TYPE_INT,   3)
-        tags += _tag('TTResultFormat_TTTRRecType',   TYPE_INT,   0x00010303)
-        tags += _tag('TTResultFormat_BitsPerRecord', TYPE_INT,   32)
-        tags += _tag('MeasDesc_Resolution',          TYPE_FLOAT, tcspc_res)
-        tags += _tag('MeasDesc_GlobalResolution',    TYPE_FLOAT, global_res)
-        tags += _tag('TTResult_SyncRate',            TYPE_INT,   int(frequency))
-        tags += _tag('TTResult_NumberOfRecords',     TYPE_INT,   n_records)
-        tags += _tag('ImgHdr_PixX',                  TYPE_INT,   n_x)
-        tags += _tag('ImgHdr_PixY',                  TYPE_INT,   n_y)
-        tags += _tag('ImgHdr_LineStart',             TYPE_INT,   1)
-        tags += _tag('ImgHdr_LineStop',              TYPE_INT,   2)
-        tags += _tag('ImgHdr_TimePerPixel',          TYPE_FLOAT, syncs_per_pixel * global_res * 1e3)
-        tags += _tag('HW_Type',                      TYPE_STR,   'FLIMKit_synthetic')
-        tags += _tag('Header_End',                   TYPE_EMPTY, 0)
-        with open(path, 'wb') as fh:
-            fh.write(b'PQTTTR\x00\x00' + b'00.0.1\x00\x00' + tags + records_arr.tobytes())
-        return n_records
-class PTUArray5D:
-    def __init__(self, ptu_file, binning=1):
-        self.ptu = ptu_file
-        self.binning = binning
-        self.n_y_out = self.ptu.n_y // binning
-        self.n_x_out = self.ptu.n_x // binning
-        self._load_and_process()
-    def _find_frames(self, records, ch,
-                     dtime):
-        frame_starts = np.array([0], dtype=np.int64)
-        frame_ends = np.array([len(records)], dtype=np.int64)
-        return frame_starts, frame_ends
-    def _load_and_process(self):
-        records = self.ptu._load_records()
-        ch, dtime, nsync = self.ptu._decode_picoharp_t3(records)
-        frame_starts, frame_ends = self._find_frames(records, ch, dtime)
-        self.n_frames = len(frame_starts)
-        active_channels = np.unique(ch[ch != 0xF])
-        self.n_channels = len(active_channels)
-        self.active_channels = active_channels
-        ny = self.n_y_out
-        nx = self.n_x_out
-        nb = self.ptu.n_bins
-        self.array = np.zeros((self.n_frames, ny, nx, self.n_channels, nb),
-                              dtype=np.uint32)
-        for frame_idx, (fs, fe) in enumerate(zip(frame_starts, frame_ends)):
-            self._fill_frame(frame_idx, fs, fe, ch, dtime, active_channels)
-    def _fill_frame(self, frame_idx, start, end, ch, dtime, active_channels):
-        frame_mask = np.zeros(len(ch), dtype=bool)
-        frame_mask[start:end] = True
-        marker_mask = frame_mask & (ch == 0xF) & (dtime != 0)
-        marker_idx = np.where(marker_mask)[0]
-        marker_dtime = dtime[marker_mask]
-        line_start_mask = (marker_dtime & 1) != 0
-        line_start_abs = marker_idx[line_start_mask]
-        line_stop_mask = (marker_dtime & 2) != 0
-        line_stop_abs = marker_idx[line_stop_mask]
-        n_lines = min(len(line_start_abs), len(line_stop_abs))
-        photon_mask = frame_mask & (ch != 0xF) & np.isin(ch, active_channels)
-        photon_idx = np.where(photon_mask)[0]
-        photon_ch = ch[photon_idx]
-        photon_dtime = dtime[photon_idx].astype(np.int32)
-        ch_to_idx = {ch_val: idx for idx, ch_val in enumerate(active_channels)}
-        ny_out = self.n_y_out
-        nx_out = self.n_x_out
-        binning = self.binning
-        n_bins = self.ptu.n_bins
-        for line_num in range(n_lines):
-            ls = line_start_abs[line_num]
-            le = line_stop_abs[line_num]
-            if le <= ls:
-                continue
-            global_row = line_num % self.ptu.n_y
-            row_bin = global_row // binning
-            if row_bin >= ny_out:
-                continue
-            lo = np.searchsorted(photon_idx, ls, side='right')
-            hi = np.searchsorted(photon_idx, le, side='left')
-            if hi <= lo:
-                continue
-            line_ph_idx = photon_idx[lo:hi]
-            line_ph_ch = photon_ch[lo:hi]
-            line_ph_dt = photon_dtime[lo:hi]
-            line_len = le - ls
-            rel_pos = line_ph_idx - ls
-            col_full = (rel_pos * self.ptu.n_x) // line_len
-            col_bin = col_full // binning
-            col_bin = np.clip(col_bin, 0, nx_out - 1)
-            for i in range(len(line_ph_idx)):
-                tb = line_ph_dt[i]
-                if tb >= n_bins:
-                    continue
-                ch_val = line_ph_ch[i]
-                if ch_val not in ch_to_idx:
-                    continue
-                ch_idx = ch_to_idx[ch_val]
-                self.array[frame_idx, row_bin, col_bin[i], ch_idx, tb] += 1
-    def __getitem__(self, key):
-        return self.array[key]
-    @property
-    def shape(self):
-        return self.array.shape
-    @property
-    def dims(self):
-        return ('T', 'Y', 'X', 'C', 'H')
-    @property
-    def frequency(self):
-        return 1.0 / (self.n_bins * self.tcspc_res)
 
-def read_ptu(path, binning=1, channel=None,
-             verbose=False):
-    ptu = PTUFile(path, verbose=verbose)
-    data = ptu.pixel_stack(channel=channel, binning=binning)
-    metadata = {
+    def _ch_pos(self, channel):
+        channel = int(channel)
+        if channel in self._active:
+            return self._active.index(channel)
+        if 0 <= channel < self.n_channels:
+            return channel
+        if self.n_channels == 1:
+            return 0
+        raise ValueError(f'Channel {channel} not in PTU active channels {self._active}')
+
+    def summed_decay(self, channel=None):
+        channel = _norm_channel(channel)
+        h = np.asarray(self._ptu.decode_histogram(asxarray=False), dtype=float)
+        if h.ndim == 1:
+            h = h[None, :]
+        if channel is None:
+            pos = int(np.argmax(h.sum(axis=1)))
+            self.photon_channel = self._active[pos] if self._active else 0
+        else:
+            pos = self._ch_pos(channel)
+        decay = _fit_bins(h[pos], self.n_bins).astype(float)
+        self._total_photons = int(decay.sum())
+        return decay
+
+    def _decode_cube(self, channel):
+        channel = _norm_channel(channel)
+        if channel is None:
+            if self.photon_channel is None:
+                self.summed_decay(channel=None)
+            channel = self.photon_channel
+        pos = self._ch_pos(channel)
+        p = self._ptu
+        dims = dict(zip(p.dims, p.shape))
+        ny, nx = int(dims.get('Y', 0)), int(dims.get('X', 0))
+        if ny == 0 or nx == 0:
+            raise RuntimeError('PTU has no scan image (point-mode); use summed_decay')
+        arr = np.asarray(p.decode_image(channel=pos, frame=-1, asxarray=False))
+        cube = _reduce_yxh(arr, p.dims)
+        return _fit_bins(cube, self.n_bins).astype(np.uint32)
+
+    def raw_pixel_stack(self, channel=None, binning=1):
+        cube = self._decode_cube(channel)
+        if binning > 1:
+            cube = _bin_cube(cube, binning)
+        self._total_photons = int(cube.sum())
+        return cube.astype(np.uint32)
+
+    def pixel_stack(self, channel=None, binning=1):
+        return self.raw_pixel_stack(channel=channel, binning=binning).astype(float)
+
+    def intensity_image(self, channel=None, binning=1):
+        return self.raw_pixel_stack(channel=channel, binning=binning).sum(axis=2)
+
+def _metadata(ptu, data):
+    return {
         'frequency': ptu.sync_rate,
         'tcspc_resolution': ptu.tcspc_res,
         'shape': data.shape,
         'dims': ('Y', 'X', 'H'),
         'tags': ptu.tags,
-        'x_pixel_size': ptu.tags.get('ImgHdr_PixRes', 0),
-        'y_pixel_size': ptu.tags.get('ImgHdr_PixRes', 0),
+        'x_pixel_size': ptu.tags.get('ImgHdr_PixResol', ptu.tags.get('ImgHdr_PixRes', 0)),
+        'y_pixel_size': ptu.tags.get('ImgHdr_PixResol', ptu.tags.get('ImgHdr_PixRes', 0)),
         'n_bins': ptu.n_bins,
         'time_ns': ptu.time_ns,
         'photon_channel': ptu.photon_channel,
     }
-    return data, metadata
-def read_ptu_5d(path, binning=1, verbose=False):
+
+def read_ptu(path, binning=1, channel=None, verbose=False):
     ptu = PTUFile(path, verbose=verbose)
-    builder = PTUArray5D(ptu, binning=binning)
-    data = builder.array
-    metadata = {
-        'frequency': ptu.sync_rate,
-        'tcspc_resolution': ptu.tcspc_res,
-        'shape': data.shape,
-        'dims': builder.dims,
-        'tags': ptu.tags,
-        'x_pixel_size': ptu.tags.get('ImgHdr_PixRes', 0),
-        'y_pixel_size': ptu.tags.get('ImgHdr_PixRes', 0),
-        'n_channels': builder.n_channels,
-        'channel_list': list(builder.active_channels),
-    }
-    if verbose:
-        pass
+    data = ptu.pixel_stack(channel=channel, binning=binning)
+    metadata = _metadata(ptu, data)
     return data, metadata
+
 def get_intensity_image(path, binning=1, channel=None):
     data, metadata = read_ptu(path, binning=binning, channel=channel, verbose=False)
     img = data.sum(axis=2)
     return img, metadata
+
 def get_flim_data(path, binning=1, channel=None):
     return read_ptu(path, binning=binning, channel=channel, verbose=False)
+
 def normalise_flim(flim):
     if flim is None:
         return None
@@ -548,80 +262,6 @@ def normalise_flim(flim):
     if flim.ndim == 3:
         return flim
     return None
+
 def create_time_axis(n_bins, tcspc_resolution):
     return np.arange(n_bins) * tcspc_resolution * 1e9
-def decode_ptu(ptu_file):
-    if not Path(ptu_file).exists():
-        raise FileNotFoundError(f"File not found: {ptu_file}")
-    img, metadata = get_intensity_image(ptu_file)
-    return metadata['tags'], img, metadata
-def decode_t3_record(ptu_path):
-    if not Path(ptu_path).exists():
-        raise FileNotFoundError(f"PTU file not found: {ptu_path}")
-    ptu = PTUFile(ptu_path, verbose=False)
-    if ptu.rec_type != 0x00010303:
-        raise ValueError(
-            f"Unsupported record type: 0x{ptu.rec_type:08X}. "
-            'Expected PicoHarp T3 (0x00010303).'
-        )
-    records = ptu._load_records()
-    ch, dtime, nsync = ptu._decode_picoharp_t3(records)
-    return ch, dtime, nsync
-def decode_ptu_raw_cube(ptu_path, n_bins=None,
-                        tile_shape=None,
-                        channel=None):
-    cube, metadata = read_ptu(ptu_path, binning=1, channel=channel, verbose=False)
-    if n_bins is not None:
-        cube = cube[..., :n_bins]
-    return cube
-
-def get_flim_cube(path):
-    return read_ptu(path)[0]
-
-def get_raw_flim_cube(path, n_bins=None, tile_shape=None, channel=None):
-    return decode_ptu_raw_cube(path, n_bins, tile_shape, channel)
-
-def get_flim_histogram_from_ptufile(
-    ptu_path: Path,
-    rotate_cw: bool = True,
-    binning: int = 1,
-    channel: int = None
-) -> Tuple[np.ndarray, Dict[str, Any]]:
-    try:
-        from .reader import PTUFile
-        ptu = PTUFile(str(ptu_path), verbose=False)
-        if hasattr(ptu, 'raw_pixel_stack'):
-            stack = ptu.raw_pixel_stack(channel=channel, binning=binning)
-        else:
-            stack = ptu.pixel_stack(channel=channel, binning=binning)
-            if stack.max() <= 1.0 and stack.sum() > 0:
-                raise ValueError('Custom class returned normalized data')
-        if stack.sum() == 0:
-            raise ValueError('Custom class returned zero photons')
-        if rotate_cw:
-            stack = np.rot90(stack, k=-1, axes=(0, 1))
-        metadata = {
-            'tcspc_resolution': ptu.tcspc_res,
-            'n_time_bins': ptu.n_bins,
-            'tile_shape': (ptu.n_y // binning, ptu.n_x // binning),
-            'frequency': ptu.sync_rate,
-            'binning': binning,
-            'channel': channel,
-        }
-        return stack, metadata
-    except Exception as e:
-        from .decode import get_raw_flim_histogram
-        stack, meta = get_raw_flim_histogram(ptu_path, rotate_cw=rotate_cw)
-        if binning > 1:
-            from scipy.ndimage import zoom
-            zoom_factors = (1/binning, 1/binning, 1)
-            stack = zoom(stack, zoom_factors, order=0, mode='nearest')
-        metadata = {
-            'tcspc_resolution': meta['tcspc_resolution'],
-            'n_time_bins': meta['n_time_bins'],
-            'tile_shape': (stack.shape[0], stack.shape[1]),
-            'frequency': meta.get('frequency', None),
-            'binning': binning,
-            'channel': channel,
-        }
-        return stack, metadata

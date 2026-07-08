@@ -47,8 +47,8 @@ FLIMKit auto-detects the file type and routes everything through one loader (`FL
 
 | Format | Notes |
 |---|---|
-| PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic |
-| Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned); decoder written from B&H's SPCM docs and verified on sample data (`flimkit/formats/BH/NOTICE.md`) |
+| PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic. Read with Christoph Gohlke's `ptufile`; the original FLIMKit decoder is kept as a cross-checked reference in `flim-native-decoders` (`flimkit/formats/PTU/NOTICE.md`) |
+| Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned). Read with Christoph Gohlke's `sdtfile`; FLIMKit's own decoder (from B&H's SPCM docs, checked bit-for-bit against `sdtfile`) is kept as a reference in `flim-native-decoders` (`flimkit/formats/BH/NOTICE.md`) |
 | Photonscore `.photons` | Photonscore LINCam D7 container (position-sensitive). Pure-Python reader, no native dependency, validated bit-exact against the Photonscore SDK; `dt` calibration from the `TacChannel` attribute (`flimkit/formats/PS/NOTICE.md`) |
 | ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
 | ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor). Experimental, not yet validated on real ISS files (issue #19) |
@@ -604,14 +604,15 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 ### `flimkit.PTU` - PTU File I/O
 
 #### `reader.py`
-- **`PTUFile(path, verbose=False)`** - parse a PicoQuant PTU file. Extracts TCSPC metadata and T3 photon records.
+- **`PTUFile(path, verbose=False)`** - wraps Christoph Gohlke's `ptufile` and exposes the FLIMFile interface. Pins the TCSPC bin grid, integrates frames, and selects the photon channel.
   - `.summed_decay(channel=None)` - summed decay histogram
   - `.pixel_stack(channel=None, binning=1)` - (Y, X, H) histogram stack
-  - `.raw_pixel_stack(channel=None, binning=1)` - overflow-corrected pixel stack using nsync timing
+  - `.raw_pixel_stack(channel=None, binning=1)` - (Y, X, H) stack (uint32)
   - `.n_bins`, `.tcspc_res`, `.time_ns` - TCSPC metadata
+- **`read_pck(path)`** - reads PicoQuant Check / IRF `.pck` histograms (`ptufile` exposes only their tags, so this stays in FLIMKit)
 
 #### `decode.py`
-- Low-level T3 record decoding (PicoHarp, HydraHarp formats)
+- `get_flim_histogram_from_ptufile()` - `(Y, X, H)` stack + metadata for the tile-stitch pipeline
 - `create_time_axis()` - build time axis from PTU metadata
 
 #### `tools.py`

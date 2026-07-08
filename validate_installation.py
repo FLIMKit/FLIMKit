@@ -36,6 +36,8 @@ def check_dependencies():
         'numpy': 'NumPy',
         'scipy': 'SciPy',
         'tifffile': 'TiffFile',
+        'ptufile': 'ptufile (PicoQuant .ptu reading)',
+        'sdtfile': 'sdtfile (Becker & Hickl .sdt reading)',
         'phasorpy': 'PhasorPy',
         'xarray': 'xarray',
         'inquirer': 'Inquirer',

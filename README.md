@@ -1,5 +1,7 @@
 # FLIMKit
 
+[![tests](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml)
+
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
 FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag, Photonscore `.photons`). Built as a drop-in for FLIM microscope software, with two workflows:
@@ -107,7 +109,9 @@ FLIMKit auto-detects the file type and routes every format through one loader (`
 - TimeHarp 260 N / P T3
 - MultiHarp / generic T3
 
-**Becker & Hickl `.sdt` (SPC TCSPC):** the histogram / image `.sdt` files SPCM saves (per-pixel decays already binned). The decoder was written from Becker & Hickl's official SPCM file-structure documentation and verified against sample files. Thanks to Becker & Hickl for supporting this (see `flimkit/formats/BH/NOTICE.md`).
+Decoding and image reconstruction use Christoph Gohlke's [`ptufile`](https://github.com/cgohlke/ptufile). FLIMKit's original T3 decoder, checked against `ptufile` on 32 real files (Leica, PicoQuant, Chroma, Zeiss; image and point-mode), is kept as a reference in the separate `flim-native-decoders` repository (see `flimkit/formats/PTU/NOTICE.md`).
+
+**Becker & Hickl `.sdt` (SPC TCSPC):** the histogram / image `.sdt` files SPCM saves (per-pixel decays already binned). Read with Christoph Gohlke's [`sdtfile`](https://github.com/cgohlke/sdtfile); FLIMKit's own decoder, written from Becker & Hickl's official SPCM documentation and checked bit-for-bit against `sdtfile` on real files, is kept as a reference in `flim-native-decoders`. Thanks to Becker & Hickl for supporting this (see `flimkit/formats/BH/NOTICE.md`).
 
 **Photonscore `.photons` (LINCam, D7 container):** the position-sensitive photon-counting files from Photonscore's LINCam systems. Pure-Python reader for the D7 container (paged protobuf, seed plus delta-coded photon streams), decoded with no native dependency and validated bit-exact against the Photonscore SDK. Each photon carries an (x, y) position and a TCSPC micro-time, so the image is formed by binning the positions into a pixel grid and the decay by histogramming the micro-time; `dt` calibration comes from the file's `TacChannel` attribute. Thanks to Photonscore for supporting this and for open-sourcing the D7 format (see `flimkit/formats/PS/NOTICE.md`).
 
@@ -218,6 +222,8 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 **PhasorPy**: Gohlke, C. et al. Zenodo. https://doi.org/10.5281/zenodo.13862586
 
+**ptufile / sdtfile** (PicoQuant `.ptu` and Becker & Hickl `.sdt` readers): Gohlke, C. https://github.com/cgohlke/ptufile, https://github.com/cgohlke/sdtfile
+
 **Tile stitching**: Preibisch et al. (2009). *Bioinformatics* 25(11). https://doi.org/10.1093/bioinformatics/btp184
 
 **Cellpose-SAM**: Pachitariu & Stringer (2025). *bioRxiv*. https://doi.org/10.1101/2025.04.28.651001
@@ -226,7 +232,7 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
-FLIMKit reads several instrument formats. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported their readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. The PicoQuant `.ptu` reader was written from PicoQuant's published format documentation, without direct input from PicoQuant. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. FLIMKit's own `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
 ## Contact
 
