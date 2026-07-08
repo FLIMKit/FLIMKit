@@ -14,6 +14,12 @@ Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
 [Examples repo](https://github.com/alex1075/FLIMKit-Examples.git) | [Full documentation](documentation.md)
 
+## Screenshots
+
+![FLIMKit GUI](flimkit/ui.png)
+
+Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed decay curve, and full IRF deconvolution. The residual graph now displays beneath the tail fit for detailed fit quality assessment.
+
 ## Installation
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
