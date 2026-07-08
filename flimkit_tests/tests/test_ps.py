@@ -3,7 +3,8 @@ import pytest
 from flimkit.formats import FLIMFile, detect_format
 from flimkit.formats.flim_file import file_modality
 from flimkit.formats.PS.reader import PSFile, read_ps, get_intensity_image
-from flimkit.formats.PS import decode as pd
+from photonsfile import read_photons, has_dual_tdc
+import photonsfile._d7 as pd
 
 MAGIC = b'D7 Photons Data'
 
@@ -94,7 +95,7 @@ def test_detect_and_dispatch(tmp_path):
 def test_roundtrip_decode(tmp_path):
     path = tmp_path / 'sample.photons'
     streams = _sample(path)
-    out = pd.read_photons(str(path))
+    out = read_photons(str(path))
     for k in ('x', 'y', 'dt', 'ms'):
         assert np.array_equal(out[k], np.array(streams[k]))
     assert out['x'].dtype == np.uint16
@@ -166,8 +167,8 @@ def test_dual_tdc(tmp_path):
         ('/start/time', 3, start),
         ('/stop/time', 3, stop),
     ], {'/photons/PositionBits': '12'})
-    assert pd.has_dual_tdc(str(path))
-    out = pd.read_photons(str(path))
+    assert has_dual_tdc(str(path))
+    out = read_photons(str(path))
     assert np.array_equal(out['dt'], np.array([500, 400, 800]))
     assert np.array_equal(out['x'], np.array(x))
     ps = PSFile(str(path), verbose=False, n_bins=4)
@@ -179,15 +180,15 @@ def test_dual_tdc(tmp_path):
 def test_single_tdc_not_dual(tmp_path):
     path = tmp_path / 'sample.photons'
     _sample(path)
-    assert not pd.has_dual_tdc(str(path))
+    assert not has_dual_tdc(str(path))
     assert PSFile(str(path), verbose=False).dual_tdc is False
 
 def test_numpy_fallback_matches(tmp_path, monkeypatch):
     path = tmp_path / 'sample.photons'
     streams = _sample(path)
-    out_default = pd.read_photons(str(path))
+    out_default = read_photons(str(path))
     monkeypatch.setattr(pd, '_HAVE_NUMBA', False)
-    out_fallback = pd.read_photons(str(path))
+    out_fallback = read_photons(str(path))
     for k in ('x', 'y', 'dt', 'ms'):
         assert np.array_equal(out_default[k], out_fallback[k])
         assert np.array_equal(out_fallback[k], np.array(streams[k]))
@@ -202,7 +203,7 @@ def test_high_dataset_id(tmp_path):
         ('/photons/y', 5, [40, 50, 60]),
         ('/photons/dt', 5, [1, 2, 3]),
     ], _ATTRS)
-    out = pd.read_photons(str(path))
+    out = read_photons(str(path))
     assert np.array_equal(out['dt'], np.array([1, 2, 3]))
     assert np.array_equal(out['x'], np.array([10, 20, 30]))
     assert np.array_equal(out['y'], np.array([40, 50, 60]))

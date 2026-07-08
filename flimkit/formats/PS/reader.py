@@ -1,16 +1,16 @@
 import numpy as np
 from pathlib import Path
-from . import decode as pd
+from photonsfile import read_header, read_attributes, has_dual_tdc, read_photons
 
 class PSFile:
     def __init__(self, path, verbose=True, channel=None, pixels=512,
                  n_bins=256, period_ns=None):
         self.path = str(path)
         self.verbose = verbose
-        self.header = pd.read_header(self.path)
-        self.attrs = pd.read_attributes(self.path)
+        self.header = read_header(self.path)
+        self.attrs = read_attributes(self.path)
         self._names = [d['name'] for d in self.header['datasets']]
-        self.dual_tdc = pd.has_dual_tdc(self.path)
+        self.dual_tdc = has_dual_tdc(self.path)
         self.pos_range = 1 << int(self.attrs.get('/photons/PositionBits', 12))
         self.tac_range = 1 << int(self.attrs.get('/photons/TacBits', 12))
         self.pixels = int(pixels)
@@ -90,7 +90,7 @@ class PSFile:
 
     def _ensure_streams(self):
         if self._streams is None:
-            self._streams = pd.read_photons(self.path)
+            self._streams = read_photons(self.path)
             if self.dual_tdc and 'dt' in self._streams:
                 dt = np.asarray(self._streams['dt'])
                 dt = dt[dt >= 0]
