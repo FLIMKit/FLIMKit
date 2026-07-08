@@ -2,6 +2,7 @@
 
 This reader decodes Photonscore LINCam `.photons` files (the "D7" container), the
 position-sensitive photon-counting format written by Photonscore's LINCam systems.
+The decoder is delegated to the `photonsfile` library (https://github.com/alex1075/photonsfile).
 
 ## Acknowledgement
 
@@ -11,11 +12,11 @@ SDK and a sample `.photons` file, and open-sourced the D7 storage format at
 Photonscore's request the credit here is to the company rather than to an
 individual.
 
-The decoder in `decode.py` is original FLIMKit code. It was first worked out from
-the SDK and the sample file, then checked field for field against the public D7
-specification. No Photonscore source is redistributed here. The reader is pure
-Python (numpy, with an optional numba path) and needs none of Photonscore's native
-libraries.
+The D7 decoder was originally developed as FLIMKit code, worked out from the SDK
+and sample file, then checked field for field against the public D7 specification.
+It has been spun out to the `photonsfile` library for reuse. The decoder is pure
+Python (numpy, with an optional numba JIT path) and needs none of Photonscore's
+native libraries. See photonsfile for full credits and documentation.
 
 ## Format reference (verified bit-exact against the SDK)
 
