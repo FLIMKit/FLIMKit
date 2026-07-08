@@ -14,7 +14,7 @@ Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
 [Examples repo](https://github.com/alex1075/FLIMKit-Examples.git) | [Full documentation](documentation.md)
 
-## Screenshots
+## GUI
 
 ![FLIMKit GUI](flimkit/ui.png)
 
