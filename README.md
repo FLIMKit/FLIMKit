@@ -1,8 +1,4 @@
-# FLIMKit
-
-<div align="center">
-  <img src="flimkit/UI/icon.png" alt="FLIMKit" width="200">
-</div>
+# <img src="flimkit/UI/icon.png" alt="" width="32" height="32"> FLIMKit
 
 [![tests](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml)
 
