@@ -66,5 +66,5 @@ def test_resolve_ptu_channel_rejects_invalid_explicit_channel(monkeypatch):
         lambda path: [1, 3],
     )
 
-    with pytest.raises(ValueError, match="Available channels: \[1, 3\]"):
+    with pytest.raises(ValueError, match=r"Available channels: \[1, 3\]"):
         phasor_launcher.resolve_ptu_channel("fake.ptu", channel=2)
