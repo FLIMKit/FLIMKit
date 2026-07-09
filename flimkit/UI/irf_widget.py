@@ -4,7 +4,6 @@ from tkinter import ttk
 from typing import Optional
 from flimkit.UI.utils import _browse_file, _section
 class IRFWidget:
-    # Sentinel to detect that the path was auto-filled (not user-entered)
     _AUTO_FILL = object()
     CHOICES = [
         ('Analytical model (XLSX)',                      'irf_xlsx'),
@@ -47,8 +46,10 @@ class IRFWidget:
             _browse_file(self.sv_path, 'Select machine IRF',
                          [('NumPy array', '*.npy'), ('All', '*.*')])
         else:
+            from flimkit.formats import supported_extensions
+            _flim = ' '.join('*' + e for e in supported_extensions())
             _browse_file(self.sv_path, 'Select IRF file',
-                         [('FLIM / XLSX', '*.ptu *.sdt *.photons *.xlsx'), ('All', '*.*')])
+                         [('FLIM / XLSX', _flim + ' *.xlsx'), ('All', '*.*')])
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(

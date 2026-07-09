@@ -29,7 +29,7 @@ class ScanRecord:
     def session_path(self):
         if self.scan_type == 'fov':
             p = Path(self.source_path)
-            candidate = p.parent / f"{p.stem}.roi_session.npz"
+            candidate = p.parent / f'{p.stem}.roi_session.npz'
         else:
             if not self.out_st:
                 return None
@@ -41,7 +41,7 @@ class ScanRecord:
         if self.scan_type != 'fov':
             return None
         p = Path(self.source_path)
-        candidate = p.parent / f"{p.stem}_phasor.npz"
+        candidate = p.parent / f'{p.stem}_phasor.npz'
         return candidate if candidate.exists() else None
 
     @property
@@ -51,7 +51,6 @@ class ScanRecord:
     @property
     def has_phasor_session(self):
         return self.phasor_session_path is not None
-
 
 class ProjectFile:
 
@@ -76,7 +75,7 @@ class ProjectFile:
                     pf.scans[stem] = ScanRecord(**rec_dict)
                 pf.config = data.get('config', {})
             except Exception as exc:
-                print(f"[Project] Warning: could not read {json_path.name}: {exc}")
+                print(f'[Project] Warning: could not read {json_path.name}: {exc}')
         pf._scan_folder()
         return pf
 
@@ -92,13 +91,15 @@ class ProjectFile:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
 
     def _scan_folder(self):
-        flim_files = sorted(p for ext in ('*.ptu', '*.sdt', '*.photons')
+        from flimkit.formats import supported_extensions
+        _globs = tuple('*' + e for e in supported_extensions())
+        flim_files = sorted(p for ext in _globs
                             for p in self.project_dir.glob(ext))
         for ptu in flim_files:
             if ptu.name.startswith('._'):
                 continue
             if ptu.stem not in self.scans:
-                xlsx_file = self.project_dir / f"{ptu.stem}.xlsx"
+                xlsx_file = self.project_dir / f'{ptu.stem}.xlsx'
                 xlsx_path = str(xlsx_file) if xlsx_file.exists() and not xlsx_file.name.startswith('._') else None
                 self.scans[ptu.stem] = ScanRecord(
                     stem=ptu.stem,

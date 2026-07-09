@@ -13,9 +13,7 @@ try:
 except ImportError:
     HAS_DND = False
 
-
 _cfg: dict = {}
-
 
 def _C() -> dict:
     if not _cfg:
@@ -46,23 +44,10 @@ def _C() -> dict:
         )
     return _cfg
 
-
-
 def _reconstruct_dict_from_session(session_data: dict, key: str) -> dict:
-    """
-    Inverse of the hoisting done in _save_roi_progress.
-    Reconstructs a dict from JSON + hoisted numpy arrays stored separately.
-    
-    Args:
-        session_data: The session/fit result dict containing "key_json" and "key_arr_*" entries
-        key: Base key name (e.g. "global_summary" or "pixel_maps")
-    
-    Returns:
-        Reconstructed dict with arrays reattached
-    """
     import json
     result = {}
-    json_str = session_data.get(f"{key}_json")
+    json_str = session_data.get(f'{key}_json')
     if json_str:
         if isinstance(json_str, (bytes, np.ndarray)):
             json_str = json_str.item() if hasattr(json_str, 'item') else json_str.decode()
@@ -70,20 +55,13 @@ def _reconstruct_dict_from_session(session_data: dict, key: str) -> dict:
             result = json.loads(json_str)
         except Exception:
             pass
-    
-    prefix = f"{key}_arr_"
+    prefix = f'{key}_arr_'
     for skey, sval in session_data.items():
         if skey.startswith(prefix) and isinstance(sval, np.ndarray):
             result[skey[len(prefix):]] = sval
-    
     return result
 
-
 def _safe_array_from_json(value) -> np.ndarray:
-    """
-    Safely convert a value that may be a string representation of an array
-    back to a real numpy array. Handles numpy scalar wrappers.
-    """
     if isinstance(value, np.ndarray):
         return value
     if isinstance(value, (bytes, np.ndarray)):
@@ -94,14 +72,12 @@ def _safe_array_from_json(value) -> np.ndarray:
     if isinstance(value, str):
         try:
             import re
-            # Try to parse numpy array string format: [1.0 2.0 3.0] with optional formatting
             value = re.sub(r'\s+', ' ', value.strip())
             value = value.replace('e+', 'e+').replace('e-', 'e-')
             return np.fromstring(value.strip('[]'), sep=' ')
         except Exception:
             pass
     return np.asarray(value)
-
 
 def _parse_summary(captured_log: str) -> list:
     rows = []
@@ -117,7 +93,6 @@ def _parse_summary(captured_log: str) -> list:
                 else:
                     rows.append((param, rest, ''))
     return rows
-
 
 class _Redirect:
 
@@ -136,22 +111,17 @@ class _Redirect:
             return
         self.buf.append(text)
         self._batch.append(text)
-
-        # Forward stderr content to crash handler log
         if self._is_stderr:
             try:
                 from flimkit.utils.crash_handler import log_event
-                log_event(f"STDERR: {text.rstrip()}", level='warning')
+                log_event(f'STDERR: {text.rstrip()}', level='warning')
             except Exception:
                 pass
-        
-        # Flush if batch is large or timeout elapsed
-        should_flush = False
+                should_flush = False
         if len(''.join(self._batch)) >= self._batch_size:
             should_flush = True
         elif time.time() - self._last_flush >= self._flush_interval:
             should_flush = True
-        
         if should_flush:
             self._flush_batch()
 
@@ -160,14 +130,11 @@ class _Redirect:
             return
         text = ''.join(self._batch)
         self._batch.clear()
-        
-        # Use root.after() for thread-safe GUI updates if root is available
         if self.root:
             self.root.after(0, self._update_widget, text)
         else:
-            # Fallback to direct update (not thread-safe but works in single-threaded context)
             self._update_widget(text)
-    
+
     def _update_widget(self, text):
         try:
             self.widget.configure(state='normal')
@@ -181,7 +148,6 @@ class _Redirect:
 
     def flush(self):
         self._flush_batch()
-
 
 class _FileRedirect:
 
@@ -219,7 +185,6 @@ class _FileRedirect:
                 pass
             self._file = None
 
-
 class _FileTailer:
 
     def __init__(self, filepath: str, widget: scrolledtext.ScrolledText, update_interval_ms: int = 200):
@@ -237,19 +202,14 @@ class _FileTailer:
     def _poll_file(self, root):
         if not self._running:
             return
-        
         try:
             if not Path(self.filepath).exists():
                 root.after(self.update_interval_ms, lambda: self._poll_file(root))
                 return
-            
-            # Read new content from file
             with open(self.filepath, 'r') as f:
                 f.seek(self._last_pos)
                 new_content = f.read()
                 self._last_pos = f.tell()
-            
-            # Update widget if there's new content
             if new_content:
                 self.widget.configure(state='normal')
                 self.widget.insert(tk.END, new_content)
@@ -258,40 +218,25 @@ class _FileTailer:
                 self.widget.update_idletasks()
         except Exception:
             pass
-        
-        # Schedule next poll
         root.after(self.update_interval_ms, lambda: self._poll_file(root))
 
     def stop(self):
         self._running = False
 
-
 PAD = dict(padx=8, pady=4)
 
-# default open-dialog filter: every format FLIMFile can route, not just .ptu
-FLIM_FILETYPES = [
-    ('FLIM files', '*.ptu *.sdt *.tagtime *.tagchannel *.tagdecay *.ifi *.ifli *.photons'),
-    ('PicoQuant PTU', '*.ptu'),
-    ('Becker & Hickl SDT', '*.sdt'),
-    ('ISS time-tag', '*.tagtime *.tagchannel *.tagdecay'),
-    ('ISS image', '*.ifi'),
-    ('ISS FD-FLIM (phasor)', '*.ifli'),
-    ('Photonscore .photons', '*.photons'),
-    ('All', '*.*'),
-]
-
+from flimkit.formats import file_dialog_filetypes
+FLIM_FILETYPES = file_dialog_filetypes() + [('All', '*.*')]
 
 def _browse_file(var, title='Select file', filetypes=(('All', '*.*'),)):
     p = filedialog.askopenfilename(title=title, filetypes=filetypes)
     if p:
         var.set(p)
 
-
 def _browse_dir(var, title='Select directory'):
     p = filedialog.askdirectory(title=title)
     if p:
         var.set(p)
-
 
 def _row(parent, label, var, row, browse_fn, width=45, state='normal'):
     ttk.Label(parent, text=label).grid(
@@ -300,8 +245,6 @@ def _row(parent, label, var, row, browse_fn, width=45, state='normal'):
     e.grid(row=row, column=1, sticky='ew', padx=4, pady=3)
     ttk.Button(parent, text='Browse...', command=browse_fn).grid(
         row=row, column=2, padx=4, pady=3)
-    
-    # Add drag-and-drop support if available
     if HAS_DND:
         try:
             def _drop_handler(event):
@@ -309,27 +252,21 @@ def _row(parent, label, var, row, browse_fn, width=45, state='normal'):
                 if data.startswith('{') and data.endswith('}'):
                     data = data[1:-1]
                 var.set(data)
-            
             e.drop_target_register(DND_FILES, DND_TEXT)
             e.dnd_bind('<<Drop>>', _drop_handler)
         except Exception:
             pass
-    
     return e
 
-
 def _section(parent, text: str) -> ttk.LabelFrame:
-    return ttk.LabelFrame(parent, text=f"  {text}  ", padding=(10, 6))
-
+    return ttk.LabelFrame(parent, text=f'  {text}  ', padding=(10, 6))
 
 def _tog(bvar: tk.BooleanVar, entry: ttk.Entry):
     entry.configure(state='normal' if bvar.get() else 'disabled')
 
-
 def _flt(sv: tk.StringVar) -> Optional[float]:
     v = sv.get().strip()
     return float(v) if v and v.lower() != 'none' else None
-
 
 def _thresh(bvar: tk.BooleanVar, sv: tk.StringVar):
     if not bvar.get():

@@ -4,21 +4,18 @@ from pathlib import Path
 
 import numpy as np
 
-
-
 def _yes_no(question):
     import inquirer
     ans = inquirer.prompt([inquirer.List(
         'yesno', message=question, choices=['Yes', 'No'])])
     return ans['yesno'] == 'Yes'
 
-
 def _ask_path(message, *, optional=False):
     import inquirer
     hint = ' (leave blank to skip)' if optional else ''
     ans = inquirer.prompt([
         inquirer.Path('path',
-                      message=f"{message}{hint}",
+                      message=f'{message}{hint}',
                       path_type=inquirer.Path.FILE,
                       exists=not optional)])
     val = (ans or {}).get('path', '').strip()
@@ -26,14 +23,10 @@ def _ask_path(message, *, optional=False):
         return None
     return val
 
-
 def _pick_save_file(title: str, default_name: str) -> str | None:
     try:
         import tkinter as tk
         from tkinter import filedialog
-
-        # Reuse an existing Tk root (e.g. when called from the FLIMkit GUI)
-        # rather than creating a second conflicting root window.
         existing = tk._default_root
         if existing is not None:
             parent = existing
@@ -42,7 +35,6 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
             parent = tk.Tk()
             parent.withdraw()
             need_destroy = True
-
         parent.attributes('-topmost', True)
         parent.update()
         path = filedialog.asksaveasfilename(
@@ -55,10 +47,8 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
             parent.destroy()
         return path or None
     except Exception:
-        path = input(f"Save path [{default_name}]: ").strip().strip('"')
+        path = input(f'Save path [{default_name}]: ').strip().strip('"')
         return path or default_name
-
-
 
 def save_session(path, *,
                  real_cal,
@@ -74,7 +64,6 @@ def save_session(path, *,
     cursor_g = np.array([c['center_g'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
     cursor_s = np.array([c['center_s'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
     cursor_colors = np.array([c['color'] for c in cursors], dtype='U10') if n else np.array([], dtype='U10')
-
     save_kw = dict(
         real_cal=real_cal,
         imag_cal=imag_cal,
@@ -91,10 +80,8 @@ def save_session(path, *,
     )
     if display_image is not None:
         save_kw['display_image'] = np.asarray(display_image)
-
     np.savez_compressed(path, **save_kw)
-    print(f"Session saved → {path}  ({n} cursor(s))")
-
+    print(f'Session saved → {path}  ({n} cursor(s))')
 
 def load_session(path):
     d = np.load(path, allow_pickle=False)
@@ -125,21 +112,16 @@ def load_session(path):
         display_image=d['display_image'] if 'display_image' in d else None,
     )
 
-
-
 def get_ptu_active_channels(ptu_path):
     from flimkit.formats import FLIMFile
-
     ptu = FLIMFile(str(ptu_path), verbose=False)
     records = ptu._load_records()
     special, ch_raw, _, _ = ptu._decode_records(records)
     active_channels = np.unique(ch_raw[~special]).astype(int)
     return sorted(int(channel) for channel in active_channels)
 
-
 def _prompt_ptu_channel(active_channels):
     import inquirer
-
     answer = inquirer.prompt([inquirer.List(
         'channel',
         message=(
@@ -152,7 +134,6 @@ def _prompt_ptu_channel(active_channels):
         raise ValueError('No channel selected for phasor analysis')
     return int(str(answer['channel']).split()[-1])
 
-
 def resolve_ptu_channel(
     ptu_path,
     channel=None,
@@ -162,7 +143,6 @@ def resolve_ptu_channel(
     active_channels = get_ptu_active_channels(ptu_path)
     if not active_channels:
         raise ValueError('No photon channels found in PTU file')
-
     if channel is not None:
         selected_channel = int(channel)
         if selected_channel not in active_channels:
@@ -171,15 +151,12 @@ def resolve_ptu_channel(
                 f'Available channels: {active_channels}'
             )
         return selected_channel
-
     if len(active_channels) == 1:
         selected_channel = active_channels[0]
         print(f'Auto-selected channel {selected_channel} (only channel available)')
         return selected_channel
-
     if prompt_fn is None:
         prompt_fn = _prompt_ptu_channel
-
     selected_channel = int(prompt_fn(active_channels))
     if selected_channel not in active_channels:
         raise ValueError(
@@ -194,41 +171,33 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
     from .formats.PTU.tools import signal_from_PTUFile
     from flimkit.formats import FLIMFile
     from .phasor.signal import get_phasor_irf, calibrate_signal_with_irf
-
-    print(f"Loading PTU file: {ptu_path}")
+    print(f'Loading PTU file: {ptu_path}')
     channel = resolve_ptu_channel(ptu_path, channel=channel)
-
-    print(f"Using channel: {channel}")
+    print(f'Using channel: {channel}')
     signal = signal_from_PTUFile(ptu_path, dtype=np.uint32, binning=4, channel=channel)
     frequency = float(signal.attrs['frequency'])
-
-    print(f"Computing phasors (frequency = {frequency:.2f} MHz) ...")
+    print(f'Computing phasors (frequency = {frequency:.2f} MHz) ...')
     mean, real, imag = phasor_from_signal(signal, axis='H')
-
-    # Build a spatially-correct intensity image via raw_pixel_stack
-    # (uses nsync timing → accurate pixel positions for the FOV overlay)
     ptu = FLIMFile(str(ptu_path), verbose=False)
     display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)
-
     if irf_path:
         from .phasor.signal import calibrate_signal_with_machine_irf
         irf_path_p = Path(irf_path)
         if irf_path_p.suffix.lower() == '.npy':
-            print(f"Calibrating with machine IRF (.npy): {irf_path}")
+            print(f'Calibrating with machine IRF (.npy): {irf_path}')
             real_cal, imag_cal = calibrate_signal_with_machine_irf(
                 signal, real, imag, irf_path, frequency)
         else:
-            print(f"Calibrating with IRF (.xlsx): {irf_path}")
+            print(f'Calibrating with IRF (.xlsx): {irf_path}')
             irf_time_ns, irf_counts = get_phasor_irf(irf_path)
             real_cal, imag_cal = calibrate_signal_with_irf(
                 signal, real, imag, irf_time_ns, irf_counts, frequency)
     else:
         print(' No IRF - using uncalibrated phasor coordinates.')
         real_cal, imag_cal = real, imag
-
     if phasor_filter:
         from .phasor.filters import phasor_filter as _filter_fn
-        print(f"Applying phasor filter: {phasor_filter} ...")
+        print(f'Applying phasor filter: {phasor_filter} ...')
         real_cal, imag_cal = _filter_fn(
             np.asarray(real_cal, dtype=float),
             np.asarray(imag_cal, dtype=float),
@@ -236,7 +205,6 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
             mean=np.asarray(mean, dtype=float),
             **(filter_kwargs or {}),
         )
-
     return dict(
         real_cal=np.asarray(real_cal),
         imag_cal=np.asarray(imag_cal),
@@ -258,15 +226,12 @@ def launch_phasor(ptu_path=None,
                   max_cursors=6,
                   figsize=(8, 5)):
     from .phasor.interactive import phasor_cursor_tool
-
+    from flimkit.formats import file_modality
     initial_cursors = None
     initial_params = None
     src_ptu = ptu_path
     src_irf = irf_path
-
-
     if session_path is None and ptu_path is None:
-        # Interactive inquirer flow
         import inquirer
         mode = inquirer.prompt([inquirer.List(
             'mode',
@@ -276,7 +241,6 @@ def launch_phasor(ptu_path=None,
                 'Resume a saved session (.npz)',
             ],
         )])['mode']
-
         if mode.startswith('Resume'):
             session_path = _ask_path('Path to saved .npz session')
             if session_path is None:
@@ -287,10 +251,8 @@ def launch_phasor(ptu_path=None,
             if ptu_path is None:
                 print('No file specified - aborting.')
                 return {}
-
-
     if session_path:
-        print(f"Loading session: {session_path}")
+        print(f'Loading session: {session_path}')
         sess = load_session(session_path)
         data = dict(
             real_cal=sess['real_cal'],
@@ -303,9 +265,9 @@ def launch_phasor(ptu_path=None,
         initial_params = sess['params']
         src_ptu = sess.get('ptu_file')
         src_irf = sess.get('irf_file')
-        print(f"  frequency = {data['frequency']:.2f} MHz, "
-              f"{len(sess['cursors'])} cursor(s) restored")
-    elif ptu_path and str(ptu_path).lower().endswith('.ifli'):
+        print(f'  frequency = {data['frequency']:.2f} MHz, '
+              f'{len(sess['cursors'])} cursor(s) restored')
+    elif ptu_path and file_modality(ptu_path) == 'frequency':
         from .phasor.signal import process_ifli
         data = process_ifli(ptu_path, phasor_filter=phasor_filter,
                             filter_kwargs=filter_kwargs, channel=channel)
@@ -325,8 +287,6 @@ def launch_phasor(ptu_path=None,
                 machine_irf_path = _ask_path('Path to machine IRF (.npy)')
         effective_irf = irf_path or machine_irf_path
         src_irf = effective_irf
-        # machine_irf_path takes precedence as the calibration source
-        # if no XLSX IRF is supplied
         effective_irf = irf_path or machine_irf_path
         data = _process_ptu(ptu_path, effective_irf, channel=channel,
                             phasor_filter=phasor_filter,
@@ -335,7 +295,7 @@ def launch_phasor(ptu_path=None,
 
     def _save_callback(state, params):
         stem = Path(src_ptu).stem if src_ptu else 'phasor_session'
-        default_name = f"{stem}_session.npz"
+        default_name = f'{stem}_session.npz'
         out = _pick_save_file('Save phasor session', default_name)
         if out:
             save_session(
@@ -350,7 +310,6 @@ def launch_phasor(ptu_path=None,
                 irf_file=src_irf,
                 display_image=_data.get('display_image'),
             )
-
     state = phasor_cursor_tool(
         data['real_cal'],
         data['imag_cal'],
@@ -364,11 +323,9 @@ def launch_phasor(ptu_path=None,
     )
     return state
 
-
 def phasor_inquire():
     print('\n Interactive Phasor Analysis')
     return launch_phasor()
-
 
 if __name__ == '__main__':
     phasor_inquire()
