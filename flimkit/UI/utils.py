@@ -117,7 +117,7 @@ class _Redirect:
                 log_event(f'STDERR: {text.rstrip()}', level='warning')
             except Exception:
                 pass
-                should_flush = False
+        should_flush = False
         if len(''.join(self._batch)) >= self._batch_size:
             should_flush = True
         elif time.time() - self._last_flush >= self._flush_interval:

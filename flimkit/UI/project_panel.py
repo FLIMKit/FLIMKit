@@ -9,6 +9,7 @@ _ICON_BOTH        = '◉'
 _ICON_NOSESSION   = '○'
 _ICON_FOV  = 'F'
 _ICON_XLIF = 'T'
+_ICON_ZSTACK = 'Z'
 
 
 class ProjectBrowserPanel:
@@ -158,7 +159,12 @@ class ProjectBrowserPanel:
                 session_dot = _ICON_PHASOR_ONLY
             else:
                 session_dot = _ICON_NOSESSION
-            type_tag    = _ICON_XLIF if rec.scan_type == 'xlif' else _ICON_FOV
+            if rec.scan_type == 'xlif':
+                type_tag = _ICON_XLIF
+            elif rec.scan_type == 'zstack':
+                type_tag = _ICON_ZSTACK
+            else:
+                type_tag = _ICON_FOV
             label = f"{session_dot} {type_tag} {stem}"
             self._lb.insert(tk.END, label)
             self._stems.append(stem)
@@ -238,6 +244,29 @@ class ProjectBrowserPanel:
             else:
                 if rec.session_path and hasattr(app, '_load_fitted_data_from_file'):
                     app._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)
+
+        elif rec.scan_type == 'zstack':
+            app._switch_form('fov')
+            if hasattr(app, 'sv_fov_analysis'):
+                app.sv_fov_analysis.set('zstack')
+                if hasattr(app, '_on_fov_analysis_changed'):
+                    app._on_fov_analysis_changed()
+            if hasattr(app, 'sv_zstack_dir'):
+                app.sv_zstack_dir.set(rec.ptu_dir or rec.source_path)
+            if hasattr(app, 'sv_out_fov'):
+                app.sv_out_fov.set(rec.stem)
+            if rec.session_path and hasattr(app, '_fov_preview'):
+                try:
+                    from flimkit.FLIM.zstack import load_zstack_display_slices
+                    group_dir = Path(rec.session_path).parent
+                    slices = load_zstack_display_slices(
+                        group_dir, ptu_dir=rec.ptu_dir, region=rec.stem)
+                    if slices:
+                        app._fov_preview.display_zstack(slices)
+                    if hasattr(app, '_populate_zstack_summary_from_dir'):
+                        app._populate_zstack_summary_from_dir(group_dir)
+                except Exception as exc:
+                    print(f'[Project] Could not reload z-stack {rec.stem}: {exc}')
 
         else:
             app._switch_form('stitch')

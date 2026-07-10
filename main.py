@@ -25,17 +25,14 @@ def main(fast=False, cli=False, check_updates=False):
         )
         print(report)
         return
-
     if not cli:
         from flimkit.UI.gui import launch_gui
         launch_gui()
         return
-    
-    from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles, timelapse_flim_fit
+    from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles, timelapse_flim_fit, zstack_flim_fit
     import inquirer
     from flimkit._version import __version__, roadmap
     from flimkit.utils.fancy import display_banner, flim_fitting_banner, banner_goodbye
-    
     if fast == False:
         display_banner()
     print("Welcome to the FLIM data processing tool!")
@@ -50,35 +47,33 @@ def main(fast=False, cli=False, check_updates=False):
                 'Reconstruct a FOV and FLIM FIT',
                 'Just stitch multiple tiles together',
                 'Timelapse batch fit',
+                'Z-stack batch fit',
                 'About',
                 'Exit'
             ]
         )
     ]
     answers = inquirer.prompt(questions)
-
     if answers['process_option'] == 'FLIM FIT a single FOV':
         if fast == False:
             flim_fitting_banner()
         print("FLIM FITting a single FOV...")
         single_FOV_flim_fit(interactive=True)
-
     elif answers['process_option'] == 'Phasor analysis':
         from flimkit.phasor_launcher import phasor_inquire
         phasor_inquire()
-
     elif answers['process_option'] == 'Reconstruct a FOV and FLIM FIT':
         print("Reconstructing a FOV and FLIM FITting...")
         stitch_and_fit(interactive=True)
-
     elif answers['process_option'] == 'Just stitch multiple tiles together':
         print("Stitching multiple tiles together...")
         stitch_tiles(interactive=True)
-
     elif answers['process_option'] == 'Timelapse batch fit':
         print("Timelapse batch FLIM fitting...")
         timelapse_flim_fit(interactive=True)
-
+    elif answers['process_option'] == 'Z-stack batch fit':
+        print("Z-stack batch FLIM fitting...")
+        zstack_flim_fit(interactive=True)
     elif answers['process_option'] == 'About':
         print('Current version: ' + __version__)
         try:

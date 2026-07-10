@@ -6,7 +6,7 @@
 
 FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag, Photonscore `.photons`). Built as a drop-in for FLIM microscope software, with two workflows:
 
-- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
+- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, timelapse and z-stack analysis (a stack fitted as one FOV with a shared reference lifetime), and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
 - **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
 - **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, spatial filtering (gaussian/median/wavelet), two-component decomposition, automatic peak detection, session save/load
 
@@ -78,7 +78,7 @@ Requires Docker Desktop with buildx. On Apple Silicon, buildx cross-compiles for
 python main.py
 ```
 
-Five tabs: **Single FOV Fit**, **Tile Stitch / Fit**, **Batch ROI Fit**, **Machine IRF Builder**, **Phasor Analysis**. The right panel shows an FOV preview (intensity image + summed decay) and switches to the interactive phasor view when that tab is active.
+Five tabs: **Single FOV Fit**, **Tile Stitch / Fit**, **Batch ROI Fit**, **Machine IRF Builder**, **Phasor Analysis**. The right panel shows an FOV preview (intensity image + summed decay) and switches to the interactive phasor view when that tab is active. The Single FOV Fit tab has an Analysis toggle next to the input file: switch it to **Z-stack** to pick a folder of `region_zX.ptu` slices (one PTU per z-slice, e.g. a Leica `.sptw` workspace) and fit the whole stack as one FOV with a shared reference lifetime. The FOV Preview shows the intensity when you pick the folder and the fitted FLIM after fitting, with a z-slider (shown only for a z-stack) to scroll through depth. In a project folder, a z-stack appears as one collapsed entry (a `Z` tag) in the browser and reloads its fitted stack when selected.
 
 ### Terminal UI
 
@@ -208,7 +208,7 @@ python run_tests.py integration  # integration tests only
 
 ## Roadmap
 
-Done: single FOV fitting, tile stitching, batch ROI processing, phasor analysis, GUI, session restoration, compiled app, ROI analysis with QuPath export.
+Done: single FOV fitting, tile stitching, batch ROI processing, timelapse and z-stack analysis, phasor analysis, GUI, session restoration, compiled app, ROI analysis with QuPath export.
 
 Up next: config persistence, stat histograms, auto-region detection, batch n-exp in GUI. Chemical validation and publication pending.
 

@@ -30,6 +30,10 @@ class ScanRecord:
         if self.scan_type == 'fov':
             p = Path(self.source_path)
             candidate = p.parent / f'{p.stem}.roi_session.npz'
+        elif self.scan_type == 'zstack':
+            if not self.out_st:
+                return None
+            candidate = Path(self.out_st) / self.stem / f'{self.stem}_reference_fit.json'
         else:
             if not self.out_st:
                 return None
@@ -92,11 +96,23 @@ class ProjectFile:
 
     def _scan_folder(self):
         from flimkit.formats import supported_extensions
+        zstack_groups = {}
+        zstack_slice_paths = set()
+        try:
+            from flimkit.FLIM.zstack import group_zstack_files
+            for (region, t, s), zslices in group_zstack_files(self.project_dir).items():
+                if t == 0 and s == 0 and len(zslices) >= 2:
+                    zstack_groups[region] = zslices
+                    zstack_slice_paths.update(str(p) for p in zslices.values())
+        except Exception:
+            pass
         _globs = tuple('*' + e for e in supported_extensions())
         flim_files = sorted(p for ext in _globs
                             for p in self.project_dir.glob(ext))
         for ptu in flim_files:
             if ptu.name.startswith('._'):
+                continue
+            if str(ptu) in zstack_slice_paths:
                 continue
             if ptu.stem not in self.scans:
                 xlsx_file = self.project_dir / f'{ptu.stem}.xlsx'
@@ -109,6 +125,17 @@ class ProjectFile:
                     out_st=None,
                     output_prefix=None,
                     xlsx_path=xlsx_path,
+                )
+        for region in zstack_groups:
+            if region not in self.scans:
+                self.scans[region] = ScanRecord(
+                    stem=region,
+                    scan_type='zstack',
+                    source_path=str(self.project_dir),
+                    ptu_dir=str(self.project_dir),
+                    out_st=str(self.output_base),
+                    output_prefix=None,
+                    xlsx_path=None,
                 )
         for xlif in sorted(self.project_dir.glob('*.xlif')):
             if xlif.name.startswith('._'):
