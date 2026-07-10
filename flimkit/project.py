@@ -99,7 +99,7 @@ class ProjectFile:
         zstack_groups = {}
         zstack_slice_paths = set()
         try:
-            from flimkit.FLIM.zstack import group_zstack_files
+            from flimkit.utils.batch_fit import group_zstack_files
             for (region, t, s), zslices in group_zstack_files(self.project_dir).items():
                 if t == 0 and s == 0 and len(zslices) >= 2:
                     zstack_groups[region] = zslices

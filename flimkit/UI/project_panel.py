@@ -2,15 +2,13 @@ import tkinter as tk
 from tkinter import ttk, filedialog
 from pathlib import Path
 
-
-_ICON_FIT_ONLY    = '●'
+_ICON_FIT_ONLY = '●'
 _ICON_PHASOR_ONLY = '◐'
-_ICON_BOTH        = '◉'
-_ICON_NOSESSION   = '○'
-_ICON_FOV  = 'F'
+_ICON_BOTH = '◉'
+_ICON_NOSESSION = '○'
+_ICON_FOV = 'F'
 _ICON_XLIF = 'T'
 _ICON_ZSTACK = 'Z'
-
 
 class ProjectBrowserPanel:
     """
@@ -27,55 +25,47 @@ class ProjectBrowserPanel:
     """
 
     def __init__(self, parent, app, width=170):
-        self._app   = app
+        self._app = app
         self._width = width
-
         self._project = None
-        self._stems   = []
-
+        self._stems = []
         self.frame = ttk.Frame(parent, width=width)
         self.frame.grid_propagate(False)
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(1, weight=1)
-
         hdr = ttk.Frame(self.frame)
         hdr.grid(row=0, column=0, sticky='ew', padx=4, pady=(6, 2))
         ttk.Label(hdr, text='Project',
                   font=('TkDefaultFont', 9, 'bold')).pack(side='left')
-
         lb_outer = ttk.Frame(self.frame, relief='sunken', borderwidth=1)
         lb_outer.grid(row=1, column=0, sticky='nsew', padx=4, pady=2)
         lb_outer.columnconfigure(0, weight=1)
         lb_outer.rowconfigure(0, weight=1)
-
         sb = ttk.Scrollbar(lb_outer, orient='vertical')
         sb.grid(row=0, column=1, sticky='ns')
-
         self._lb = tk.Listbox(
             lb_outer,
             yscrollcommand = sb.set,
-            selectmode     = 'single',
-            activestyle    = 'none',
-            font           = ('Courier', 9),
-            relief         = 'flat',
-            borderwidth    = 0,
+            selectmode = 'single',
+            activestyle = 'none',
+            font = ('Courier', 9),
+            relief = 'flat',
+            borderwidth = 0,
             highlightthickness = 0,
             exportselection = False,
         )
         self._lb.grid(row=0, column=0, sticky='nsew')
         sb.config(command=self._lb.yview)
         self._lb.bind('<<ListboxSelect>>', self._on_select)
-
         self._sv_status = tk.StringVar(value='No project open')
         ttk.Label(
             self.frame,
             textvariable = self._sv_status,
-            foreground   = 'grey',
-            font         = ('TkDefaultFont', 7),
-            wraplength   = width - 12,
-            anchor       = 'w',
+            foreground = 'grey',
+            font = ('TkDefaultFont', 7),
+            wraplength = width - 12,
+            anchor = 'w',
         ).grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
-
         self._setup_dnd()
 
     def grid(self, **kw):
@@ -103,9 +93,9 @@ class ProjectBrowserPanel:
             return
         self._project.update_after_fit(
             stem,
-            out_st        = out_st,
+            out_st = out_st,
             output_prefix = output_prefix,
-            ptu_dir       = ptu_dir,
+            ptu_dir = ptu_dir,
         )
         self._project.save()
         self._refresh()
@@ -118,8 +108,6 @@ class ProjectBrowserPanel:
         self._refresh()
 
     def _setup_dnd(self):
-        # tkinterdnd2 has compatibility issues on many systems
-        # Users can use File > Open Project Folder... instead
         pass
 
     def load_folder(self, folder):
@@ -144,13 +132,11 @@ class ProjectBrowserPanel:
     def _refresh(self):
         if self._project is None:
             return
-
         self._lb.delete(0, tk.END)
         self._stems.clear()
-
         for stem, rec in self._project.sorted_scans():
             has_fit = rec.has_session
-            has_ph  = rec.has_phasor_session
+            has_ph = rec.has_phasor_session
             if has_fit and has_ph:
                 session_dot = _ICON_BOTH
             elif has_fit:
@@ -168,7 +154,6 @@ class ProjectBrowserPanel:
             label = f"{session_dot} {type_tag} {stem}"
             self._lb.insert(tk.END, label)
             self._stems.append(stem)
-
         n = len(self._stems)
         n_sess = sum(1 for r in self._project.scans.values()
                      if r.has_session or r.has_phasor_session)
@@ -184,7 +169,7 @@ class ProjectBrowserPanel:
         if not sel or self._project is None:
             return
         stem = self._stems[sel[0]]
-        rec  = self._project.scans.get(stem)
+        rec = self._project.scans.get(stem)
         if rec is None:
             return
         self._selecting = True
@@ -195,11 +180,8 @@ class ProjectBrowserPanel:
 
     def _load_scan(self, rec):
         app = self._app
-
         if hasattr(app, '_cancel_pending_scan_loads'):
             app._cancel_pending_scan_loads()
-
-        # Clear ROIs from the previous scan so they don't bleed into the new one
         if hasattr(app, '_fov_preview'):
             app._fov_preview._roi_manager.clear_all()
             app._fov_preview._roi_patches.clear()
@@ -208,21 +190,15 @@ class ProjectBrowserPanel:
                       getattr(app, '_stitch_roi_panel', None)):
             if panel is not None:
                 panel._refresh_region_list()
-
         if rec.scan_type == 'fov':
             current_form = getattr(app, '_current_form', 'fov')
             want_phasor = (current_form == 'phasor')
-
             if want_phasor:
                 app._switch_form('phasor')
             else:
                 app._switch_form('fov')
-            
-            # Set guard flag BEFORE sv_ptu.set() to prevent auto-load trace from firing
-            # (we'll load the session explicitly below instead)
             if hasattr(app, '_last_loaded_ptu'):
                 app._last_loaded_ptu = rec.source_path
-            
             app.sv_ptu.set(rec.source_path)
             if hasattr(app, '_fov_preview'):
                 app._fov_preview.load_fov(rec.source_path)
@@ -235,7 +211,6 @@ class ProjectBrowserPanel:
                     app._irf_fov.sv_method.set('machine_irf')
             if hasattr(app, 'sv_out_fov'):
                 app.sv_out_fov.set(rec.stem)
-            
             if want_phasor:
                 if hasattr(app, 'sv_ph_ptu'):
                     app.sv_ph_ptu.set(rec.source_path)
@@ -244,7 +219,6 @@ class ProjectBrowserPanel:
             else:
                 if rec.session_path and hasattr(app, '_load_fitted_data_from_file'):
                     app._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)
-
         elif rec.scan_type == 'zstack':
             app._switch_form('fov')
             if hasattr(app, 'sv_fov_analysis'):
@@ -257,7 +231,7 @@ class ProjectBrowserPanel:
                 app.sv_out_fov.set(rec.stem)
             if rec.session_path and hasattr(app, '_fov_preview'):
                 try:
-                    from flimkit.FLIM.zstack import load_zstack_display_slices
+                    from flimkit.UI.flim_display import load_zstack_display_slices
                     group_dir = Path(rec.session_path).parent
                     slices = load_zstack_display_slices(
                         group_dir, ptu_dir=rec.ptu_dir, region=rec.stem)
@@ -267,23 +241,15 @@ class ProjectBrowserPanel:
                         app._populate_zstack_summary_from_dir(group_dir)
                 except Exception as exc:
                     print(f'[Project] Could not reload z-stack {rec.stem}: {exc}')
-
         else:
             app._switch_form('stitch')
-
-            # Set guard flag BEFORE sv_xlif.set() to prevent auto-load trace from firing
-            # (we'll load the session explicitly below instead)
             if hasattr(app, '_last_loaded_xlif'):
                 app._last_loaded_xlif = rec.source_path
-
             app.sv_xlif.set(rec.source_path)
-
             if rec.ptu_dir and hasattr(app, 'sv_ptu_dir'):
                 app.sv_ptu_dir.set(rec.ptu_dir)
-
             out_st = self._project.default_out_st(rec.stem) if self._project else ''
             if hasattr(app, 'sv_out_st'):
                 app.sv_out_st.set(out_st)
-
             if rec.session_path and hasattr(app, '_load_fitted_data_from_file'):
                 app._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)

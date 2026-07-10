@@ -15,7 +15,6 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from flimkit.UI import flim_display
 
-
 class ResultsPanel:
     def __init__(self, parent, root=None):
         self.parent = parent
@@ -23,14 +22,11 @@ class ResultsPanel:
         self.frame = ttk.Frame(parent)
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(0, weight=1)
-
         self._nb = ttk.Notebook(self.frame)
         self._nb.grid(row=0, column=0, sticky='nsew')
-
         self._build_progress()
         self._build_summary()
         self._build_images()
-
         self._imgs = []
         self._folder = None
         self._img_i = 0
@@ -41,7 +37,6 @@ class ResultsPanel:
         self._export_callback = None
         self._load_callback = None
         self._save_npz_callback = None
-
         self._status = tk.StringVar(value='Ready.')
         ttk.Label(self.frame, textvariable=self._status, foreground='grey').grid(
             row=1, column=0, sticky='w', padx=4, pady=(2, 4))
@@ -55,7 +50,6 @@ class ResultsPanel:
             f, state='disabled', wrap='word',
             font=('Courier', 9), background='#1e1e1e', foreground='#d4d4d4')
         self.log.grid(row=0, column=0, sticky='nsew')
-
         btn_bar = ttk.Frame(f)
         btn_bar.grid(row=1, column=0, sticky='ew', pady=(4, 0))
         ttk.Button(btn_bar, text='Save log...', command=self._save_log).pack(side='left',  padx=4)
@@ -125,7 +119,6 @@ class ResultsPanel:
         try:
             import csv
             from pathlib import Path
-            
             init_name = f"{self._scan_name}_summed_fit.csv" if self._scan_name else None
             csv_file = filedialog.asksaveasfilename(
                 title='Export Summed Fit Data',
@@ -133,28 +126,22 @@ class ResultsPanel:
                 defaultextension='.csv',
                 filetypes=[('CSV files', '*.csv'), ('All files', '*.*')],
                 initialdir=self._output_dir)
-            
             if not csv_file:
                 return
-            
             rows = []
             for item in self._tv.get_children():
                 values = self._tv.item(item)['values']
                 rows.append(values)
-            
             if not rows:
                 messagebox.showwarning('No Data', 'No summary data to export.')
                 return
-            
             with open(csv_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Parameter', 'Value', 'Unit'])
                 writer.writerows(rows)
-            
             messagebox.showinfo('Export Success', f"Summed fit data exported to:\n{Path(csv_file).name}")
             self._status.set(f"Exported → {Path(csv_file).name}")
             print(f"[Export] Summed fit CSV: {csv_file}")
-            
         except Exception as e:
             messagebox.showerror('Export Error', f"Failed to export CSV:\n{e}")
             import traceback
@@ -167,7 +154,6 @@ class ResultsPanel:
             defaultextension='.npz')
         if not npz_file:
             return
-        
         if self._load_callback:
             self._load_callback(npz_file)
 
@@ -176,7 +162,6 @@ class ResultsPanel:
         self._nb.add(f, text='  Fit Summary  ')
         f.columnconfigure(0, weight=1)
         f.rowconfigure(0, weight=1)
-
         cols = ('Parameter', 'Value', 'Unit')
         tv = ttk.Treeview(f, columns=cols, show='headings')
         tv.heading('Parameter', text='Parameter', anchor='w')
@@ -185,17 +170,14 @@ class ResultsPanel:
         tv.column('Parameter', width=300, anchor='w', stretch=True)
         tv.column('Value',     width=110, anchor='e', stretch=False)
         tv.column('Unit',      width=70,  anchor='w', stretch=False)
-
         sb = ttk.Scrollbar(f, orient='vertical', command=tv.yview)
         tv.configure(yscrollcommand=sb.set)
         tv.grid(row=0, column=0, sticky='nsew')
         sb.grid(row=0, column=1, sticky='ns')
-
         tv.tag_configure('odd',  background='#f5f7fa', foreground='#000000')
         tv.tag_configure('even', background='#ffffff', foreground='#000000')
         tv.tag_configure('warn', foreground='#c0550a', background='#fff8f0')
         self._tv = tv
-        
         btn_bar = ttk.Frame(f)
         btn_bar.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(4, 0))
         self._export_btn = ttk.Button(btn_bar, text='Export Images...', 
@@ -207,20 +189,21 @@ class ResultsPanel:
         self._nb.add(f, text='  Images  ')
         f.columnconfigure(0, weight=1)
         f.rowconfigure(0, weight=1)
-
         fig = Figure(figsize=(5, 5), facecolor='#2b2b2b')
         self._ax = fig.add_subplot(111)
         self._ax.set_facecolor('#2b2b2b')
         self._ax.axis('off')
         self._canvas_mpl = FigureCanvasTkAgg(fig, master=f)
         self._canvas_mpl.get_tk_widget().grid(row=0, column=0, sticky='nsew')
-
         self._img_lbl = tk.StringVar(value='No images loaded')
         ttk.Label(f, textvariable=self._img_lbl, foreground='grey').grid(
             row=1, column=0, sticky='w', padx=4, pady=(2, 0))
-
+        self._img_slider_updating = False
+        self._img_slider = ttk.Scale(f, from_=0, to=0, orient='horizontal',
+                                     command=self._on_img_slider)
+        self._img_slider.grid(row=2, column=0, sticky='ew', padx=4, pady=(2, 0))
         nav = ttk.Frame(f)
-        nav.grid(row=2, column=0, sticky='ew', pady=(4, 0))
+        nav.grid(row=3, column=0, sticky='ew', pady=(4, 0))
         ttk.Button(nav, text='◀ Prev', command=self._img_prev).pack(side='left', padx=4)
         ttk.Button(nav, text='Next ▶', command=self._img_next).pack(side='left', padx=4)
         ttk.Button(nav, text='Open folder', command=self._open_folder).pack(side='right', padx=4)
@@ -230,13 +213,11 @@ class ResultsPanel:
     def populate_summary(self, rows: list):
         for item in self._tv.get_children():
             self._tv.delete(item)
-        
         self._tv.update()
         for i, (param, val, unit) in enumerate(rows):
             tag = 'warn' if param.startswith('⚠') else ('odd' if i % 2 else 'even')
             self._tv.insert('', tk.END, values=(param, val, unit), tags=(tag,))
         self._tv.update_idletasks()
-        
         if rows:
             self._nb.select(1)
             self._nb.update_idletasks()
@@ -254,9 +235,26 @@ class ResultsPanel:
             for pat in ('*.png', '*.tif', '*.tiff'):
                 self._imgs += sorted(Path(folder).glob(pat))
         self._img_i = 0
+        self._img_slider.configure(to=max(len(self._imgs) - 1, 0))
+        self._sync_img_slider()
         self._draw_img()
         if self._imgs:
             self._nb.select(2)
+
+    def _sync_img_slider(self):
+        self._img_slider_updating = True
+        try:
+            self._img_slider.set(self._img_i)
+        finally:
+            self._img_slider_updating = False
+
+    def _on_img_slider(self, value):
+        if self._img_slider_updating or not getattr(self, '_imgs', None):
+            return
+        i = max(0, min(int(round(float(value))), len(self._imgs) - 1))
+        if i != self._img_i:
+            self._img_i = i
+            self._draw_img()
 
     def _draw_img(self):
         self._ax.cla()
@@ -282,11 +280,13 @@ class ResultsPanel:
     def _img_prev(self):
         if self._imgs:
             self._img_i = (self._img_i - 1) % len(self._imgs)
+            self._sync_img_slider()
             self._draw_img()
 
     def _img_next(self):
         if self._imgs:
             self._img_i = (self._img_i + 1) % len(self._imgs)
+            self._sync_img_slider()
             self._draw_img()
 
     def _save_img(self):

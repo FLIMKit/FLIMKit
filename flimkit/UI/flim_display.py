@@ -1,7 +1,75 @@
+import json
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 from matplotlib.colors import Normalize, PowerNorm
 
+def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
+    from flimkit.utils.batch_fit import group_zstack_files
+    group_dir = Path(group_dir)
+    ref = {}
+    ref_files = list(group_dir.glob('*_reference_fit.json'))
+    if ref_files:
+        try:
+            ref = json.loads(ref_files[0].read_text())
+        except Exception:
+            ref = {}
+    taus_ns = ref.get('taus_ns', [])
+    nexp = ref.get('nexp', len(taus_ns))
+    ref_decay = ref_time = ref_model = ref_irf = None
+    ref_chi2 = None
+    npz_path = group_dir / 'reference_decay.npz'
+    if npz_path.exists():
+        try:
+            with np.load(str(npz_path)) as zf:
+                ref_decay = zf['decay']
+                ref_time = zf['time_ns']
+                ref_model = zf['model'] if zf['model'].size > 0 else None
+                ref_irf = zf['irf_prompt'] if zf['irf_prompt'].size > 0 else None
+                ref_chi2 = float(zf['reduced_chi2_tail'][0]) if zf['reduced_chi2_tail'].size > 0 else None
+        except Exception:
+            pass
+    z_to_ptu = {}
+    if ptu_dir is not None and Path(ptu_dir).is_dir():
+        groups = group_zstack_files(ptu_dir)
+        for (r, _t, _s), zsl in groups.items():
+            if region is None or r == region:
+                z_to_ptu = {z: str(p) for z, p in zsl.items()}
+                break
+    slices = []
+    for slice_dir in sorted(group_dir.glob('z[0-9]*')):
+        if not slice_dir.is_dir():
+            continue
+        try:
+            z = int(slice_dir.name[1:])
+        except ValueError:
+            continue
+        def _load(name):
+            p = slice_dir / f'{name}.npy'
+            return np.load(str(p)) if p.exists() else None
+        pixel_maps = {}
+        for k in ('tau_mean_int', 'tau_mean_amp', 'alpha_1', 'alpha_2', 'alpha_3', 'chi2_r'):
+            m = _load(k)
+            if m is not None:
+                pixel_maps[k] = m
+        global_summary = {'taus_ns': list(taus_ns), 'n_exp': nexp}
+        if ref_model is not None:
+            global_summary['model'] = ref_model
+        if ref_chi2 is not None and ref_chi2 == ref_chi2:
+            global_summary['reduced_chi2_tail'] = ref_chi2
+        fit_result = {
+            'pixel_maps': pixel_maps,
+            'intensity': _load('intensity'),
+            'global_summary': global_summary,
+        }
+        if ref_decay is not None and ref_time is not None:
+            fit_result['decay'] = ref_decay
+            fit_result['time_ns'] = ref_time
+        if ref_irf is not None:
+            fit_result['irf_prompt'] = ref_irf
+        slices.append({'z': z, 'ptu_path': z_to_ptu.get(z), 'fit_result': fit_result})
+    slices.sort(key=lambda d: d['z'])
+    return slices
 
 COLORMAPS = {
     'hsv': 'hsv',
@@ -11,24 +79,19 @@ COLORMAPS = {
     'twilight': 'twilight',
 }
 
-
 def compute_weighted_lifetime(
     pixel_maps,
     intensity,
     n_exp=2,
     weighting='amplitude',
 ) -> np.ndarray:
-    # weighting='amplitude' → Σ(aᵢτᵢ)/Σ(aᵢ);  'intensity' → Σ(aᵢτᵢ²)/Σ(aᵢτᵢ)
-    primary  = 'tau_mean_int' if weighting == 'intensity' else 'tau_mean_amp'
+    primary = 'tau_mean_int' if weighting == 'intensity' else 'tau_mean_amp'
     fallback = 'tau_mean_amp' if weighting == 'intensity' else 'tau_mean_int'
     for key in (primary, fallback):
         if key in pixel_maps:
             arr = np.asarray(pixel_maps[key], dtype=np.float32).copy()
             arr[arr == 0] = np.nan
             return arr
-
-    # No precomputed mean map - derive the requested weighting from components.
-    # Key format is 'tau1', 'tau2', ... and 'a1', 'a2', ... (no underscore)
     shape = intensity.shape
     num = np.zeros(shape, dtype=np.float64)
     den = np.zeros(shape, dtype=np.float64)
@@ -45,12 +108,10 @@ def compute_weighted_lifetime(
             else:
                 num[valid] += amp[valid] * tau[valid]
                 den[valid] += amp[valid]
-
     result = np.full(shape, np.nan, dtype=np.float32)
     mask = den > 0
     result[mask] = (num[mask] / den[mask]).astype(np.float32)
     return result
-
 
 def apply_color_scale(
     image,
@@ -59,39 +120,25 @@ def apply_color_scale(
     gamma=1.0,
     percentile_auto=(2, 98),
 ):
-    # Create working copy, preserve NaN
     valid_mask = ~np.isnan(image)
     valid_pixels = image[valid_mask]
-
-    # Auto-detect range if not provided
     if vmin is None:
         vmin = np.percentile(valid_pixels, percentile_auto[0]) if valid_pixels.size > 0 else 0
     if vmax is None:
         vmax = np.percentile(valid_pixels, percentile_auto[1]) if valid_pixels.size > 0 else 1
-
-    # Clip to range
     clipped = np.clip(image, vmin, vmax)
-
-    # Normalize to [0, 1]
     if vmax > vmin:
         normalized = (clipped - vmin) / (vmax - vmin)
     else:
         normalized = np.zeros_like(clipped)
-
-    # Apply gamma correction
     if gamma != 1.0:
         normalized = np.power(normalized, 1.0 / gamma)
-
-    # Restore NaN
     normalized[~valid_mask] = np.nan
-
     return normalized
-
 
 def get_colormap(name='viridis'):
     cmap_name = COLORMAPS.get(name, name)
     return plt.cm.get_cmap(cmap_name)
-
 
 def compute_region_stats(
     lifetime_map,
@@ -101,19 +148,15 @@ def compute_region_stats(
 ):
     region_lifetime = lifetime_map[region_mask]
     region_intensity = intensity_map[region_mask]
-
-    # Filter valid (non-NaN) pixels
     valid_mask = ~np.isnan(region_lifetime)
     valid_lifetime = region_lifetime[valid_mask]
     valid_intensity = region_intensity[valid_mask]
-
     stats = {
         'median_tau': float(np.nanmedian(valid_lifetime)) if valid_lifetime.size > 0 else np.nan,
         'mean_amplitude': float(np.mean(valid_intensity)) if valid_intensity.size > 0 else np.nan,
         'photon_count': int(np.sum(valid_intensity)),
         'n_pixels': int(np.sum(valid_mask)),
     }
-
     if full_stats and valid_lifetime.size > 0:
         stats.update({
             'min_tau': float(np.nanmin(valid_lifetime)),
@@ -128,9 +171,7 @@ def compute_region_stats(
                 'p95': float(np.nanpercentile(valid_lifetime, 95)),
             },
         })
-
     return stats
-
 
 def mask_to_rgba(
     mask,

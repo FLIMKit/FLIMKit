@@ -2211,7 +2211,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if not out_dir:
             messagebox.showerror('Missing input', 'Please specify an output directory.')
             return
-        from flimkit.FLIM.timelapse import group_timelapse_files
+        from flimkit.utils.batch_fit import group_timelapse_files
         groups = group_timelapse_files(ptu_dir)
         if not groups:
             messagebox.showerror(
@@ -2263,7 +2263,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ref_tau1, ref_tau2, ref_tau3 = (_parsed + [None, None, None])[:3]
         n_groups = len(groups)
         n_frames = sum(len(v) for v in groups.values())
-        from flimkit.FLIM.timelapse import fit_timelapse
+        from flimkit.FLIM.batch import fit_timelapse
 
         def task(progress_callback, cancel_event):
             a = argparse.Namespace(
@@ -2801,7 +2801,43 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 params['channel'] = expert['channels']
         return params
 
+    def _on_fov_analysis_changed(self):
+        mode = self.sv_fov_analysis.get()
+        if mode == 'zstack':
+            self._fov_single_fr.grid_remove()
+            self._fov_zstack_fr.grid()
+            self._btn_fov.configure(text='▶  Run Z-stack Fit')
+            self._on_zstack_dir_changed()
+        else:
+            self._fov_zstack_fr.grid_remove()
+            self._fov_single_fr.grid()
+            self._btn_fov.configure(text='▶  Run Single-FOV Fit')
+            if self._fov_preview is not None:
+                self._fov_preview._hide_zstack()
+
+    def _on_zstack_dir_changed(self, *_):
+        if getattr(self, 'sv_fov_analysis', None) is None \
+                or self.sv_fov_analysis.get() != 'zstack':
+            return
+        d = self.sv_zstack_dir.get().strip()
+        if not d or not Path(d).is_dir() or self._fov_preview is None:
+            return
+        from flimkit.utils.batch_fit import group_zstack_files
+        try:
+            groups = group_zstack_files(d)
+        except Exception:
+            return
+        if not groups:
+            return
+        zslices = next(iter(groups.values()))
+        descs = [{'z': z, 'ptu_path': str(p)} for z, p in sorted(zslices.items())]
+        self._fov_preview.display_zstack(descs)
+
     def _run_fov(self):
+        if getattr(self, 'sv_fov_analysis', None) is not None \
+                and self.sv_fov_analysis.get() == 'zstack':
+            self._run_zstack_fov()
+            return
         ptu = self.sv_ptu.get().strip()
         if not ptu or not Path(ptu).exists():
             messagebox.showerror('Missing input', 'Please select a valid PTU file.')
@@ -2814,6 +2850,136 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             output_dir=out_dir,
             ptu_path=ptu,
             task_name='Single-FOV Fit'
+        )
+
+    def _populate_zstack_summary_from_dir(self, group_dir):
+        import json
+        import numpy as np
+        if self._res is None:
+            return
+        group_dir = Path(group_dir)
+        ref = {}
+        for rf in group_dir.glob('*_reference_fit.json'):
+            try:
+                ref = json.loads(rf.read_text())
+            except Exception:
+                ref = {}
+            break
+        rows = []
+        for i, tau in enumerate(ref.get('taus_ns', [])):
+            rows.append((f'τ{i+1} (reference)', f'{float(tau):.3f}', 'ns'))
+        if ref.get('n_slices') is not None:
+            rows.append(('Z-slices', str(ref['n_slices']), ''))
+        if ref.get('total_pooled_photons') is not None:
+            rows.append(('Pooled photons', f"{int(ref['total_pooled_photons']):,}", ''))
+        zj = {}
+        for zf in group_dir.glob('*_zseries.json'):
+            try:
+                zj = json.loads(zf.read_text())
+            except Exception:
+                zj = {}
+            break
+        def _mean(key):
+            vals = [v for v in zj.get(key, []) if isinstance(v, (int, float)) and v == v]
+            return float(np.mean(vals)) if vals else None
+        tm = _mean('tau_mean_mean')
+        if tm is not None:
+            rows.append(('Mean τ (slices)', f'{tm:.3f}', 'ns'))
+        npx = [v for v in zj.get('n_pixels_fitted', []) if isinstance(v, (int, float))]
+        if npx:
+            rows.append(('Pixels fitted', f'{int(sum(npx)):,}', ''))
+        cm = _mean('chi2_r_mean')
+        if cm is not None:
+            rows.append(('Mean χ²_r', f'{cm:.3f}', ''))
+        if rows:
+            self._res.populate_summary(rows)
+
+    def _run_zstack_fov(self):
+        ptu_dir = self.sv_zstack_dir.get().strip()
+        if not ptu_dir or not Path(ptu_dir).is_dir():
+            messagebox.showerror('Missing input', 'Please select a valid z-stack folder.')
+            return
+        from flimkit.FLIM.batch import fit_zstack
+        from flimkit.utils.batch_fit import group_zstack_files
+        groups = group_zstack_files(ptu_dir)
+        if not groups:
+            messagebox.showerror(
+                'No z-stack PTUs',
+                f'No files matching region_zX.ptu found in:\n{ptu_dir}')
+            return
+        cfg = _C()
+        params = self._get_roi_fit_params()
+        _out_raw = self.sv_out_fov.get().strip() or 'flim_zstack_out'
+        if Path(_out_raw).parent == Path('.'):
+            out_dir = str(Path(ptu_dir) / _out_raw)
+        else:
+            out_dir = _out_raw
+        expert = dict(self._expert_overrides)
+        correct_pileup = self.bv_correct_pileup.get()
+        n_stacks = len(groups)
+        n_slices = sum(len(v) for v in groups.values())
+
+        def task(progress_callback, cancel_event):
+            a = argparse.Namespace(
+                nexp=params['n_exp'],
+                tau_min=params['tau_min'],
+                tau_max=params['tau_max'],
+                estimate_irf=params['estimate_irf'],
+                machine_irf=params['machine_irf'],
+                irf_fwhm=params['irf_fwhm'],
+                irf_bins=params['irf_bins'],
+                irf_fit_width=params['irf_fit_width'],
+                optimizer=expert.get('optimizer', 'de'),
+                restarts=expert.get('lm_restarts', cfg['lm_restarts']),
+                de_population=expert.get('de_population', cfg['de_population']),
+                de_maxiter=expert.get('de_maxiter', cfg['de_maxiter']),
+                workers=expert.get('n_workers', cfg['n_workers']),
+                no_polish=False,
+                channel=params['channel'],
+                min_photons=expert.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
+                correct_pileup=correct_pileup,
+                cost_function=params['cost_function'],
+                save_stack=True,
+                no_plots=False,
+            )
+            return fit_zstack(
+                ptu_dir=ptu_dir,
+                output_dir=out_dir,
+                args=a,
+                channel=params['channel'],
+                compute_bound_fraction=False,
+                progress_callback=progress_callback,
+                cancel_event=cancel_event,
+            )
+
+        def on_done(result):
+            self._set_buttons('normal')
+            self._res.set_status(
+                f'✓  Z-stack complete - {n_stacks} stack(s), {n_slices} slices.')
+            first = next(iter(result.values())) if isinstance(result, dict) and result else None
+            if first is not None:
+                from flimkit.UI.flim_display import load_zstack_display_slices
+                try:
+                    slices = load_zstack_display_slices(first['group_dir'], ptu_dir=ptu_dir)
+                    if slices:
+                        self._fov_preview.display_zstack(slices)
+                except Exception as exc:
+                    print(f'[Z-stack] Could not load fitted stack into preview: {exc}')
+                self._populate_zstack_summary_from_dir(first['group_dir'])
+                self._res.load_images(first.get('preview_dir') or out_dir)
+            else:
+                self._res.load_images(out_dir)
+            if hasattr(self, '_proj_browser') and self._proj_browser and self._proj_browser._project:
+                first_key = next(iter(result.keys())) if isinstance(result, dict) and result else None
+                if first_key is not None:
+                    self._proj_browser.on_fit_done(
+                        first_key, out_st=out_dir, ptu_dir=ptu_dir)
+        self._set_buttons('disabled')
+        self.run_with_progress(
+            task,
+            task_name=f'Z-stack Fit ({n_stacks} stack(s), {n_slices} slices)',
+            on_done=on_done,
+            output_dir=out_dir,
         )
 
     def _run_stitch(self):

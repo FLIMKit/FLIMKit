@@ -54,6 +54,19 @@ class FOVPreviewPanel:
         ctrl_frame.columnconfigure(1, weight=1)
         ctrl_frame.grid_remove()
         self._ctrl_frame = ctrl_frame
+        zbar = ttk.Frame(self.frame)
+        zbar.grid(row=3, column=0, sticky='ew', padx=4, pady=(0, 4))
+        zbar.columnconfigure(1, weight=1)
+        self._z_label = tk.StringVar(value='z 1/1')
+        ttk.Label(zbar, textvariable=self._z_label, width=12).grid(row=0, column=0, sticky='w')
+        self._z_slider_updating = False
+        self._z_slider = ttk.Scale(zbar, from_=0, to=0, orient='horizontal',
+                                   command=self._on_z_slider)
+        self._z_slider.grid(row=0, column=1, sticky='ew', padx=4)
+        self._zbar = zbar
+        zbar.grid_remove()
+        self._zstack = None
+        self._z_i = 0
         ttk.Label(ctrl_frame, text='τ range (ns):').grid(row=0, column=0, sticky='w')
         ttk.Label(ctrl_frame, text='Min:').grid(row=0, column=1, sticky='w', padx=(10, 2))
         self._sv_tau_min = tk.StringVar()
@@ -121,7 +134,12 @@ class FOVPreviewPanel:
         self._cached_decay_yscale = 'log'
         self._cached_resid_data = None
         self._setup_zoom()
-    def load_fov(self, ptu_path: Optional[str]):
+    def load_fov(self, ptu_path: Optional[str], _keep_zstack=False):
+        if not _keep_zstack:
+            self._hide_zstack()
+        self._lifetime_map = None
+        self._pixel_maps = None
+        self._cached_resid_data = None
         if not ptu_path or not Path(ptu_path).exists():
             self._clear()
             self._status.set('Invalid PTU file')
@@ -165,7 +183,9 @@ class FOVPreviewPanel:
         except Exception as e:
             self._clear()
             self._status.set(f"Error loading FOV: {str(e)[:50]}")
-    def display_fit_results(self, ptu_path: str, fit_result: dict):
+    def display_fit_results(self, ptu_path: str, fit_result: dict, _keep_zstack=False):
+        if not _keep_zstack:
+            self._hide_zstack()
         try:
             from flimkit.formats import FLIMFile
             import numpy as np
@@ -177,7 +197,6 @@ class FOVPreviewPanel:
             time_ns_from_result = fit_result.get('time_ns')
             decay_from_result = fit_result.get('decay')
             canvas = fit_result.get('canvas')
-            
             if decay_from_result is not None and time_ns_from_result is not None:
                 decay = decay_from_result
                 time_ns = time_ns_from_result
@@ -189,7 +208,6 @@ class FOVPreviewPanel:
                 else:
                     decay = None
                     time_ns = None
-            # Get intensity image: prefer canvas (from tile fitting), then fit_result, then PTU fallback
             intensity = None
             if canvas is not None and 'intensity' in canvas:
                 intensity = canvas['intensity']
@@ -204,13 +222,10 @@ class FOVPreviewPanel:
             from flimkit.UI.flim_display import compute_weighted_lifetime
             pixel_maps = fit_result.get('pixel_maps')
             if pixel_maps is None and canvas is not None:
-                # For tile fits, extract pixel_maps from canvas
                 pixel_maps = {k: v for k, v in canvas.items() 
                              if k not in ('intensity', 'coverage')}
             nexp = global_summary.get('n_exp', len(global_summary.get('taus_ns', [])))
             if nexp == 0:
-                # derive_global_tau schema (tile_fit) stores tau1_mean_ns / tau2_mean_ns ...
-                # rather than a taus_ns list.  Count how many tau{k}_mean_ns keys exist.
                 nexp = sum(1 for k in range(1, 4) if f'tau{k}_mean_ns' in global_summary)
             lifetime_map = None
             if pixel_maps and nexp > 0:
@@ -242,10 +257,8 @@ class FOVPreviewPanel:
                 fit_result['lifetime'] = lifetime_map
             if pixel_maps:
                 fit_result['pixel_maps'] = pixel_maps
-
             taus_fit = global_summary.get('taus_ns', [])
             model = global_summary.get('model')
-            
             self._ax_img.clear()
             intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
             self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
@@ -362,6 +375,51 @@ class FOVPreviewPanel:
             traceback.print_exc()
             self._status.set(f"Error: {str(e)[:60]}")
             self._status.set(f"Error displaying fit: {str(e)[:50]}")
+    def display_zstack(self, slices, ptu_path=None):
+        self._zstack = list(slices) if slices else None
+        if not self._zstack:
+            self._hide_zstack()
+            return
+        n = len(self._zstack)
+        self._z_slider.configure(to=max(n - 1, 0))
+        self._zbar.grid()
+        self._z_i = 0
+        self._sync_z_slider()
+        self._show_zstack_slice(0)
+
+    def _hide_zstack(self):
+        self._zstack = None
+        try:
+            self._zbar.grid_remove()
+        except Exception:
+            pass
+
+    def _sync_z_slider(self):
+        self._z_slider_updating = True
+        try:
+            self._z_slider.set(self._z_i)
+        finally:
+            self._z_slider_updating = False
+
+    def _on_z_slider(self, value):
+        if self._z_slider_updating or not self._zstack:
+            return
+        i = max(0, min(int(round(float(value))), len(self._zstack) - 1))
+        if i != self._z_i:
+            self._z_i = i
+            self._show_zstack_slice(i)
+
+    def _show_zstack_slice(self, i):
+        desc = self._zstack[i]
+        self._z_label.set(f"z {desc.get('z', i + 1)}  ({i + 1}/{len(self._zstack)})")
+        fit_result = desc.get('fit_result')
+        if fit_result is not None:
+            self.display_fit_results(desc.get('ptu_path'), fit_result, _keep_zstack=True)
+        else:
+            self.load_fov(desc.get('ptu_path'), _keep_zstack=True)
+        if self._display_mode != 'flim' or not self._decay_visible:
+            self._rebuild_layout()
+
     def load_stitched_roi(self, output_dir: str):
         if not output_dir:
             self._clear()
@@ -372,7 +430,6 @@ class FOVPreviewPanel:
             import numpy as np
             import tifffile
             out_path = Path(output_dir)
-
             intensity_files = sorted(out_path.glob('*_stitched_intensity.tif'))
             if not intensity_files:
                 intensity_files = sorted(out_path.glob('*_intensity.tif'))
@@ -404,7 +461,6 @@ class FOVPreviewPanel:
                 if lifetime_disp:
                     try:
                         lifetime_data = tifffile.imread(str(lifetime_disp[0])).astype(np.float32)
-                        # Convert uint16 back to ns (assumes 0-5 ns scale)
                         lifetime_data = lifetime_data / 65535.0 * 5.0
                         lifetime_min, lifetime_max = 0.0, 5.0
                         print(f"  ✓ Loaded display-scaled lifetime: 0-5 ns")
@@ -701,7 +757,6 @@ class FOVPreviewPanel:
             self._finish_roi_drag()
         self._pan_origin = None
     def _on_pan_motion(self, event):
-        # ROI dragging takes priority
         if self._roi_drag is not None:
             if event.xdata is not None and event.ydata is not None:
                 self._update_roi_drag(event.xdata, event.ydata)
@@ -798,26 +853,26 @@ class FOVPreviewPanel:
                           height_ratios=[1, 0.6, 0.3],
                           width_ratios=[1, 1, 0.05],
                           hspace=0.38, wspace=0.15)
-            self._ax_img   = self._fig.add_subplot(gs[0, 0])
-            self._ax_flim  = self._fig.add_subplot(gs[0, 1])
-            self._ax_cbar  = self._fig.add_subplot(gs[0, 2])
+            self._ax_img = self._fig.add_subplot(gs[0, 0])
+            self._ax_flim = self._fig.add_subplot(gs[0, 1])
+            self._ax_cbar = self._fig.add_subplot(gs[0, 2])
             self._ax_decay = self._fig.add_subplot(gs[1, :])
             self._ax_resid = self._fig.add_subplot(gs[2, :], sharex=self._ax_decay)
         else:
             if self._display_mode == 'intensity':
                 gs = GridSpec(1, 1, figure=self._fig)
-                self._ax_img   = self._fig.add_subplot(gs[0, 0])
-                self._ax_flim  = self._fig.add_axes([0, 0, 0.01, 0.01])
+                self._ax_img = self._fig.add_subplot(gs[0, 0])
+                self._ax_flim = self._fig.add_axes([0, 0, 0.01, 0.01])
                 self._ax_flim.set_visible(False)
-                self._ax_cbar  = self._fig.add_axes([0, 0, 0.01, 0.01])
+                self._ax_cbar = self._fig.add_axes([0, 0, 0.01, 0.01])
                 self._ax_cbar.set_visible(False)
             else:
                 gs = GridSpec(1, 2, figure=self._fig,
                               width_ratios=[1, 0.05],
                               wspace=0.08)
-                self._ax_flim  = self._fig.add_subplot(gs[0, 0])
-                self._ax_cbar  = self._fig.add_subplot(gs[0, 1])
-                self._ax_img   = self._fig.add_axes([0, 0, 0.01, 0.01])
+                self._ax_flim = self._fig.add_subplot(gs[0, 0])
+                self._ax_cbar = self._fig.add_subplot(gs[0, 1])
+                self._ax_img = self._fig.add_axes([0, 0, 0.01, 0.01])
                 self._ax_img.set_visible(False)
             self._ax_decay = self._fig.add_axes([0, 0, 0.01, 0.01])
             self._ax_decay.set_visible(False)
