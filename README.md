@@ -16,7 +16,7 @@ Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
 ## GUI
 
-![FLIMKit GUI](flimkit/ui.png)
+![FLIMKit GUI](Docs/ui.png)
 
 Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed decay curve, and full IRF deconvolution. The residual graph now displays beneath the tail fit for detailed fit quality assessment.
 
