@@ -60,6 +60,7 @@ from flimkit.UI.utils import (
     _tog,
     _flt,
     _thresh,
+    _enable_dnd,
 )
 from flimkit.UI.progress_window import ProgressWindowManager
 from flimkit.UI.irf_widget import IRFWidget
@@ -481,7 +482,7 @@ class _UIBuilder:
 
     def _menu_about(self):
         from flimkit._version import __version__
-        about_text = f"""FLIMKit Analysis GUI
+        about_text = f'''FLIMKit Analysis GUI
 
 Version: {__version__}
 
@@ -496,7 +497,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
 
 Designed, developed, and maintained by Alex Hunt.
 Anthropic's Claude AI assisted with parts of the GUI implementation.
-        """
+        '''
         messagebox.showinfo('About FLIMKit', about_text)
 
     def _menu_documentation(self):
@@ -686,6 +687,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _init_ui(self):
         from flimkit.utils.crash_handler import install_tk_error_handler
         install_tk_error_handler(self.root)
+        _enable_dnd(self.root)
         self.state = AppState()
         self._mode_controller = ModeController(self)
         self._controller = FLIMKitController(self)
@@ -935,35 +937,35 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 'register': self.bv_register.get() if hasattr(self, 'bv_register') else False,
                 'channel': self.sv_channel_focus.get() if hasattr(self, 'sv_channel_focus') else 'auto',
                 'threshold': self.sv_int_threshold.get() if hasattr(self, 'sv_int_threshold') else '5',
-                'out_fov':        self.sv_out_fov.get() if hasattr(self, 'sv_out_fov') else '',
-                'mode_fov':       self.sv_mode_fov.get() if hasattr(self, 'sv_mode_fov') else 'both',
-                'tau_min_fov':    self.sv_tau_min_fov.get() if hasattr(self, 'sv_tau_min_fov') else '',
-                'tau_max_fov':    self.sv_tau_max_fov.get() if hasattr(self, 'sv_tau_max_fov') else '',
-                'thr_fov_en':     self.bv_thr_fov.get() if hasattr(self, 'bv_thr_fov') else False,
-                'thr_fov_val':    self.sv_thr_fov.get() if hasattr(self, 'sv_thr_fov') else '5',
-                'cell_mask':      self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
+                'out_fov': self.sv_out_fov.get() if hasattr(self, 'sv_out_fov') else '',
+                'mode_fov': self.sv_mode_fov.get() if hasattr(self, 'sv_mode_fov') else 'both',
+                'tau_min_fov': self.sv_tau_min_fov.get() if hasattr(self, 'sv_tau_min_fov') else '',
+                'tau_max_fov': self.sv_tau_max_fov.get() if hasattr(self, 'sv_tau_max_fov') else '',
+                'thr_fov_en': self.bv_thr_fov.get() if hasattr(self, 'bv_thr_fov') else False,
+                'thr_fov_val': self.sv_thr_fov.get() if hasattr(self, 'sv_thr_fov') else '5',
+                'cell_mask': self.bv_cell.get() if hasattr(self, 'bv_cell') else False,
                 'correct_pileup': self.bv_correct_pileup.get() if hasattr(self, 'bv_correct_pileup') else False,
                 'correct_pileup_st': self.bv_correct_pileup_st.get() if hasattr(self, 'bv_correct_pileup_st') else False,
-                'tvb_ptu_fov':    self.sv_tvb_ptu_fov.get() if hasattr(self, 'sv_tvb_ptu_fov') else '',
-                'tvb_ptu_st':     self.sv_tvb_ptu_st.get() if hasattr(self, 'sv_tvb_ptu_st') else '',
-                'tvb_ptu_batch':  self.sv_batch_tvb_ptu.get() if hasattr(self, 'sv_batch_tvb_ptu') else '',
-                'xlif_file':      self.sv_xlif.get()    if hasattr(self, 'sv_xlif')    else '',
-                'ptu_dir':        self.sv_ptu_dir.get() if hasattr(self, 'sv_ptu_dir') else '',
-                'out_st':         self.sv_out_st.get()  if hasattr(self, 'sv_out_st')  else '',
-                'pipeline':       self.sv_pipeline.get() if hasattr(self, 'sv_pipeline') else 'stitch_only',
-                'bv_rotate':      self.bv_rotate.get()  if hasattr(self, 'bv_rotate')  else True,
-                'bv_perpix':      self.bv_perpix.get()  if hasattr(self, 'bv_perpix')  else False,
-                'tau_lo':         self.sv_tau_lo.get()  if hasattr(self, 'sv_tau_lo')  else '',
-                'tau_hi':         self.sv_tau_hi.get()  if hasattr(self, 'sv_tau_hi')  else '',
-                'int_lo':         self.sv_int_lo.get()  if hasattr(self, 'sv_int_lo')  else '',
-                'int_hi':         self.sv_int_hi.get()  if hasattr(self, 'sv_int_hi')  else '',
-                'thr_st_en':      self.bv_thr_st.get()  if hasattr(self, 'bv_thr_st')  else False,
-                'thr_st_val':     self.sv_thr_st.get()  if hasattr(self, 'sv_thr_st')  else '',
-                'bv_register':    self.bv_register.get() if hasattr(self, 'bv_register') else True,
-                'reg_max_shift':  self.sv_reg_max_shift.get() if hasattr(self, 'sv_reg_max_shift') else '120',
-                'irf_st_method':  self._irf_st.sv_method.get() if hasattr(self, '_irf_st') else 'irf_xlsx',
-                'irf_st_path':    self._irf_st.sv_path.get()   if hasattr(self, '_irf_st') else '',
-                'tile_irf_dir':   self.sv_tile_irf_dir.get() if hasattr(self, 'sv_tile_irf_dir') else '',
+                'tvb_ptu_fov': self.sv_tvb_ptu_fov.get() if hasattr(self, 'sv_tvb_ptu_fov') else '',
+                'tvb_ptu_st': self.sv_tvb_ptu_st.get() if hasattr(self, 'sv_tvb_ptu_st') else '',
+                'tvb_ptu_batch': self.sv_batch_tvb_ptu.get() if hasattr(self, 'sv_batch_tvb_ptu') else '',
+                'xlif_file': self.sv_xlif.get() if hasattr(self, 'sv_xlif') else '',
+                'ptu_dir': self.sv_ptu_dir.get() if hasattr(self, 'sv_ptu_dir') else '',
+                'out_st': self.sv_out_st.get() if hasattr(self, 'sv_out_st') else '',
+                'pipeline': self.sv_pipeline.get() if hasattr(self, 'sv_pipeline') else 'stitch_only',
+                'bv_rotate': self.bv_rotate.get() if hasattr(self, 'bv_rotate') else True,
+                'bv_perpix': self.bv_perpix.get() if hasattr(self, 'bv_perpix') else False,
+                'tau_lo': self.sv_tau_lo.get() if hasattr(self, 'sv_tau_lo') else '',
+                'tau_hi': self.sv_tau_hi.get() if hasattr(self, 'sv_tau_hi') else '',
+                'int_lo': self.sv_int_lo.get() if hasattr(self, 'sv_int_lo') else '',
+                'int_hi': self.sv_int_hi.get() if hasattr(self, 'sv_int_hi') else '',
+                'thr_st_en': self.bv_thr_st.get() if hasattr(self, 'bv_thr_st') else False,
+                'thr_st_val': self.sv_thr_st.get() if hasattr(self, 'sv_thr_st') else '',
+                'bv_register': self.bv_register.get() if hasattr(self, 'bv_register') else True,
+                'reg_max_shift': self.sv_reg_max_shift.get() if hasattr(self, 'sv_reg_max_shift') else '120',
+                'irf_st_method': self._irf_st.sv_method.get() if hasattr(self, '_irf_st') else 'irf_xlsx',
+                'irf_st_path': self._irf_st.sv_path.get() if hasattr(self, '_irf_st') else '',
+                'tile_irf_dir': self.sv_tile_irf_dir.get() if hasattr(self, 'sv_tile_irf_dir') else '',
                 'expert_overrides': self._expert_overrides if hasattr(self, '_expert_overrides') else {},
             }
             print(f'[Session] Captured form state: active_form={state.get('active_form')}')
@@ -2158,9 +2160,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _batch_mode_changed(self):
         mode = self.sv_batch_mode.get()
         labels = {
-            'tiled':      'Mode: Multi-Tile ROI Fit',
-            'fov':        'Mode: Single FOV Fit',
-            'timelapse':  'Mode: Timelapse Fit',
+            'tiled': 'Mode: Multi-Tile ROI Fit',
+            'fov': 'Mode: Single FOV Fit',
+            'timelapse': 'Mode: Timelapse Fit',
         }
         self._batch_mode_label.configure(text=labels.get(mode, ''))
         if mode == 'tiled':
@@ -2174,14 +2176,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         else:
             self._batch_tl_fr.grid_remove()
         btn_texts = {
-            'tiled':     '▶  Run Batch ROI Fit',
-            'fov':       '▶  Run Batch FOV Fit',
+            'tiled': '▶  Run Batch ROI Fit',
+            'fov': '▶  Run Batch FOV Fit',
             'timelapse': '▶  Run Timelapse Fit',
         }
         self._btn_batch.configure(text=btn_texts.get(mode, '▶  Run'))
         help_texts = {
-            'tiled':     'One sub-folder per ROI created inside the output base dir.',
-            'fov':       'One sub-folder per PTU file created inside the output base dir.',
+            'tiled': 'One sub-folder per ROI created inside the output base dir.',
+            'fov': 'One sub-folder per PTU file created inside the output base dir.',
             'timelapse': 'One sub-folder per (region, series, z) group inside the output base dir.',
         }
         self._batch_io_help.configure(text=help_texts.get(mode, ''))
@@ -2479,7 +2481,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         correct_pileup = self.bv_batch_correct_pileup.get()
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
-        from flimkit.formats.PTU.stitch    import fit_flim_tiles
+        from flimkit.formats.PTU.stitch import fit_flim_tiles
         from flimkit.FLIM.assemble import (derive_global_tau, save_assembled_maps,
                                            assemble_tile_maps)
         from flimkit.utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
@@ -2706,6 +2708,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 return
         self._loading_ptu = True
         self._add_to_recent(ptu_path, 'file')
+        if hasattr(self, 'sv_out_fov'):
+            self.sv_out_fov.set(Path(ptu_path).stem)
 
         def load():
             try:
@@ -2777,20 +2781,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         cfg = _C()
         irf = self._irf_fov.get_args(xlsx_fallback=self.sv_xlsx.get().strip())
         params = {
-            'ptu_path':       self.sv_ptu.get().strip() or None,
-            'n_exp':          self.iv_nexp_fov.get(),
-            'tau_min':        float(self.sv_tau_min_fov.get() or cfg['Tau_min']),
-            'tau_max':        float(self.sv_tau_max_fov.get() or cfg['Tau_max']),
-            'cost_function':  cfg.get('cost_function', 'poisson'),
-            'channel':        cfg['channels'],
-            'irf':            irf['irf'],
-            'irf_xlsx':       irf['irf_xlsx'],
-            'estimate_irf':   irf['estimate_irf'],
-            'machine_irf':    irf.get('machine_irf') or str(cfg['MACHINE_IRF_DEFAULT_PATH']),
-            'irf_bins':       cfg['IRF_BINS'],
-            'irf_fit_width':  cfg['IRF_FIT_WIDTH'],
-            'irf_fwhm':       cfg['IRF_FWHM'],
-            'irf_align':      'steepest_rise',
+            'ptu_path': self.sv_ptu.get().strip() or None,
+            'n_exp': self.iv_nexp_fov.get(),
+            'tau_min': float(self.sv_tau_min_fov.get() or cfg['Tau_min']),
+            'tau_max': float(self.sv_tau_max_fov.get() or cfg['Tau_max']),
+            'cost_function': cfg.get('cost_function', 'poisson'),
+            'channel': cfg['channels'],
+            'irf': irf['irf'],
+            'irf_xlsx': irf['irf_xlsx'],
+            'estimate_irf': irf['estimate_irf'],
+            'machine_irf': irf.get('machine_irf') or str(cfg['MACHINE_IRF_DEFAULT_PATH']),
+            'irf_bins': cfg['IRF_BINS'],
+            'irf_fit_width': cfg['IRF_FIT_WIDTH'],
+            'irf_fwhm': cfg['IRF_FWHM'],
+            'irf_align': 'steepest_rise',
             'irf_shift_bins': 2,
         }
         expert = self._expert_overrides
@@ -3034,7 +3038,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             self._proj_browser.on_fit_done(
                                 xlif_stem,
                                 out_st = str(Path(a.output_dir).parent),
-                                ptu_dir = getattr(a, 'ptu_dir',    None),
+                                ptu_dir = getattr(a, 'ptu_dir', None),
                             )
                 except Exception as e:
                     import traceback
@@ -3453,8 +3457,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             import numpy as _np
             tau_centers = list(_np.atleast_1d(tau_centers))
             widths_ns = list(_np.atleast_1d(global_summary.get('widths_ns', [])))
-            fwhms_ns = list(_np.atleast_1d(global_summary.get('fwhms_ns',  [])))
-            amps_d = list(_np.atleast_1d(global_summary.get('amps',      [])))
+            fwhms_ns = list(_np.atleast_1d(global_summary.get('fwhms_ns', [])))
+            amps_d = list(_np.atleast_1d(global_summary.get('amps', [])))
             fracs_d = list(_np.atleast_1d(global_summary.get('fractions', [])))
             dist_type = global_summary.get('dist_type', 'gaussian')
             dist_label = dist_type.capitalize()
@@ -3470,12 +3474,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if i < len(fracs_d):
                     rows.append((f'f{i+1} (int. frac.)', f'{fracs_d[i]:.4f}', ''))
         taus = global_summary.get('taus_ns', []) if tau_centers is None else None
-        amps = global_summary.get('amps',    []) if tau_centers is None else None
+        amps = global_summary.get('amps', []) if tau_centers is None else None
         fracs = global_summary.get('fractions', []) if tau_centers is None else None
         if taus is not None and len(taus) > 0:
             import numpy as np
             taus = list(np.atleast_1d(taus))
-            amps = list(np.atleast_1d(amps))  if amps  is not None else []
+            amps = list(np.atleast_1d(amps)) if amps is not None else []
             fracs = list(np.atleast_1d(fracs)) if fracs is not None else []
             for i in range(len(taus)):
                 rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))

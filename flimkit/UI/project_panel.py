@@ -108,7 +108,37 @@ class ProjectBrowserPanel:
         self._refresh()
 
     def _setup_dnd(self):
-        pass
+        try:
+            from tkinterdnd2 import DND_FILES, DND_TEXT
+        except ImportError:
+            return
+        try:
+            self._lb.drop_target_register(DND_FILES, DND_TEXT)
+            self._lb.dnd_bind('<<Drop>>', self._on_drop)
+        except Exception:
+            pass
+
+    def _on_drop(self, event):
+        try:
+            paths = self._lb.tk.splitlist(event.data)
+        except Exception:
+            paths = [event.data]
+        for p in paths:
+            p = p.strip()
+            if not p:
+                continue
+            path = Path(p)
+            if path.is_dir():
+                self.load_folder(str(path))
+                if hasattr(self._app, '_add_to_recent'):
+                    self._app._add_to_recent(str(path), 'project')
+                return
+            if path.is_file():
+                if hasattr(self._app, '_switch_form'):
+                    self._app._switch_form('fov')
+                if hasattr(self._app, 'sv_ptu'):
+                    self._app.sv_ptu.set(str(path))
+                return
 
     def load_folder(self, folder):
         if not folder:

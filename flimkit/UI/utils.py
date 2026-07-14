@@ -13,6 +13,16 @@ try:
 except ImportError:
     HAS_DND = False
 
+def _enable_dnd(root):
+    if not HAS_DND:
+        return False
+    try:
+        from tkinterdnd2 import TkinterDnD
+        TkinterDnD._require(root)
+        return True
+    except Exception:
+        return False
+
 _cfg: dict = {}
 
 def _C() -> dict:
