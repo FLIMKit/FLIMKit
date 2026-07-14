@@ -108,6 +108,12 @@ class BHFile:
             self.sync_source = 'measured'
         self.period_ns = (1e9 / self.sync_rate) if self.sync_rate > 0 else 0.0
         self.n_records = 0
+        self.col_time_s = float(mi['col_t']) or None
+        self.acq_time_s = float(stop['stop_time']) or self.col_time_s
+        if self.sync_rate > 0 and self.acq_time_s:
+            self.n_sync = int(self.sync_rate * self.acq_time_s)
+        else:
+            self.n_sync = None
         info = self._sdt.info
         self.tags = {
             'BH_ID': _decode_str(getattr(info, 'id', '')),
@@ -148,8 +154,10 @@ class BHFile:
             print(' ')
 
     @property
-    def pileup_fraction(self):
-        return None
+    def photons_per_pulse(self):
+        if self._total_photons is None or not self.n_sync:
+            return None
+        return self._total_photons / self.n_sync
 
     def _norm_channel(self, channel):
         if channel is None or int(channel) < 1:
@@ -209,7 +217,9 @@ class BHFile:
 
     def summed_decay(self, channel=None):
         cube = self._decode_cube(channel)
-        return cube.sum(axis=(0, 1)).astype(float)
+        decay = cube.sum(axis=(0, 1)).astype(float)
+        self._total_photons = int(decay.sum())
+        return decay
 
     def intensity_image(self, channel=None, binning=1):
         idx = self._norm_channel(channel)

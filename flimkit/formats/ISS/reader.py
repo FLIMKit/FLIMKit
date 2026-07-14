@@ -134,11 +134,11 @@ class ISSFile:
         decay = np.bincount(dec, minlength=self.n_bins).astype(float)
         self._total_photons = int(decay.sum())
         return decay[:self.n_bins]
+    n_sync = None
+
     @property
-    def pileup_fraction(self):
-        if self._total_photons is None or self.n_records == 0:
-            return None
-        return self._total_photons / self.n_records
+    def photons_per_pulse(self):
+        return None
     def pixel_stack(self, channel=None, binning=1, n_x=None, n_y=None):
         ach = np.abs(self.channel)
         is_frame = ach == _FRAME_CH

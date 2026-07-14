@@ -296,7 +296,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   global_popt, n_exp,
                   min_photons=MIN_PHOTONS_PERPIX,
                   tau_min_ns=None, tau_max_ns=None,
-                  correct_pileup=False, n_sync=0,
+                  correct_pileup=False, n_sync=None,
                   progress_callback=None,
                   free_tau=False,
                   use_gpu='auto',
@@ -308,7 +308,18 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         if n_valid > _FREE_TAU_WARN_PIXELS:
             print(f'  [!] free-tau per-pixel on {n_valid:,} pixels is slow (iterative fit each); '
                   f'fixed-tau is ~100x faster - untick free-tau or draw a smaller ROI')
-    _n_sync_px = int(n_sync / max(ny * nx, 1)) if correct_pileup and n_sync > 0 else 0
+    _n_sync_px = 0
+    if correct_pileup:
+        if not n_sync:
+            raise ValueError('pile-up correction requested but this file exposes no '
+                             'excitation-pulse count (N_sync); Coates is unavailable here')
+        _n_sync_px = int(n_sync / max(ny * nx, 1))
+        _max_px = float(stack.sum(axis=2).max())
+        if _n_sync_px <= _max_px:
+            raise ValueError(
+                f'pile-up correction needs more pulses than photons per pixel; got '
+                f'{_n_sync_px:,} pulses/px vs {_max_px:,.0f} photons in the brightest pixel. '
+                f'Check the N_sync reported by the reader.')
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     idx = 2 * n_exp
     shift = global_popt[idx]; idx += 1

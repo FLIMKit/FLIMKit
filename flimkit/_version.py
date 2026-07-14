@@ -1,4 +1,4 @@
-__version__ = '0.9.15'
+__version__ = '0.9.16'
 fitter_version = '17'
 
 roadmap = '''Flim program roadmap:
@@ -30,5 +30,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.13 -> added Gaussian and Lorentzian lifetime distribution fitting (Lakowicz §4.11.2)
 0.9.14 -> bug fixes galore
 0.9.15 -> new file format support: ISS (TD-FLIM .TAGTIME/.TAGCHANNEL/.TAGDECAY, FD-FLIM phasor .ifli; see issue #19), Becker & Hickl .sdt (SPC TCSPC FLIM, FIFO-image histograms; decoder written from B&H SPCM file-structure docs) and Photonscore .photons (LINCam D7 container; pure-Python, no native dependency, validated bit-exact vs the Photonscore SDK; see issue #20)
+0.9.16 -> fixed pile-up correction: Coates was being fed the photon/record count instead of the excitation-pulse count (N_sync), which destroyed the decay tail and mis-reported pile-up (0.07% read as 97%). N_sync is now taken from the true sync count per format, and Coates refuses any count that cannot be one.
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

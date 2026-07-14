@@ -968,7 +968,7 @@ def fit_flim_tiles(
                 tau_min_ns  = tau_min_ns,
                 tau_max_ns  = tau_max_ns,
                 correct_pileup = getattr(args, 'correct_pileup', False),
-                n_sync      = ptu.n_records,
+                n_sync      = ptu.n_sync,
                 free_tau    = getattr(args, 'free_tau_perpixel', False),
                 tvb_profile = _tvb_tile,
                 fit_tvb     = _fit_tvb,

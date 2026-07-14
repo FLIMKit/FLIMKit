@@ -4,7 +4,12 @@ from scipy.optimize import curve_fit
 
 def coates_pileup_correction(decay: np.ndarray, n_sync: int):
     m = np.asarray(decay, dtype=float)
-    n_s = float(n_sync)
+    n_s = float(n_sync or 0.0)
+    total = float(m.sum())
+    if n_s <= 0.0 or n_s <= total:
+        raise ValueError(
+            f'coates_pileup_correction needs the excitation-pulse count N_sync; got '
+            f'n_sync={n_s:,.0f} for {total:,.0f} photons. N_sync must exceed the photon count.')
     cumulative = np.concatenate([[0.0], np.cumsum(m[:-1])])
     denom = n_s - cumulative
     # Argument of log: 1 - M(t)/(N_s - C(t))

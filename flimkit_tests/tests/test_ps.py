@@ -142,7 +142,8 @@ def test_no_channels(tmp_path):
     ps = PSFile(str(path), verbose=False)
     assert ps.n_channels == 1
     assert ps.photon_channel == 1
-    assert ps.pileup_fraction is None
+    assert ps.n_sync is None
+    assert ps.photons_per_pulse is None
 
 def test_read_ps_metadata(tmp_path):
     path = tmp_path / 'sample.photons'

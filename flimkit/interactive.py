@@ -542,7 +542,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
-                n_sync=getattr(ptu, 'n_records', 0),
+                n_sync=getattr(ptu, 'n_sync', None),
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
             )
@@ -804,12 +804,13 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
           f'at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)')
     print(f'    IRF peak (steepest rise): bin {irf_peak_bin} '
           f'({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)')
-    pu = ptu.pileup_fraction
+    pu = ptu.photons_per_pulse
+    n_sync = getattr(ptu, 'n_sync', None)
     _pileup_pct = None
     _count_rate_mhz = None
     if pu is not None:
-        acq_s = ptu.n_records / ptu.sync_rate
-        cr_mhz = (decay.sum() / acq_s) / 1e6
+        acq_s = getattr(ptu, 'acq_time_s', None) or 0.0
+        cr_mhz = ((decay.sum() / acq_s) / 1e6) if acq_s > 0 else 0.0
         pu_pct = pu * 100
         _pileup_pct = round(pu_pct, 2)
         _count_rate_mhz = round(cr_mhz, 4)
@@ -817,15 +818,18 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f'    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  '
               f'Acq: {acq_s:.1f} s  '
               f'Count rate: {cr_mhz:.3f} MHz  '
-              f'Pile-up: {pu_pct:.1f}%{pu_warn}')
-        if getattr(args, 'correct_pileup', False):
-            from flimkit.FLIM.fit_tools import coates_pileup_correction, estimate_bg
-            bg_pre = estimate_bg(decay, irf_peak_bin)
-            decay_no_bg = np.maximum(decay - bg_pre, 0.0)
-            decay_raw_sum = decay.sum()
-            decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
-            print(f'    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): '
-                  f'{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)')
+              f'Photons/pulse: {pu:.4f} ({pu_pct:.2f}%){pu_warn}')
+    if getattr(args, 'correct_pileup', False):
+        if not n_sync:
+            raise ValueError('--correct-pileup requested but this file exposes no '
+                             'excitation-pulse count (N_sync); Coates is unavailable here')
+        from flimkit.FLIM.fit_tools import coates_pileup_correction, estimate_bg
+        bg_pre = estimate_bg(decay, irf_peak_bin)
+        decay_no_bg = np.maximum(decay - bg_pre, 0.0)
+        decay_raw_sum = decay.sum()
+        decay = coates_pileup_correction(decay_no_bg, n_sync) + bg_pre
+        print(f'    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): '
+              f'{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)')
     xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
         print(f'\n[3] XLSX: {args.xlsx}')
@@ -1013,7 +1017,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
-                n_sync=ptu.n_records,
+                n_sync=ptu.n_sync,
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,

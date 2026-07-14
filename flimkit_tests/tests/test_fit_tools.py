@@ -6,6 +6,7 @@ from flimkit.FLIM.fit_tools import (
     estimate_bg_from_histogram,
     find_fit_start,
     find_fit_end,
+    coates_pileup_correction,
     _build_bounds,
     _pack_p0,
 )
@@ -206,3 +207,38 @@ class TestPackP0:
                        bg_init=0, tau_override=[1.0, 5.0])
         assert p0[0] == 1.0
         assert p0[1] == 5.0
+
+
+def test_coates_rejects_photon_count_as_n_sync():
+    decay = np.zeros(64)
+    decay[10:] = 100.0
+    total = decay.sum()
+    with pytest.raises(ValueError, match='N_sync'):
+        coates_pileup_correction(decay, total)
+    with pytest.raises(ValueError, match='N_sync'):
+        coates_pileup_correction(decay, int(total * 0.9))
+    with pytest.raises(ValueError, match='N_sync'):
+        coates_pileup_correction(decay, 1)
+    with pytest.raises(ValueError, match='N_sync'):
+        coates_pileup_correction(decay, 0)
+    with pytest.raises(ValueError, match='N_sync'):
+        coates_pileup_correction(decay, None)
+
+
+def test_coates_is_near_identity_in_single_photon_regime():
+    decay = np.zeros(64)
+    decay[10:] = np.exp(-np.arange(54) / 12.0) * 50.0
+    n_sync = int(decay.sum() / 0.001)
+    out = coates_pileup_correction(decay, n_sync)
+    assert out.sum() == pytest.approx(decay.sum(), rel=2e-3)
+    assert np.all(out >= decay - 1e-9)
+
+
+def test_coates_lengthens_tail_when_pileup_is_real():
+    decay = np.zeros(64)
+    decay[10:] = np.exp(-np.arange(54) / 12.0) * 1000.0
+    n_sync = int(decay.sum() / 0.5)
+    out = coates_pileup_correction(decay, n_sync)
+    gain = out[10:] / np.maximum(decay[10:], 1e-9)
+    assert out.sum() > decay.sum()
+    assert gain[-1] > gain[0]

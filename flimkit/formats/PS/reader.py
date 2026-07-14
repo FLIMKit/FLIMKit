@@ -84,8 +84,10 @@ class PSFile:
                       'pass period_ns=<laser period ns> for a real time axis')
             print(' ')
 
+    n_sync = None
+
     @property
-    def pileup_fraction(self):
+    def photons_per_pulse(self):
         return None
 
     def _ensure_streams(self):

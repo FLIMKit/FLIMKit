@@ -72,9 +72,10 @@ def test_surface_matches_ptu(tmp_path):
     assert f.sync_rate == f.frequency
     assert f.n_records == f.channel.shape[0]
     assert f.photon_channel == 1
-    assert f.pileup_fraction is None
+    assert f.n_sync is None
+    assert f.photons_per_pulse is None
     f.pixel_stack(channel=1)
-    assert 0.0 < f.pileup_fraction <= 1.0
+    assert f.photons_per_pulse is None
     # binning must not clobber the full-res dims
     f.pixel_stack(channel=1, binning=2)
     assert (f.n_y, f.n_x) == (2, 3)

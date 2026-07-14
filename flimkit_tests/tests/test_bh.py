@@ -58,7 +58,7 @@ def test_channel_default_and_pileup(tmp_path):
     bh = BHFile(str(path), verbose=False)
     assert bh.n_channels == 1
     assert bh.photon_channel == 1
-    assert bh.pileup_fraction is None
+    assert bh.photons_per_pulse is None
     assert np.array_equal(bh.summed_decay(channel=None), bh.summed_decay(channel=1))
     assert np.array_equal(bh.summed_decay(channel=0), bh.summed_decay(channel=1))
     bh.pixel_stack(channel=1)

@@ -133,6 +133,11 @@ class PTUFile:
         self._active = [int(c) for c in p.active_channels]
         self.n_channels = len(self._active)
         self.n_records = int(getattr(p, 'number_records', 0) or 0)
+        self.n_photons = int(getattr(p, 'number_photons', 0) or 0)
+        self.n_frames = int(getattr(p, 'number_images', 0) or 0) or 1
+        # ptufile 'global_*_time' are in units of global_resolution, i.e. sync periods.
+        self.n_sync = int(getattr(p, 'global_acquisition_time', 0) or 0) or None
+        self.acq_time_s = float(getattr(p, 'acquisition_time', 0.0) or 0.0) or None
         self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
         self.photon_channel = None
         self.tags = dict(p.tags)
@@ -147,7 +152,10 @@ class PTUFile:
                 print(f"  Image    : {self.n_x} x {self.n_y} px, {self.n_channels} channel(s)")
             else:
                 print(f"  Point    : {self.n_channels} channel(s)")
-            print(f"  Records  : {self.n_records:,}")
+            print(f"  Records  : {self.n_records:,}  ({self.n_photons:,} photons)")
+            if self.n_sync:
+                print(f"  Sync     : {self.n_sync:,} pulses over {self.acq_time_s or 0.0:.1f} s"
+                      f"  ({self.n_photons / self.n_sync:.4f} photons/pulse)")
             print(' ')
 
     def close(self):
@@ -163,10 +171,10 @@ class PTUFile:
         self.close()
 
     @property
-    def pileup_fraction(self):
-        if self._total_photons is None or self.n_records == 0:
+    def photons_per_pulse(self):
+        if self._total_photons is None or not self.n_sync:
             return None
-        return self._total_photons / self.n_records
+        return self._total_photons / self.n_sync
 
     def _ch_pos(self, channel):
         channel = int(channel)
