@@ -6,7 +6,8 @@ tqdm.disable = True
 from scipy.optimize import least_squares, differential_evolution, nnls
 from scipy.stats.distributions import chi2 as chi2_dist
 from ..FLIM.irf_tools import build_full_irf
-from ..FLIM.fit_tools import estimate_bg, find_fit_start, find_fit_end, _build_bounds, _pack_p0, coates_pileup_correction
+from ..FLIM.fit_tools import (estimate_bg, find_fit_start, find_fit_end, _build_bounds,
+                              _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx)
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
                            dist_reconvolution_model, build_dist_basis_grid,
@@ -58,7 +59,9 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                cost_function='poisson',
                sigma_max=3.0,
                irf_shift_bins=2,
-               tvb_profile=None, fit_tvb=False):
+               tvb_profile=None, fit_tvb=False,
+               fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
+               n_sync=None):
     warmup_gpu_backend()
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
@@ -76,6 +79,14 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     fit_end = min(fit_end, standard_fit_end)
     fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
     fit_start = max(0, min(fit_start, fit_end - 10))
+    # user window overrides the auto one; auto stays the default
+    if fit_end_ns is not None:
+        fit_end = min(n_bins, bins_from_ns(fit_end_ns, tcspc_res))
+    if fit_start_ns is not None:
+        fit_start = max(0, min(bins_from_ns(fit_start_ns, tcspc_res), fit_end - 2))
+    exclude_bins = [(bins_from_ns(lo, tcspc_res), bins_from_ns(hi, tcspc_res))
+                    for lo, hi in (exclude_ns or [])]
+    fit_idx = build_fit_idx(fit_start, fit_end, n_bins, exclude_bins)
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
     if fit_tvb and tvb_profile is None:
         raise ValueError('fit_tvb=True requires a tvb_profile.')
@@ -90,7 +101,13 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     print(f"  σ broadening: {'free param (σ≤' + f'{sigma_max:.1f})' if fit_sigma else 'fixed at 0'}")
     print(f"  Fit window: bins {fit_start}-{fit_end} "
           f"({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), "
-          f"{fit_end-fit_start} bins")
+          f"{len(fit_idx)} bins fitted"
+          f"{' (user-set)' if (fit_start_ns is not None or fit_end_ns is not None) else ' (auto)'}")
+    if exclude_bins:
+        for (lo_b, hi_b), (lo_n, hi_n) in zip(exclude_bins, exclude_ns):
+            print(f"    Excluded: bins {lo_b}-{hi_b} ({lo_n:.2f}-{hi_n:.2f} ns)")
+    if n_sync:
+        print(f"  Pile-up: in forward model (N_sync={n_sync:,}), data left raw")
     lo, hi = _build_bounds(n_exp, tau_min, tau_max, decay_work.max(),
                              has_tail, fit_bg, fit_sigma,
                              bg_init=bg_init, bg_upper=bg_upper,
@@ -98,22 +115,22 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                              fit_tvb=fit_tvb, tvb_init=tvb_init, tvb_upper=tvb_upper)
     bounds = list(zip(lo, hi))
     if cost_function == 'chi2':
-        weights = np.sqrt(np.maximum(decay_work[fit_start:fit_end], 1.0))
+        weights = np.sqrt(np.maximum(decay_work[fit_idx], 1.0))
         def residuals(params):
             model_vals = reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
                 n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-            return (model_vals[fit_start:fit_end]
-                    - decay_work[fit_start:fit_end]) / weights
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+            return (model_vals[fit_idx]
+                    - decay_work[fit_idx]) / weights
     else:
         def residuals(params):
             model_vals = reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
                 n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-            n = decay_work[fit_start:fit_end]
-            m = np.maximum(model_vals[fit_start:fit_end], 1e-10)
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+            n = decay_work[fit_idx]
+            m = np.maximum(model_vals[fit_idx], 1e-10)
             dev = m - n
             pos = n > 0
             dev[pos] += n[pos] * np.log(n[pos] / m[pos])
@@ -161,14 +178,14 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             cost_fn = _DECostPoissonLogTau(
                 tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                 has_tail, fit_bg, fit_sigma,
-                fit_start, fit_end, decay_work,
-                tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+                fit_idx, decay_work,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
         else:
             cost_fn = _DECostLogTau(
                 tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                 has_tail, fit_bg, fit_sigma,
-                fit_start, fit_end, decay_work, weights,
-                tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+                fit_idx, decay_work, weights,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
         de_res = differential_evolution(
             cost_fn, bounds=bounds_log,
             maxiter=de_maxiter, popsize=de_popsize,
@@ -196,14 +213,17 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     popt_original = popt_work.copy()
     summary = _make_summary(popt_original, decay, tcspc_res, n_bins, irf_prompt,
                             n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                            fit_start, fit_end, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+                            fit_idx, message, tvb_profile=tvb_profile,
+                            fit_tvb=fit_tvb, n_sync=n_sync)
     return popt_original, summary
 
 
 def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
                   n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                  fit_start, fit_end, message=None,
-                  tvb_profile=None, fit_tvb=False):
+                  fit_idx, message=None,
+                  tvb_profile=None, fit_tvb=False, n_sync=None):
+    fit_start = int(fit_idx[0])
+    fit_end = int(fit_idx[-1]) + 1
     taus = popt[:n_exp]
     amps = popt[n_exp:2*n_exp]
     order = np.argsort(-taus)
@@ -230,25 +250,26 @@ def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
         tail_amp = tail_tau = 0.0
     model = reconvolution_model(popt, tcspc_res, n_bins, irf_prompt,
                                    n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                                   tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-    d_win = decay[fit_start:fit_end].astype(float)
-    m_win = model[fit_start:fit_end]
+                                   tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+    d_win = decay[fit_idx].astype(float)
+    m_win = model[fit_idx]
     sigma_w = np.sqrt(np.maximum(d_win, 1.0))
     chi2 = float(np.sum(((d_win - m_win) / sigma_w)**2))
-    dof = max((fit_end - fit_start) - len(popt), 1)
+    dof = max(len(fit_idx) - len(popt), 1)
     rchi2 = chi2 / dof
     p_val = float(1 - chi2_dist.cdf(chi2, df=dof))
     resid = (decay - model) / np.sqrt(np.maximum(model, 1.0))
     sigma_p = np.sqrt(np.maximum(m_win, 1.0))
     chi2_p = float(np.sum(((d_win - m_win) / sigma_p)**2))
     rchi2_p = chi2_p / dof
-    peak_bin_loc = int(np.argmax(decay[fit_start:fit_end])) + fit_start
+    peak_bin_loc = int(fit_idx[np.argmax(decay[fit_idx])])
     tail_start = peak_bin_loc + max(1, int(0.05 * (fit_end - peak_bin_loc)))
-    d_tail = decay[tail_start:fit_end].astype(float)
-    m_tail = model[tail_start:fit_end]
+    tail_idx = fit_idx[fit_idx >= tail_start]
+    d_tail = decay[tail_idx].astype(float)
+    m_tail = model[tail_idx]
     sw_tail = np.sqrt(np.maximum(d_tail, 1.0))
     chi2_tail = float(np.sum(((d_tail - m_tail) / sw_tail)**2))
-    dof_tail = max((fit_end - tail_start) - len(popt), 1)
+    dof_tail = max(len(tail_idx) - len(popt), 1)
     rchi2_tail = chi2_tail / dof_tail
     sp_tail = np.sqrt(np.maximum(m_tail, 1.0))
     chi2_tail_p = float(np.sum(((d_tail - m_tail) / sp_tail)**2))
@@ -297,6 +318,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   min_photons=MIN_PHOTONS_PERPIX,
                   tau_min_ns=None, tau_max_ns=None,
                   correct_pileup=False, n_sync=None,
+                  fit_idx=None,
                   progress_callback=None,
                   free_tau=False,
                   use_gpu='auto',
@@ -320,6 +342,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 f'pile-up correction needs more pulses than photons per pixel; got '
                 f'{_n_sync_px:,} pulses/px vs {_max_px:,.0f} photons in the brightest pixel. '
                 f'Check the N_sync reported by the reader.')
+    # explicit bin set the projection runs over; default is every bin (old behaviour)
+    fit_idx = np.arange(n_bins) if fit_idx is None else np.asarray(fit_idx, dtype=int)
+    _windowed = len(fit_idx) != n_bins
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     idx = 2 * n_exp
     shift = global_popt[idx]; idx += 1
@@ -336,8 +361,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     conv_basis = np.array([
         np.real(np.fft.ifft(np.fft.fft(b) * irf_fft)) for b in basis
     ]) 
-    A = conv_basis.T   
-    if use_gpu is not False:
+    A = conv_basis.T
+    A_fit = A[fit_idx]
+    if _windowed and use_gpu is not False:
+        print(f'  [per-pixel] fit window/exclusions active ({len(fit_idx)}/{n_bins} bins); '
+              f'using CPU path (GPU backends have no window support yet)')
+    if use_gpu is not False and not _windowed:
         _backend = gpu_backend if gpu_backend is not None else (
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
         )
@@ -420,11 +449,13 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 np.fft.fft(np.exp(-t_axis / max(tau, 1e-15))) * _irf_fft_g))
             for tau in tau_grid
         ])  
-        bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)
+        basis_fit = basis_grid[:, fit_idx]
+        bb_grid = np.maximum((basis_fit ** 2).sum(axis=1), 1e-20)
         if tvb_on:
-            _tvb_U = np.column_stack([np.asarray(tvb_profile, dtype=float), np.ones(n_bins)])
+            _tvb_prof_f = np.asarray(tvb_profile, dtype=float)[fit_idx]
+            _tvb_U = np.column_stack([_tvb_prof_f, np.ones(len(fit_idx))])
             _tvb_Up = np.linalg.pinv(_tvb_U)
-            _basis_perp = basis_grid - (basis_grid @ _tvb_Up.T) @ _tvb_U.T
+            _basis_perp = basis_fit - (basis_fit @ _tvb_Up.T) @ _tvb_U.T
             _bb_perp = np.maximum((_basis_perp ** 2).sum(axis=1), 1e-20)
         for yi in tqdm(range(ny), desc='  Per-pixel rows', disable=True):
             if progress_callback is not None:
@@ -440,13 +471,14 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 if correct_pileup and _n_sync_px > 0:
                     dvf = np.array([coates_pileup_correction(dvf[k], _n_sync_px)
                                     for k in range(len(valid_xi))])
-                d_perp = dvf - (dvf @ _tvb_Up.T) @ _tvb_U.T
+                dvf_f = dvf[:, fit_idx]
+                d_perp = dvf_f - (dvf_f @ _tvb_Up.T) @ _tvb_U.T
                 bd_p = d_perp @ _basis_perp.T
                 d_sq = (d_perp ** 2).sum(axis=1)
                 costs_p = d_sq[:, np.newaxis] - np.maximum(bd_p, 0.0) ** 2 / _bb_perp
                 best_g = np.argmin(costs_p, axis=1)
                 amp_v = np.maximum(bd_p[np.arange(len(valid_xi)), best_g] / _bb_perp[best_g], 0.0)
-                resid_after = dvf - amp_v[:, np.newaxis] * basis_grid[best_g]
+                resid_after = dvf_f - amp_v[:, np.newaxis] * basis_fit[best_g]
                 vz = resid_after @ _tvb_Up.T
                 tvb_v = np.maximum(vz[:, 0], 0.0)
                 bg_z = vz[:, 1]
@@ -462,10 +494,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     maps['alpha_1'][yi, xi] = float(amp_v[k])
                     maps['frac_1'][yi, xi] = 1.0
                     maps['tvb_scale'][yi, xi] = float(tvb_v[k])
-                    model_px = amp_v[k] * basis_grid[best_g[k]] + tvb_v[k] * tvb_profile + bg_z[k]
-                    resid = dvf[k] - model_px
+                    model_px = amp_v[k] * basis_fit[best_g[k]] + tvb_v[k] * _tvb_prof_f + bg_z[k]
+                    resid = dvf_f[k] - model_px
                     chi2_px = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
-                    maps['chi2_r'][yi, xi] = chi2_px / max(n_bins - 2, 1)
+                    maps['chi2_r'][yi, xi] = chi2_px / max(len(fit_idx) - 2, 1)
                     fitted += 1
                 continue
             dv = decay_row[valid_xi] 
@@ -478,9 +510,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     coates_pileup_correction(dc_v[k], _n_sync_px)
                     for k in range(len(valid_xi))
                 ])
-            bd = dc_v @ basis_grid.T             
-            amps_g = np.maximum(bd / bb_grid, 0.0)  
-            dc_sq  = (dc_v ** 2).sum(axis=1)        
+            dc_f = dc_v[:, fit_idx]
+            bd = dc_f @ basis_fit.T
+            amps_g = np.maximum(bd / bb_grid, 0.0)
+            dc_sq  = (dc_f ** 2).sum(axis=1)
             # cost[i,j] = ||dc_v[i]||² - max(bd[i,j],0)² / ||basis[j]||²
             # Minimising cost ↔ maximising the projection bd²/||b||²
             costs = dc_sq[:, np.newaxis] - np.maximum(bd, 0.0) ** 2 / bb_grid
@@ -498,11 +531,11 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 maps['tau_mean_int'][yi, xi] = tau_ns
                 maps['alpha_1'][yi, xi] = float(amp_v[k])
                 maps['frac_1'][yi, xi] = 1.0
-                best_b = basis_grid[best_g[k]]
+                best_b = basis_fit[best_g[k]]
                 model_px = float(amp_v[k]) * best_b + bg_v[k]
-                resid = dv[k] - model_px
+                resid = dv[k][fit_idx] - model_px
                 chi2_px = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
-                maps['chi2_r'][yi, xi] = chi2_px / max(n_bins - 2, 1)
+                maps['chi2_r'][yi, xi] = chi2_px / max(len(fit_idx) - 2, 1)
                 fitted += 1
     elif not free_tau:
         for yi in tqdm(range(ny), desc='  Per-pixel rows', disable=True):
@@ -517,21 +550,21 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     dfit = decay_px.astype(float)
                     if correct_pileup and _n_sync_px > 0:
                         dfit = coates_pileup_correction(dfit, _n_sync_px)
-                    coeffs_px, _ = nnls(A_aug, dfit)
+                    coeffs_px, _ = nnls(A_aug[fit_idx], dfit[fit_idx])
                     amps_px = coeffs_px[:n_exp]
                     tvb_px = coeffs_px[n_exp]
                     bg_px = coeffs_px[n_exp + 1]
-                    model_px = A @ amps_px + tvb_px * B_cpu + bg_px
+                    model_px = A_fit @ amps_px + tvb_px * B_cpu[fit_idx] + bg_px
                 else:
                     bg_px = estimate_bg(decay_px, int(np.argmax(decay_px)))
                     data_corr = np.maximum(decay_px - bg_px, 0.0)
                     if correct_pileup and _n_sync_px > 0:
                         data_corr = coates_pileup_correction(data_corr, _n_sync_px)
-                    amps_px, _ = nnls(A, data_corr)
-                    model_px = A @ amps_px + bg_px
-                resid = decay_px - model_px
+                    amps_px, _ = nnls(A_fit, data_corr[fit_idx])
+                    model_px = A_fit @ amps_px + bg_px
+                resid = decay_px[fit_idx] - model_px
                 chi2_px = float(np.sum(resid**2 / np.maximum(model_px, 1.0)))
-                dof_px = max(n_bins - n_exp, 1)
+                dof_px = max(len(fit_idx) - n_exp, 1)
                 amp_sum = amps_px.sum()
                 if amp_sum <= 0:
                     skipped += 1
@@ -602,7 +635,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         model_vals = reconvolution_model(
                             full_p, tcspc_res, n_bins, irf_prompt,
                             n_exp, _bg, has_tail, False, fit_sigma)
-                    return (model_vals - _decay) / _w
+                    return (model_vals[fit_idx] - _decay[fit_idx]) / _w[fit_idx]
                 try:
                     res = least_squares(
                         _resid, p0_px,
@@ -638,9 +671,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     model_sol = reconvolution_model(
                         full_sol, tcspc_res, n_bins, irf_prompt,
                         n_exp, bg_px, has_tail, False, fit_sigma)
-                resid_sol = decay_px - model_sol
-                chi2_px = float(np.sum(resid_sol**2 / np.maximum(model_sol, 1.0)))
-                dof_px = max(n_bins - 2 * n_exp, 1)
+                resid_sol = decay_px[fit_idx] - model_sol[fit_idx]
+                chi2_px = float(np.sum(resid_sol**2 / np.maximum(model_sol[fit_idx], 1.0)))
+                dof_px = max(len(fit_idx) - 2 * n_exp, 1)
                 maps['tau_mean_int'][yi, xi] = tau_int
                 maps['tau_mean_amp'][yi, xi] = tau_amp
                 maps['chi2_r'][yi, xi] = chi2_px / dof_px
@@ -664,7 +697,9 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
                     cost_function='poisson',
                     sigma_max=3.0,
                     irf_shift_bins=2,
-                    tvb_profile=None, fit_tvb=False):
+                    tvb_profile=None, fit_tvb=False,
+                    fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
+                    n_sync=None):
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
@@ -680,6 +715,14 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     fit_end = min(fit_end, standard_fit_end)
     fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
     fit_start = max(0, min(fit_start, fit_end - 10))
+    # user window overrides the auto one; auto stays the default
+    if fit_end_ns is not None:
+        fit_end = min(n_bins, bins_from_ns(fit_end_ns, tcspc_res))
+    if fit_start_ns is not None:
+        fit_start = max(0, min(bins_from_ns(fit_start_ns, tcspc_res), fit_end - 2))
+    exclude_bins = [(bins_from_ns(lo, tcspc_res), bins_from_ns(hi, tcspc_res))
+                    for lo, hi in (exclude_ns or [])]
+    fit_idx = build_fit_idx(fit_start, fit_end, n_bins, exclude_bins)
     bg_upper = max(bg_init * 2.0, bg_init + 10.0)
     if fit_tvb and tvb_profile is None:
         raise ValueError('fit_tvb=True requires a tvb_profile.')
@@ -697,21 +740,21 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
         fit_tvb=fit_tvb, tvb_init=tvb_init, tvb_upper=tvb_upper)
     bounds = list(zip(lo, hi))
     if cost_function == 'chi2':
-        weights = np.sqrt(np.maximum(decay_work[fit_start:fit_end], 1.0))
+        weights = np.sqrt(np.maximum(decay_work[fit_idx], 1.0))
         def residuals(params):
             model_vals = dist_reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
                 n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-            return (model_vals[fit_start:fit_end] - decay_work[fit_start:fit_end]) / weights
+            return (model_vals[fit_idx] - decay_work[fit_idx]) / weights
     else:
         def residuals(params):
             model_vals = dist_reconvolution_model(
                 params, tcspc_res, n_bins, irf_prompt,
                 n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-            n = decay_work[fit_start:fit_end]
-            m = np.maximum(model_vals[fit_start:fit_end], 1e-10)
+            n = decay_work[fit_idx]
+            m = np.maximum(model_vals[fit_idx], 1e-10)
             dev = m - n
             pos = n > 0
             dev[pos] += n[pos] * np.log(n[pos] / m[pos])
@@ -764,13 +807,13 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
         if cost_function == 'poisson':
             cost_fn = _DECostDistPoissonLogParam(
                 tcspc_res, n_bins, irf_prompt, n_components, dist_type,
-                bg_fixed, fit_bg, fit_sigma, fit_start, fit_end, decay_work,
-                tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+                bg_fixed, fit_bg, fit_sigma, fit_idx, decay_work,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
         else:
             cost_fn = _DECostDistLogParam(
                 tcspc_res, n_bins, irf_prompt, n_components, dist_type,
-                bg_fixed, fit_bg, fit_sigma, fit_start, fit_end, decay_work,
-                weights, tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+                bg_fixed, fit_bg, fit_sigma, fit_idx, decay_work,
+                weights, tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
         de_res = differential_evolution(
             cost_fn, bounds=bounds_log,
             maxiter=de_maxiter, popsize=de_popsize,
@@ -797,13 +840,15 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     summary = _make_summary_dist(
         popt_work, decay, tcspc_res, n_bins, irf_prompt,
         n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
-        fit_start, fit_end, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb)
+        fit_idx, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
     return popt_work, summary
 
 def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
                        n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
-                       fit_start, fit_end, message=None,
-                       tvb_profile=None, fit_tvb=False):
+                       fit_idx, message=None,
+                       tvb_profile=None, fit_tvb=False, n_sync=None):
+    fit_start = int(fit_idx[0])
+    fit_end = int(fit_idx[-1]) + 1
     tau_centers = popt[:n_components]
     widths = popt[n_components:2 * n_components]
     amps = popt[2 * n_components:3 * n_components]
@@ -823,22 +868,23 @@ def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
     model = dist_reconvolution_model(popt, tcspc_res, n_bins, irf_prompt,
                                        n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
                                        tvb_profile=tvb_profile, fit_tvb=fit_tvb)
-    d_win = decay[fit_start:fit_end].astype(float)
-    m_win = model[fit_start:fit_end]
+    d_win = decay[fit_idx].astype(float)
+    m_win = model[fit_idx]
     sigma_w = np.sqrt(np.maximum(d_win, 1.0))
     chi2 = float(np.sum(((d_win - m_win) / sigma_w) ** 2))
-    dof = max((fit_end - fit_start) - len(popt), 1)
+    dof = max(len(fit_idx) - len(popt), 1)
     rchi2 = chi2 / dof
     sigma_p = np.sqrt(np.maximum(m_win, 1.0))
     chi2_p = float(np.sum(((d_win - m_win) / sigma_p) ** 2))
     rchi2_p = chi2_p / dof
-    peak_bin_loc = int(np.argmax(decay[fit_start:fit_end])) + fit_start
+    peak_bin_loc = int(fit_idx[np.argmax(decay[fit_idx])])
     tail_start = peak_bin_loc + max(1, int(0.05 * (fit_end - peak_bin_loc)))
-    d_tail = decay[tail_start:fit_end].astype(float)
-    m_tail = model[tail_start:fit_end]
+    tail_idx = fit_idx[fit_idx >= tail_start]
+    d_tail = decay[tail_idx].astype(float)
+    m_tail = model[tail_idx]
     sw_tail = np.sqrt(np.maximum(d_tail, 1.0))
     chi2_tail = float(np.sum(((d_tail - m_tail) / sw_tail) ** 2))
-    dof_tail = max((fit_end - tail_start) - len(popt), 1)
+    dof_tail = max(len(tail_idx) - len(popt), 1)
     rchi2_tail = chi2_tail / dof_tail
     sp_tail = np.sqrt(np.maximum(m_tail, 1.0))
     chi2_tail_p = float(np.sum(((d_tail - m_tail) / sp_tail) ** 2))

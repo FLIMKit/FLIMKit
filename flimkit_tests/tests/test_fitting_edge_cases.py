@@ -150,7 +150,7 @@ class TestCostFunctions:
         cost_obj = _DECostPoisson(
             tcspc_res, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
 
         params = [2e-9, 1000.0, 0.0]
@@ -169,12 +169,12 @@ class TestCostFunctions:
         cost_lin = _DECostPoisson(
             97e-12, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
         cost_log = _DECostPoissonLogTau(
             97e-12, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
 
         cost1 = cost_lin([2e-9, 1000.0, 0.0])
@@ -199,7 +199,7 @@ class TestCostFunctions:
         cost_obj = _DECostPoisson(
             tcspc_res, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
 
         # Use numpy array for params to avoid indexing issues
@@ -219,12 +219,12 @@ class TestCostFunctions:
         cost_lin = _DECostPoisson(
             97e-12, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
         cost_log = _DECostPoissonLogTau(
             97e-12, n_bins, irf, n_exp=1, bg_fixed=5.0,
             has_tail=False, fit_bg=False, fit_sigma=False,
-            fit_start=10, fit_end=90, decay=decay
+            fit_idx=np.arange(10, 90), decay=decay
         )
 
         cost1 = cost_lin(np.array([2e-9, 1000.0, 0.0]))

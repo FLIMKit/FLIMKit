@@ -61,6 +61,27 @@ def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
     strategy = f'machine_irf ({irf_path.name}) peak_aligned_to_decay'
     return irf_prompt, strategy
 
+def parse_exclude_ns(spec):
+    # "7.2-8.8" or "7.2-8.8,11.0-11.5" -> [(7.2, 8.8), (11.0, 11.5)]
+    if not spec:
+        return None
+    if not isinstance(spec, str):
+        return spec or None
+    bands = []
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            lo, hi = part.split('-')
+            lo, hi = float(lo), float(hi)
+        except ValueError:
+            raise ValueError(f'bad --exclude-ns band {part!r}; expected "lo-hi" in ns')
+        if hi <= lo:
+            raise ValueError(f'bad --exclude-ns band {part!r}; hi must exceed lo')
+        bands.append((lo, hi))
+    return bands or None
+
 def yes_no_question(question):
     import inquirer
     questions = [inquirer.List('yesno',
@@ -491,6 +512,9 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            fit_start_ns=getattr(args, 'fit_start_ns', None),
+            fit_end_ns=getattr(args, 'fit_end_ns', None),
+            exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
         )
     print_summary(global_summary, strategy, args.nexp)
     metadata = {
@@ -963,6 +987,9 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            fit_start_ns=getattr(args, 'fit_start_ns', None),
+            fit_end_ns=getattr(args, 'fit_end_ns', None),
+            exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
     if args.mode in ('summed', 'both'):
@@ -1462,6 +1489,9 @@ def timelapse_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.fit_start_ns = None
+        args.fit_end_ns = None
+        args.exclude_ns = None
         args.save_stack = (save_stack_q == 'y')
         args.no_plots = (no_plots_q == 'y')
         _run_timelapse_fit(args)
@@ -1498,6 +1528,13 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--fit-start-ns', type=float, default=None,
+                        help='fit window start in ns (default: auto from IRF onset)')
+        ap.add_argument('--fit-end-ns', type=float, default=None,
+                        help='fit window end in ns (default: auto)')
+        ap.add_argument('--exclude-ns', type=str, default=None,
+                        help='bands to exclude from the fit, eg "7.2-8.8" or '
+                             '"7.2-8.8,11.0-11.5" (for reflection peaks mid-decay)')
         ap.add_argument('--cost-function', choices=['chi2', 'poisson'], default='poisson')
         ap.add_argument('--no-stack',   action='store_true',
                         help='Skip saving 4D (T,H,W) stacks')
@@ -1594,6 +1631,9 @@ def zstack_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.fit_start_ns = None
+        args.fit_end_ns = None
+        args.exclude_ns = None
         args.bound_fraction = (bound_q == 'y')
         args.save_stack = (save_stack_q == 'y')
         args.no_plots = (no_plots_q == 'y')
@@ -1632,6 +1672,13 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--fit-start-ns', type=float, default=None,
+                        help='fit window start in ns (default: auto from IRF onset)')
+        ap.add_argument('--fit-end-ns', type=float, default=None,
+                        help='fit window end in ns (default: auto)')
+        ap.add_argument('--exclude-ns', type=str, default=None,
+                        help='bands to exclude from the fit, eg "7.2-8.8" or '
+                             '"7.2-8.8,11.0-11.5" (for reflection peaks mid-decay)')
         ap.add_argument('--cost-function', choices=['chi2', 'poisson'], default='poisson')
         ap.add_argument('--bound-fraction', action='store_true',
                         help='Compute bound fraction α₂/(α₁+α₂)')

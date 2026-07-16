@@ -8,11 +8,22 @@ def _exponential_kernel(tcspc_res, n_bins, taus, amps, bg):
     return sum(a * np.exp(-t / max(tau, 1e-15))
                for a, tau in zip(amps, taus)) + bg
 
+def apply_pileup(model, n_sync):
+    # Forward first-photon pile-up: P(first photon of a pulse lands in bin i).
+    # Exact inverse of coates_pileup_correction, so the fit sees distorted model
+    # against raw (Poisson) data instead of corrected (non-Poisson) data.
+    # Needs the FULL-length model: bin i depends on the cumulative rate in every
+    # preceding bin, including bins outside the fit window.
+    n_s = float(n_sync)
+    lam = np.maximum(np.asarray(model, dtype=float), 0.0) / n_s
+    cum = np.concatenate([[0.0], np.cumsum(lam[:-1])])
+    return n_s * np.exp(-cum) * (1.0 - np.exp(-lam))
+
 class _DECost:
     def __init__(self, tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                  has_tail, fit_bg, fit_sigma,
-                 fit_start, fit_end, decay, weights,
-                 tvb_profile=None, fit_tvb=False):
+                 fit_idx, decay, weights,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
         self.tcspc_res = tcspc_res
         self.n_bins = n_bins
         self.irf_prompt = irf_prompt
@@ -21,21 +32,22 @@ class _DECost:
         self.has_tail = has_tail
         self.fit_bg = fit_bg
         self.fit_sigma = fit_sigma
-        self.fit_start = fit_start
-        self.fit_end = fit_end
+        self.fit_idx = fit_idx
         self.decay = decay
         self.weights = weights
         self.tvb_profile = tvb_profile
         self.fit_tvb = fit_tvb
+        self.n_sync = n_sync
 
     def __call__(self, params):
         model = reconvolution_model(
             params, self.tcspc_res, self.n_bins, self.irf_prompt,
             self.n_exp, self.bg_fixed, self.has_tail,
             self.fit_bg, self.fit_sigma,
-            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb)
-        res = ((model[self.fit_start:self.fit_end]
-                - self.decay[self.fit_start:self.fit_end])
+            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb,
+            n_sync=self.n_sync)
+        res = ((model[self.fit_idx]
+                - self.decay[self.fit_idx])
                / self.weights)
         return np.sum(res**2)
 
@@ -48,8 +60,8 @@ class _DECostLogTau(_DECost):
 class _DECostPoisson:
     def __init__(self, tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
                  has_tail, fit_bg, fit_sigma,
-                 fit_start, fit_end, decay,
-                 tvb_profile=None, fit_tvb=False):
+                 fit_idx, decay,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
         self.tcspc_res = tcspc_res
         self.n_bins = n_bins
         self.irf_prompt = irf_prompt
@@ -58,20 +70,21 @@ class _DECostPoisson:
         self.has_tail = has_tail
         self.fit_bg = fit_bg
         self.fit_sigma = fit_sigma
-        self.fit_start = fit_start
-        self.fit_end = fit_end
+        self.fit_idx = fit_idx
         self.decay = decay
         self.tvb_profile = tvb_profile
         self.fit_tvb = fit_tvb
+        self.n_sync = n_sync
 
     def __call__(self, params):
         model = reconvolution_model(
             params, self.tcspc_res, self.n_bins, self.irf_prompt,
             self.n_exp, self.bg_fixed, self.has_tail,
             self.fit_bg, self.fit_sigma,
-            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb)
-        n = self.decay[self.fit_start:self.fit_end]
-        m = np.maximum(model[self.fit_start:self.fit_end], 1e-10)
+            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb,
+            n_sync=self.n_sync)
+        n = self.decay[self.fit_idx]
+        m = np.maximum(model[self.fit_idx], 1e-10)
         # Poisson deviance (C-statistic)
         dev = m - n
         pos = n > 0
@@ -108,7 +121,8 @@ def _dist_kernel(tcspc_res, n_bins, tau_center, width, amp, dist_type, n_quad=_N
 
 def dist_reconvolution_model(params, tcspc_res, n_bins, irf_prompt,
                               n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
-                              tvb_profile=None, fit_tvb=False, tvb_fixed=0.0):
+                              tvb_profile=None, fit_tvb=False, tvb_fixed=0.0,
+                              n_sync=None):
     # params layout: [tau_c×N, width×N, amp×N, shift, (sigma), (bg), (tvb_scale)]
     tau_centers = np.clip(params[:n_components], 1e-14, None)
     widths = np.clip(params[n_components:2 * n_components], 1e-14, None)
@@ -134,6 +148,8 @@ def dist_reconvolution_model(params, tcspc_res, n_bins, irf_prompt,
     model = np.real(np.fft.ifft(np.fft.fft(kernel) * np.fft.fft(irf_full)))
     if tvb_profile is not None:
         model = model + tvb_scale * tvb_profile
+    if n_sync:
+        model = apply_pileup(model, n_sync)
     return model
 
 def build_dist_basis_grid(tcspc_res, n_bins, irf_fixed,
@@ -153,8 +169,8 @@ def build_dist_basis_grid(tcspc_res, n_bins, irf_fixed,
 
 class _DECostDist:
     def __init__(self, tcspc_res, n_bins, irf_prompt, n_components, dist_type,
-                 bg_fixed, fit_bg, fit_sigma, fit_start, fit_end, decay, weights,
-                 tvb_profile=None, fit_tvb=False):
+                 bg_fixed, fit_bg, fit_sigma, fit_idx, decay, weights,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
         self.tcspc_res = tcspc_res
         self.n_bins = n_bins
         self.irf_prompt = irf_prompt
@@ -163,21 +179,22 @@ class _DECostDist:
         self.bg_fixed = bg_fixed
         self.fit_bg = fit_bg
         self.fit_sigma = fit_sigma
-        self.fit_start = fit_start
-        self.fit_end = fit_end
+        self.fit_idx = fit_idx
         self.decay = decay
         self.weights = weights
         self.tvb_profile = tvb_profile
         self.fit_tvb = fit_tvb
+        self.n_sync = n_sync
 
     def __call__(self, params):
         model = dist_reconvolution_model(
             params, self.tcspc_res, self.n_bins, self.irf_prompt,
             self.n_components, self.dist_type,
             self.bg_fixed, self.fit_bg, self.fit_sigma,
-            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb)
-        res = ((model[self.fit_start:self.fit_end]
-                - self.decay[self.fit_start:self.fit_end])
+            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb,
+            n_sync=self.n_sync)
+        res = ((model[self.fit_idx]
+                - self.decay[self.fit_idx])
                / self.weights)
         return np.sum(res ** 2)
 
@@ -191,8 +208,8 @@ class _DECostDistLogParam(_DECostDist):
 
 class _DECostDistPoisson:
     def __init__(self, tcspc_res, n_bins, irf_prompt, n_components, dist_type,
-                 bg_fixed, fit_bg, fit_sigma, fit_start, fit_end, decay,
-                 tvb_profile=None, fit_tvb=False):
+                 bg_fixed, fit_bg, fit_sigma, fit_idx, decay,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
         self.tcspc_res = tcspc_res
         self.n_bins = n_bins
         self.irf_prompt = irf_prompt
@@ -201,20 +218,21 @@ class _DECostDistPoisson:
         self.bg_fixed = bg_fixed
         self.fit_bg = fit_bg
         self.fit_sigma = fit_sigma
-        self.fit_start = fit_start
-        self.fit_end = fit_end
+        self.fit_idx = fit_idx
         self.decay = decay
         self.tvb_profile = tvb_profile
         self.fit_tvb = fit_tvb
+        self.n_sync = n_sync
 
     def __call__(self, params):
         model = dist_reconvolution_model(
             params, self.tcspc_res, self.n_bins, self.irf_prompt,
             self.n_components, self.dist_type,
             self.bg_fixed, self.fit_bg, self.fit_sigma,
-            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb)
-        n = self.decay[self.fit_start:self.fit_end]
-        m = np.maximum(model[self.fit_start:self.fit_end], 1e-10)
+            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb,
+            n_sync=self.n_sync)
+        n = self.decay[self.fit_idx]
+        m = np.maximum(model[self.fit_idx], 1e-10)
         dev = m - n
         pos = n > 0
         dev[pos] += n[pos] * np.log(n[pos] / m[pos])
@@ -230,7 +248,8 @@ class _DECostDistPoissonLogParam(_DECostDistPoisson):
 
 def reconvolution_model(params, tcspc_res, n_bins, irf_prompt,
                         n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
-                        tvb_profile=None, fit_tvb=False, tvb_fixed=0.0):
+                        tvb_profile=None, fit_tvb=False, tvb_fixed=0.0,
+                        n_sync=None):
     taus = np.clip(params[:n_exp], 1e-14, None)
     amps = params[n_exp:2*n_exp]
     order = np.argsort(-taus)               
@@ -260,4 +279,7 @@ def reconvolution_model(params, tcspc_res, n_bins, irf_prompt,
     model = np.real(np.fft.ifft(np.fft.fft(kernel) * np.fft.fft(irf_full)))
     if tvb_profile is not None:
         model = model + tvb_scale * tvb_profile
+    # after bg and TVB: the detector piles up every photon reaching it, not just signal
+    if n_sync:
+        model = apply_pileup(model, n_sync)
     return model

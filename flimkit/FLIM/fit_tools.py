@@ -20,6 +20,23 @@ def coates_pileup_correction(decay: np.ndarray, n_sync: int):
         corrected = np.where(safe, -n_s * np.log(arg), 0.0)
     return corrected
 
+def bins_from_ns(value_ns, tcspc_res):
+    return int(round(float(value_ns) * 1e-9 / tcspc_res))
+
+def build_fit_idx(fit_start, fit_end, n_bins, exclude_bins=None):
+    # explicit bin set the fit runs over: a contiguous window minus any excluded
+    # bands (eg a reflection peak mid-decay). Dropping bins keeps the fit linear
+    # in the amplitudes, so the per-pixel projection is unaffected.
+    idx = np.arange(max(0, int(fit_start)), min(int(n_bins), int(fit_end)), dtype=int)
+    if exclude_bins:
+        keep = np.ones(idx.shape, dtype=bool)
+        for lo, hi in exclude_bins:
+            keep &= ~((idx >= int(lo)) & (idx < int(hi)))
+        idx = idx[keep]
+    if idx.size == 0:
+        raise ValueError('fit window is empty (check the window and any exclusion bands)')
+    return idx
+
 def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5):
     smoothed = gaussian_filter1d(decay.astype(float), sigma=smooth_sigma)
     deriv = np.gradient(smoothed)

@@ -148,9 +148,9 @@ class TestCostClasses:
         decay = reconvolution_model(p, RES, N, irf, 2, 0.0, False, True, False,
                                     tvb_profile=B, fit_tvb=True)
         w = np.sqrt(np.maximum(decay, 1.0))
-        c_tvb = _DECost(RES, N, irf, 2, 0.0, False, True, False, 0, N, decay, w,
+        c_tvb = _DECost(RES, N, irf, 2, 0.0, False, True, False, np.arange(N), decay, w,
                         tvb_profile=B, fit_tvb=True)(p)
-        c_no = _DECost(RES, N, irf, 2, 0.0, False, True, False, 0, N, decay, w)(p[:-1])
+        c_no = _DECost(RES, N, irf, 2, 0.0, False, True, False, np.arange(N), decay, w)(p[:-1])
         assert c_tvb < 1e-6
         assert c_no > 1.0
 
@@ -161,9 +161,9 @@ class TestCostClasses:
         dd = dist_reconvolution_model(pd, RES, N, irf, 1, 'gaussian', 0.0, True, False,
                                       tvb_profile=B, fit_tvb=True)
         wd = np.sqrt(np.maximum(dd, 1.0))
-        c_tvb = _DECostDist(RES, N, irf, 1, 'gaussian', 0.0, True, False, 0, N, dd, wd,
+        c_tvb = _DECostDist(RES, N, irf, 1, 'gaussian', 0.0, True, False, np.arange(N), dd, wd,
                             tvb_profile=B, fit_tvb=True)(pd)
-        c_no = _DECostDist(RES, N, irf, 1, 'gaussian', 0.0, True, False, 0, N, dd, wd)(pd[:-1])
+        c_no = _DECostDist(RES, N, irf, 1, 'gaussian', 0.0, True, False, np.arange(N), dd, wd)(pd[:-1])
         assert c_tvb < 1e-6
         assert c_no > 1.0
 
