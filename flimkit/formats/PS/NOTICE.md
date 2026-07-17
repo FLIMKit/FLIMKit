@@ -2,7 +2,11 @@
 
 This reader decodes Photonscore LINCam `.photons` files (the "D7" container), the
 position-sensitive photon-counting format written by Photonscore's LINCam systems.
-The decoder is delegated to the `photonsfile` library (https://github.com/alex1075/photonsfile).
+The decoder is delegated to the `photonsfile` library
+(https://github.com/alex1075/photonsfile), archived on Zenodo:
+
+> Hunt, A. and A. Akram. *photonsfile: a pure-Python reader for Photonscore LINCam
+> .photons (D7) files*. Zenodo. https://doi.org/10.5281/zenodo.21360199
 
 ## Acknowledgement
 
