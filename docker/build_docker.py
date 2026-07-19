@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import subprocess
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from flimkit._version import __version__
 
 IMAGE = 'alex1075/flimkit'

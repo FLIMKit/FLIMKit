@@ -38,7 +38,7 @@ RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html
 
 RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
 
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 14500 5900
