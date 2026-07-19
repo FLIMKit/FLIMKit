@@ -115,10 +115,10 @@ def load_session(path):
 def get_ptu_active_channels(ptu_path):
     from flimkit.formats import FLIMFile
     ptu = FLIMFile(str(ptu_path), verbose=False)
-    records = ptu._load_records()
-    special, ch_raw, _, _ = ptu._decode_records(records)
-    active_channels = np.unique(ch_raw[~special]).astype(int)
-    return sorted(int(channel) for channel in active_channels)
+    active = getattr(ptu, '_active', None)
+    if not active:
+        active = list(range(getattr(ptu, 'n_channels', 0) or 0))
+    return sorted(int(channel) for channel in active)
 
 def _prompt_ptu_channel(active_channels):
     import inquirer
@@ -179,7 +179,11 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
     print(f'Computing phasors (frequency = {frequency:.2f} MHz) ...')
     mean, real, imag = phasor_from_signal(signal, axis='H')
     ptu = FLIMFile(str(ptu_path), verbose=False)
-    display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)
+    if getattr(ptu, 'is_image', True):
+        display_image = ptu.raw_pixel_stack(channel=channel, binning=4).sum(axis=-1)
+    else:
+        print(' Point measurement: no image to reconstruct.')
+        display_image = None
     if irf_path:
         from .phasor.signal import calibrate_signal_with_machine_irf
         irf_path_p = Path(irf_path)
@@ -211,7 +215,8 @@ def _process_ptu(ptu_path, irf_path=None, channel=None, phasor_filter=None,
         mean=np.asarray(mean),
         frequency=frequency,
         channel=channel,
-        display_image=np.asarray(display_image, dtype=float),
+        display_image=(np.asarray(display_image, dtype=float)
+                       if display_image is not None else None),
     )
 
 def launch_phasor(ptu_path=None,

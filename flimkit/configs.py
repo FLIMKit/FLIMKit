@@ -39,7 +39,10 @@ n_workers = -1
 
 # IRF settings:
 IRF_FWHM = None
-IRF_FIT_WIDTH = 1.5
+# ns window (centred on the decay peak) the parametric IRF is fit over. Keep it
+# tight: a wide window pulls in the fluorescence falling edge, so the fit traces
+# the decay instead of the instrument pulse and yields an over-broad IRF.
+IRF_FIT_WIDTH = 0.5
 IRF_BINS = 21
 Estimate_IRF = 'none'
 

@@ -157,6 +157,26 @@ def phasor_cursor_tool(
         mode = params['angle_mode']
         n_cursors = len(cursors)
 
+        disp_arr = np.asarray(disp)
+        if disp_arr.ndim != 2 or min(disp_arr.shape) < 2:
+            # point / FCS measurement: one phasor coordinate, no spatial map to draw
+            _begin_output()
+            g_pt = float(np.ravel(rc)[0])
+            s_pt = float(np.ravel(ic)[0])
+            tau_phi_pt = float(phasor_to_apparent_lifetime(g_pt, s_pt, frequency)[0])
+            fig2, ax_pt = plt.subplots(1, 1, figsize=(5, 4))
+            ax_pt.text(0.5, 0.5, 'No image available\n(point measurement)',
+                       ha='center', va='center', fontsize=11)
+            ax_pt.set_xticks([])
+            ax_pt.set_yticks([])
+            ax_pt.set_title(f'τ_φ = {tau_phi_pt:.2f} ns  (G={g_pt:.3f}, S={s_pt:.3f})')
+            fig2.tight_layout()
+            plt.show()
+            print(f'Point measurement: τ_φ = {tau_phi_pt:.2f} ns  '
+                  f'(G={g_pt:.3f}, S={s_pt:.3f})')
+            _end_output()
+            return
+
         centers_g = np.array([c['center_g'] for c in cursors])
         centers_s = np.array([c['center_s'] for c in cursors])
 

@@ -10,17 +10,26 @@ def test_get_ptu_active_channels(monkeypatch):
         def __init__(self, path, verbose=False):
             self.path = path
             self.verbose = verbose
-
-        def _load_records(self):
-            return np.array([1, 2, 3, 4], dtype=np.uint32)
-
-        def _decode_records(self, records):
-            ch = np.array([3, 0xF, 1, 3], dtype=np.uint32)
-            return ch == 0xF, ch, None, None
+            self._active = [3, 1]
+            self.n_channels = 2
 
     monkeypatch.setattr(reader, "PTUFile", FakePTUFile)
 
     assert phasor_launcher.get_ptu_active_channels("fake.ptu") == [1, 3]
+
+
+def test_get_ptu_active_channels_falls_back_to_n_channels(monkeypatch):
+    from flimkit import phasor_launcher
+    from flimkit.formats.PTU import reader
+
+    class FakePTUFile:
+        def __init__(self, path, verbose=False):
+            self._active = []
+            self.n_channels = 3
+
+    monkeypatch.setattr(reader, "PTUFile", FakePTUFile)
+
+    assert phasor_launcher.get_ptu_active_channels("fake.ptu") == [0, 1, 2]
 
 
 def test_resolve_ptu_channel_autoselects_single(monkeypatch):

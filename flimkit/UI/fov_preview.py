@@ -149,18 +149,27 @@ class FOVPreviewPanel:
             from flimkit.formats import FLIMFile
             import numpy as np
             ptu = FLIMFile(ptu_path, verbose=False)
-            stack = ptu.pixel_stack(channel=None, binning=1)
-            intensity = stack.sum(axis=2)
+            is_image = getattr(ptu, 'is_image', True)
             decay = ptu.summed_decay(channel=None)
             time_ns = ptu.time_ns
             self._ax_img.clear()
-            intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-            self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+            if is_image:
+                stack = ptu.pixel_stack(channel=None, binning=1)
+                intensity = stack.sum(axis=2)
+                intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
+                self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+            else:
+                intensity = None
+                self._ax_img.text(0.5, 0.5, 'Point measurement\nno image to reconstruct',
+                                  ha='center', va='center', transform=self._ax_img.transAxes,
+                                  fontsize=9, color='white')
             self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
             self._ax_flim.clear()
-            self._ax_flim.text(0.5, 0.5, 'Waiting for fit...', ha='center', va='center',
-                              transform=self._ax_flim.transAxes, fontsize=9, color='white')
+            self._ax_flim.text(0.5, 0.5,
+                               'Waiting for fit...' if is_image else 'No FLIM image\n(point measurement)',
+                               ha='center', va='center',
+                               transform=self._ax_flim.transAxes, fontsize=9, color='white')
             self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold', color='white')
             self._ax_decay.clear()
             self._ax_decay.set_facecolor('white')
@@ -178,8 +187,11 @@ class FOVPreviewPanel:
             self._redraw_region_overlays()
             self._canvas_mpl.draw_idle()
             n_photons = int(decay.sum())
-            img_shape = intensity.shape
-            self._status.set(f"✓ {Path(ptu_path).name} | {img_shape[0]}×{img_shape[1]}px | {n_photons} photons")
+            if is_image:
+                img_shape = intensity.shape
+                self._status.set(f"✓ {Path(ptu_path).name} | {img_shape[0]}×{img_shape[1]}px | {n_photons} photons")
+            else:
+                self._status.set(f"✓ {Path(ptu_path).name} | point measurement, no image | {n_photons} photons")
         except Exception as e:
             self._clear()
             self._status.set(f"Error loading FOV: {str(e)[:50]}")
@@ -215,8 +227,9 @@ class FOVPreviewPanel:
                 intensity = fit_result['intensity']
             elif ptu_path and Path(ptu_path).exists():
                 ptu = FLIMFile(ptu_path, verbose=False)
-                stack = ptu.pixel_stack(channel=None, binning=1)
-                intensity = stack.sum(axis=2)
+                if getattr(ptu, 'is_image', True):
+                    stack = ptu.pixel_stack(channel=None, binning=1)
+                    intensity = stack.sum(axis=2)
             if intensity is None:
                 intensity = np.ones((512, 512), dtype=np.float32)
             from flimkit.UI.flim_display import compute_weighted_lifetime

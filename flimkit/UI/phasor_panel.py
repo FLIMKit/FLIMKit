@@ -462,7 +462,14 @@ class PhasorViewPanel:
     def _redraw_image(self, masks):
         self._ax_img.cla()
         self._ax_img.set_facecolor('black')
-        if self._disp is None:
+        disp = np.asarray(self._disp) if self._disp is not None else None
+        if disp is None or disp.ndim != 2 or min(disp.shape) < 2:
+            self._ax_img.text(0.5, 0.5, 'No image available\n(point measurement)',
+                              ha='center', va='center', color='white', fontsize=9,
+                              transform=self._ax_img.transAxes)
+            self._ax_img.set_title('FOV image', fontsize=9)
+            self._ax_img.set_xticks([])
+            self._ax_img.set_yticks([])
             return
 
         if masks is not None and len(masks) > 0 and self._cursors:

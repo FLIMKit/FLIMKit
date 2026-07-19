@@ -82,6 +82,21 @@ def parse_exclude_ns(spec):
         bands.append((lo, hi))
     return bands or None
 
+def apply_point_mode_limits(args, ptu):
+    if getattr(ptu, 'is_image', True):
+        return False
+    print('  Point measurement: no scan image, fitting the summed decay only.')
+    if getattr(args, 'mode', 'summed') != 'summed':
+        print(f'    mode={args.mode} -> summed (per-pixel needs an image)')
+        args.mode = 'summed'
+    if getattr(args, 'cell_mask', False):
+        print('    cell mask ignored (needs an image)')
+        args.cell_mask = False
+    if getattr(args, 'intensity_threshold', None) is not None:
+        print('    intensity threshold ignored (needs an image)')
+        args.intensity_threshold = None
+    return True
+
 def yes_no_question(question):
     import inquirer
     questions = [inquirer.List('yesno',
@@ -784,6 +799,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
+    apply_point_mode_limits(args, ptu)
     cell_mask = None
     if getattr(args, 'cell_mask', False):
         print(f'\n[1b] Building cell mask')
@@ -925,10 +941,14 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 decay, ptu.tcspc_res, ptu.n_bins,
                 fit_window_width_ns=args.irf_fit_width)
             strategy = 'estimated_parametric'
-        has_tail = True
+        # An IRF-tail term (tail_tau up to ~5 ns) is degenerate with a mono-exp
+        # decay: the fitter dumps the whole decay into the 'IRF tail' and reports
+        # a near-zero lifetime at a deceptively low chi2. Estimated IRFs must not
+        # carry one. Sigma may still float (it only broadens, cannot absorb decay).
+        has_tail = False
         fit_sigma = True
         fit_bg = True
-        print(f'  IRF: {strategy} + tail + σ as free params')
+        print(f'  IRF: {strategy} + σ as free param (no tail: degenerate with decay)')
     else:
         fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
         irf_prompt = gaussian_irf_from_fwhm(ptu.n_bins, ptu.tcspc_res, fwhm_ns, decay_peak_bin)
