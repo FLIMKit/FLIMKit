@@ -234,6 +234,7 @@ class _UIBuilder:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Tools', menu=tools_menu)
         tools_menu.add_command(label='Machine IRF Builder', command=self._menu_irf_builder)
+        tools_menu.add_command(label='Generate Synthetic PTU...', command=self._menu_synth_generator)
         batch_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label='Batch Processing', menu=batch_menu)
         batch_menu.add_command(label='Multi-Tile ROI Fit',
@@ -472,6 +473,87 @@ class _UIBuilder:
         print('[Menu] Machine IRF Builder')
         if hasattr(self, '_switch_form'):
             self._switch_form('irf')
+
+    def _menu_synth_generator(self):
+        print('[Menu] Generate Synthetic PTU')
+        from flimkit import synth
+        dlg = tk.Toplevel(self.root)
+        dlg.title('Generate Synthetic PTU')
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        fields = [
+            ('Lifetime(s) τ, ns (comma for multi-exp)', 'tau', '4.1'),
+            ('Amplitudes (comma, blank = equal)', 'amps', ''),
+            ('Photons (comma = a series)', 'photons', '1e5'),
+            ('Laser period, ns', 'period', '50'),
+            ('TCSPC bin width, ps', 'res', '25'),
+            ('IRF FWHM, ns', 'irf_fwhm', '0.15'),
+            ('IRF centre, ns', 'irf_center', '2.0'),
+            ('Reflection at, ns (blank = none)', 'refl_ns', ''),
+            ('Reflection fraction', 'refl_frac', '0.02'),
+            ('Pile-up, photons/pulse (blank = none)', 'pileup', ''),
+            ('Image side, px', 'image', '16'),
+            ('Base name', 'name', 'synth'),
+        ]
+        vals = {}
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill='both', expand=True)
+        for i, (label, key, default) in enumerate(fields):
+            ttk.Label(frm, text=label).grid(row=i, column=0, sticky='w', pady=2, padx=(0, 8))
+            v = tk.StringVar(value=default)
+            ttk.Entry(frm, textvariable=v, width=22).grid(row=i, column=1, sticky='ew', pady=2)
+            vals[key] = v
+        status = tk.StringVar(value='')
+        ttk.Label(frm, textvariable=status, foreground='grey').grid(
+            row=len(fields), column=0, columnspan=2, sticky='w', pady=(8, 0))
+
+        def _floats(s):
+            return [float(x) for x in str(s).split(',') if x.strip()]
+
+        def do_generate():
+            from tkinter import filedialog
+            out_dir = filedialog.askdirectory(title='Choose output folder for the PTUs')
+            if not out_dir:
+                return
+            try:
+                taus = _floats(vals['tau'].get())
+                tau_arg = taus[0] if len(taus) == 1 else taus
+                amps = _floats(vals['amps'].get()) or None
+                res_ns = float(vals['res'].get()) / 1000.0
+                n_bins = int(round(float(vals['period'].get()) / res_ns))
+                refl = None
+                if vals['refl_ns'].get().strip():
+                    refl = dict(center_ns=float(vals['refl_ns'].get()),
+                                frac=float(vals['refl_frac'].get()), width_ns=0.15)
+                pileup = float(vals['pileup'].get()) if vals['pileup'].get().strip() else None
+                side = int(vals['image'].get())
+                common = dict(tau_ns=tau_arg, amps=amps, n_bins=n_bins, tcspc_res_ns=res_ns,
+                              irf_fwhm_ns=float(vals['irf_fwhm'].get()),
+                              irf_center_ns=float(vals['irf_center'].get()), pileup_pp=pileup)
+                photons = _floats(vals['photons'].get())
+                if len(photons) == 1:
+                    synth.generate(out_dir, name=vals['name'].get(), ny=side, nx=side,
+                                   n_photons=photons[0], reflection=refl, **common)
+                    n_files = 1
+                else:
+                    synth.generate_series(out_dir, photons, name=vals['name'].get(),
+                                          with_reflection=refl is not None, reflection=refl,
+                                          ny=side, nx=side, **common)
+                    n_files = len(photons)
+                messagebox.showinfo('Synthetic PTU',
+                                    f'Wrote {n_files} sample PTU(s) + IRF + truth JSON to\n{out_dir}')
+                dlg.destroy()
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                status.set(f'Error: {e}')
+
+        btns = ttk.Frame(dlg)
+        btns.pack(fill='x', padx=12, pady=(0, 12))
+        ttk.Button(btns, text='Generate...', command=do_generate).pack(side='left', padx=4)
+        ttk.Button(btns, text='Cancel', command=dlg.destroy).pack(side='left', padx=4)
+        dlg.update_idletasks()
 
     def _menu_batch_processing(self, mode: str = 'tiled'):
         print(f'[Menu] Batch Processing → {mode}')
