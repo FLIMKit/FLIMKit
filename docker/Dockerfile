@@ -26,7 +26,8 @@ RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
        --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-docker.txt \
     && rm requirements-docker.txt
-COPY . .
+COPY flimkit/ ./flimkit/
+COPY main.py .
 RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&reconnect=true">\n' > /usr/share/novnc/index.html \
     && for ic in /usr/share/novnc/app/images/icons/novnc-*.png; do [ -e "$ic" ] && cp -f flimkit/UI/icon.png "$ic"; done
 RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
