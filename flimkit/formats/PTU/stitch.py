@@ -129,11 +129,11 @@ def stitch_flim_tiles(
             intensity_map = hist[:dy, :dx, :].sum(axis=2).astype(np.float32)
             tile_results.append({
                 'pixel_maps': {'intensity': intensity_map},
-                'pixel_y':        y0,
-                'pixel_x':        x0,
-                'tile_h':         dy,
-                'tile_w':         dx,
-                'ptu_name':       t['file'],
+                'pixel_y': y0,
+                'pixel_x': x0,
+                'tile_h': dy,
+                'tile_w': dx,
+                'ptu_name': t['file'],
             })
             cy = y0 + tile_y / 2.0
             cx = x0 + tile_x / 2.0
@@ -246,14 +246,14 @@ def stitch_flim_tiles(
     flim_canvas._mmap.close()
     del flim_canvas
     metadata = {
-        'canvas_shape':        (canvas_height, canvas_width),
-        'n_time_bins':         int(n_time_bins),
-        'time_range_ns':       (0.0, float(time_axis_ns[-1])),
+        'canvas_shape': (canvas_height, canvas_width),
+        'n_time_bins': int(n_time_bins),
+        'time_range_ns': (0.0, float(time_axis_ns[-1])),
         'tcspc_resolution_ps': float(tcspc_resolution * 1e12),
-        'pixel_size_um':       float(pixel_size_m * 1e6),
-        'tiles_processed':     tiles_processed,
-        'tiles_skipped':       tiles_skipped,
-        'ptu_basename':        ptu_basename,
+        'pixel_size_um': float(pixel_size_m * 1e6),
+        'tiles_processed': tiles_processed,
+        'tiles_skipped': tiles_skipped,
+        'ptu_basename': ptu_basename,
     }
     with open(output_meta, 'w') as f:
         json.dump(metadata, f, indent=2)
@@ -269,15 +269,15 @@ def stitch_flim_tiles(
         print(f"Canvas: {canvas_height} × {canvas_width} × {n_time_bins}")
         print(f"Time: 0 - {time_axis_ns[-1]:.2f} ns")
     return {
-        'intensity_path':  output_intensity,
-        'flim_path':       output_flim,
-        'time_axis_path':  output_time,
+        'intensity_path': output_intensity,
+        'flim_path': output_flim,
+        'time_axis_path': output_time,
         'weight_map_path': output_weight,
-        'metadata_path':   output_meta,
-        'canvas_shape':    (canvas_height, canvas_width),
-        'n_time_bins':     n_time_bins,
+        'metadata_path': output_meta,
+        'canvas_shape': (canvas_height, canvas_width),
+        'n_time_bins': n_time_bins,
         'tiles_processed': tiles_processed,
-        'tiles_skipped':   tiles_skipped,
+        'tiles_skipped': tiles_skipped,
     }
 
 def load_stitched_flim(
@@ -302,8 +302,8 @@ def load_stitched_flim(
         p = output_dir / prefixed
         return p if p.exists() else output_dir / generic
     if roi_prefix:
-        time_path = _find(f"{roi_prefix}_time_axis_ns.npy",       'time_axis_ns.npy')
-        int_path = _find(f"{roi_prefix}_stitched_intensity.tif",  'stitched_intensity.tif')
+        time_path = _find(f"{roi_prefix}_time_axis_ns.npy", 'time_axis_ns.npy')
+        int_path = _find(f"{roi_prefix}_stitched_intensity.tif", 'stitched_intensity.tif')
         flim_path = _find(f"{roi_prefix}_stitched_flim_counts.npy",'stitched_flim_counts.npy')
     else:
         time_path = output_dir / 'time_axis_ns.npy'
@@ -381,9 +381,9 @@ def _get_tile_irf(machine_irf, pi_machine,
 def _adapt_pixel_maps(pixel_maps, n_exp,
                       taus_ns):
     adapted = {
-        'intensity':    pixel_maps['intensity'],
+        'intensity': pixel_maps['intensity'],
         'tau_mean_amp': pixel_maps['tau_mean_amp'],
-        'chi2':         pixel_maps['chi2_r'],
+        'chi2': pixel_maps['chi2_r'],
     }
     ny, nx = pixel_maps['intensity'].shape
     for k in range(1, n_exp + 1):
@@ -432,8 +432,7 @@ def _phase_corr_2d(patch_a, patch_b, max_shift_y=120, max_shift_x=30):
     sub_x = _sub(corr_s[pk_y, :], pk_x, x_lo, x_hi) - cx
     return sub_y, sub_x, confidence
 
-def _register_tile_columns(tile_results, max_shift_px=120, verbose=True,
-):
+def _register_tile_columns(tile_results, max_shift_px=120, verbose=True,):
     REG_MAX_SHIFT_Y = max_shift_px
     REG_MAX_SHIFT_X = 30
     MIN_CONF = 5.0
