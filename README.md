@@ -12,7 +12,7 @@ FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and commo
 
 Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
-[Examples repo](https://github.com/alex1075/FLIMKit-Examples.git) | [Full documentation](documentation.md)
+[Examples repo](https://github.com/alex1075/FLIMKit-Examples.git) | [Full documentation](https://github.com/alex1075/FLIMKit/wiki)
 
 ## GUI
 

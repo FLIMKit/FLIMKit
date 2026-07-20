@@ -539,7 +539,7 @@ sess = load_session('session.npz')
 #### PTU File Reading
 
 ```python
-from flimkit.PTU.reader import PTUFile
+from flimkit.formats.PTU.reader import PTUFile
 
 ptu = PTUFile('data.ptu', verbose=True)
 decay = ptu.summed_decay(channel=None)           # auto-detect channel
@@ -550,7 +550,7 @@ print(ptu.n_bins, ptu.tcspc_res, ptu.time_ns)
 #### Signal Extraction (xarray)
 
 ```python
-from flimkit.PTU.tools import signal_from_PTUFile
+from flimkit.formats.PTU.tools import signal_from_PTUFile
 import numpy as np
 
 signal = signal_from_PTUFile('data.ptu', dtype=np.uint32, binning=4)
@@ -582,7 +582,7 @@ real_cal, imag_cal = calibrate_signal_with_machine_irf(
 #### Tile Stitching
 
 ```python
-from flimkit.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
+from flimkit.formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
 from pathlib import Path
 
 result = stitch_flim_tiles(
@@ -685,7 +685,19 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 
 ## Module Reference
 
-### `flimkit.PTU` - PTU File I/O
+### `flimkit.formats` - Format Dispatch
+
+The format layer sits behind one interface: every reader returns the same `(Y, X, H)` decay cube plus metadata, so the fitter, phasor, stitching and GUI never branch on file type.
+
+#### `flim_file.py`
+- **`FLIMFile(path, ...)`** - format-agnostic entry point. Sniffs the format and delegates to the matching reader, exposing the same `.summed_decay()` / `.pixel_stack()` / `.n_bins` / `.tcspc_res` interface regardless of source.
+- **`detect_format(path)`** - identify the format from extension, magic bytes, and sibling files (ISS needs its triplet)
+- **`file_modality(path)`** - whether the file is time-domain (fit) or frequency-domain (phasor only)
+- **`supported_formats()`**, **`supported_extensions()`**, **`file_dialog_filetypes()`** - format registry, used to build the GUI file pickers
+
+---
+
+### `flimkit.formats.PTU` - PicoQuant PTU
 
 #### `reader.py`
 - **`PTUFile(path, verbose=False)`** - wraps Christoph Gohlke's `ptufile` and exposes the FLIMFile interface. Pins the TCSPC bin grid, integrates frames, and selects the photon channel.
@@ -706,6 +718,55 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 - **`stitch_flim_tiles(xlif_path, ptu_dir, output_dir, ...)`** - stitch multi-tile PTU data into a mosaic using XLIF metadata. Three-pass phase-correlation registration (Preibisch et al. 2009): column Y drift, row Y residuals, row X backlash. Nearest-centre ownership for canvas assembly.
 - **`fit_flim_tiles(...)`** - full fitting pipeline on a stitched mosaic (two-pass: pooled DE fit → per-pixel NNLS)
 - **`load_flim_for_fitting(output_dir, load_to_memory)`** - load previously stitched data
+
+---
+
+### `flimkit.formats.BH` - Becker & Hickl SDT
+
+#### `reader.py`
+- **`BHFile(path, ...)`** - wraps Christoph Gohlke's `sdtfile` and exposes the FLIMFile interface. Handles block layout, TAC range and repetition rate; auto-selects the populated channel.
+- **`read_bh(path, binning=1, channel=None, sync_rate=None)`** - `(Y, X, H)` cube + metadata
+- **`get_flim_data(path, ...)`**, **`get_intensity_image(path, ...)`** - cube and summed-intensity helpers
+- **`create_time_axis(n_bins, tcspc_resolution)`** - time axis from SDT metadata
+
+#### `writer.py`
+- Writes `.sdt` files, used by `flimkit.synth` for the `--sdt` output so synthetic ground truth can be opened in SPCImage
+
+### `flimkit.formats.PS` - Photonscore LINCam
+
+#### `reader.py`
+- **`PSFile(path, ...)`** - reads the `.photons` D7 container via `photonsfile`. Position-sensitive detector, so the image is formed by binning each photon's (x, y) and the decay by histogramming its micro-time.
+- **`read_ps(path, binning=1, channel=None, pixels=512, n_bins=256, period_ns=None)`** - `(Y, X, H)` cube + metadata. `pixels` sets the spatial binning grid, `n_bins` the TCSPC histogram depth.
+- **`get_flim_data(path, ...)`**, **`get_intensity_image(path, ...)`**, **`create_time_axis(...)`**
+
+### `flimkit.formats.ISS` - ISS FastFLIM / Vista
+
+> Experimental: written from ISS specifications and checked only against synthetic files, not real acquisitions (issue #19).
+
+#### `reader.py`
+- **`ISSFile(path, ...)`** - time-domain triplet (`.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY`); all three must sit alongside each other
+- **`read_iss(path, binning=1, channel=None)`** - `(Y, X, H)` cube + metadata
+- **`get_flim_data(path, ...)`**, **`get_intensity_image(path, ...)`**
+
+#### `fdflim.py`
+- **`ISSFdFlim(path)`** - frequency-domain `.ifli` (`VistaFLImage`). Already phasor data, so there is no decay to fit.
+- **`phasor_from_ifli(path, channel=None, harmonic=0, calibrate=True)`** - per-pixel phase/modulation as phasor coordinates, applying the file's reference calibration
+
+#### `image.py`
+- **`read_ifi(path, channel=None)`**, **`get_intensity_image(path, channel=None)`** - ISS intensity images
+
+---
+
+### `flimkit.synth` - Synthetic Ground Truth
+
+Generates FLIM data with known parameters, for validation. Driven by [`synth_cli.py`](#synthetic-data-generation-cli).
+
+- **`generate(out_dir, name='synth', ny=16, nx=16, with_irf=True, sdt=False, **kwargs)`** - write a sample PTU, matching IRF PTU and truth JSON; `sdt=True` also writes `.sdt` versions
+- **`generate_series(out_dir, photon_counts, ...)`** - a photon-count series from one parameter set, for testing count-dependent bias
+- **`build_decay(tau_ns, amps=None, n_bins=2000, tcspc_res_ns=0.025, ...)`** - the noiseless expected decay, with optional reflection peak, pile-up and background
+- **`sample_cube(expected, ny, nx, seed=0)`** - Poisson-sample the expected decay into a `(Y, X, H)` cube
+- **`gaussian_irf(n_bins, center_bin, fwhm_bins)`** - synthetic IRF
+- **`write_ptu(...)`**, **`write_sdt(...)`**, **`write_irf_ptu(...)`** - file writers
 
 ---
 
@@ -842,11 +903,24 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │   │   ├── roi_tools.py           # ROI drawing panel, RoiManager, per-ROI decay fitting
 │   │   └── phasor_panel.py        # Embedded phasor view panel
 │   │
-│   ├── PTU/
-│   │   ├── reader.py              # PTUFile - T3 record decoding
-│   │   ├── decode.py              # Low-level histogram extraction
-│   │   ├── tools.py               # signal_from_PTUFile (xarray)
-│   │   └── stitch.py              # Multi-tile stitching + registration
+│   ├── synth.py                   # Synthetic known-truth data generation
+│   │
+│   ├── formats/
+│   │   ├── flim_file.py           # FLIMFile, detect_format - format dispatch
+│   │   ├── PTU/
+│   │   │   ├── reader.py          # PTUFile (wraps ptufile), read_pck
+│   │   │   ├── decode.py          # Histogram extraction for tile stitching
+│   │   │   ├── tools.py           # signal_from_PTUFile (xarray)
+│   │   │   └── stitch.py          # Multi-tile stitching + registration
+│   │   ├── BH/
+│   │   │   ├── reader.py          # BHFile (wraps sdtfile)
+│   │   │   └── writer.py          # .sdt writer, used by synth
+│   │   ├── PS/
+│   │   │   └── reader.py          # PSFile (wraps photonsfile)
+│   │   └── ISS/
+│   │       ├── reader.py          # ISSFile - TD triplet (experimental)
+│   │       ├── fdflim.py          # .ifli FD-FLIM phasor (experimental)
+│   │       └── image.py           # .ifi intensity image (experimental)
 │   │
 │   ├── FLIM/
 │   │   ├── models.py              # Decay models + DE cost functions
