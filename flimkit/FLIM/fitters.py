@@ -18,8 +18,6 @@ from ..configs import MIN_PHOTONS_PERPIX
 
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
-# cubes above this are handed to MLX whole and blow up unified GPU memory;
-# the CPU path is row-by-row and safe, so route large stacks there instead
 _GPU_MAX_STACK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 
@@ -79,7 +77,6 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     fit_end = min(fit_end, standard_fit_end)
     fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
     fit_start = max(0, min(fit_start, fit_end - 10))
-    # user window overrides the auto one; auto stays the default
     if fit_end_ns is not None:
         fit_end = min(n_bins, bins_from_ns(fit_end_ns, tcspc_res))
     if fit_start_ns is not None:
@@ -343,7 +340,6 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 f'pile-up correction needs more pulses than photons per pixel; got '
                 f'{_n_sync_px:,} pulses/px vs {_max_px:,.0f} photons in the brightest pixel. '
                 f'Check the N_sync reported by the reader.')
-    # explicit bin set the projection runs over; default is every bin (old behaviour)
     fit_idx = np.arange(n_bins) if fit_idx is None else np.asarray(fit_idx, dtype=int)
     _windowed = len(fit_idx) != n_bins
     tvb_on = bool(fit_tvb) and tvb_profile is not None
@@ -514,9 +510,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             dc_f = dc_v[:, fit_idx]
             bd = dc_f @ basis_fit.T
             amps_g = np.maximum(bd / bb_grid, 0.0)
-            dc_sq  = (dc_f ** 2).sum(axis=1)
-            # cost[i,j] = ||dc_v[i]||² - max(bd[i,j],0)² / ||basis[j]||²
-            # Minimising cost ↔ maximising the projection bd²/||b||²
+            dc_sq = (dc_f ** 2).sum(axis=1)
             costs = dc_sq[:, np.newaxis] - np.maximum(bd, 0.0) ** 2 / bb_grid
             best_g = np.argmin(costs, axis=1)                          
             tau_v = tau_grid[best_g]                                 
@@ -716,7 +710,6 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     fit_end = min(fit_end, standard_fit_end)
     fit_start = find_fit_start(decay_work, irf_prompt, tcspc_res)
     fit_start = max(0, min(fit_start, fit_end - 10))
-    # user window overrides the auto one; auto stays the default
     if fit_end_ns is not None:
         fit_end = min(n_bins, bins_from_ns(fit_end_ns, tcspc_res))
     if fit_start_ns is not None:
