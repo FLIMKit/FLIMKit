@@ -89,12 +89,6 @@ def buildWiki(source, outdir):
     home.append('')
     for sec in pages:
         home.append('- [' + sec['title'] + '](' + slug_page(sec['title']) + ')')
-    home.append('')
-    home.append('---')
-    home.append('')
-    home.append('*This wiki is generated from `' + source + '` in the main repository. '
-                'Edits made here are overwritten on the next push to `main` - '
-                'change the source file instead.*')
     with open(os.path.join(outdir, 'Home.md'), 'w') as f:
         f.write(rewriteLinks('\n'.join(home) + '\n', anchors))
     sidebar = ['### [FLIMKit](Home)', '']

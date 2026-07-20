@@ -6,7 +6,7 @@
 
 FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and common TCSPC / time-tag formats (PicoQuant `.ptu`, Becker & Hickl `.sdt`, ISS time-tag, Photonscore `.photons`). Built as a drop-in for FLIM microscope software, with two workflows:
 
-- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, timelapse and z-stack analysis (a stack fitted as one FOV with a shared reference lifetime), and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
+- **Reconvolution fitting**: mono/bi/tri-exponential lifetime fitting with full IRF deconvolution, per-pixel and summed modes, multi-tile ROI stitching, batch processing, timelapse and z-stack analysis (a stack fitted as one FOV with a shared reference lifetime), a settable fit window with exclusion bands (drop reflection peaks mid-decay), and optional time-varying background correction (FLIMfit-style, from a measured fluorophore-free reference)
 - **Lifetime distribution fitting**: Gaussian and Lorentzian continuous α(τ) distributions (Lakowicz §4.11.2), per-ROI and per-pixel maps with GPU acceleration
 - **Phasor analysis**: calibrated phasor plots, interactive elliptical cursors, spatial filtering (gaussian/median/wavelet), two-component decomposition, automatic peak detection, session save/load
 
@@ -91,6 +91,14 @@ python main.py --cli
 ```bash
 python fit_cli.py --ptu data.ptu --machine-irf machine_irf_default.npy --nexp 2
 python phasor_cli.py --ptu data.ptu --irf irf.xlsx
+```
+
+### Synthetic data
+
+Generates FLIM data with a known ground truth (sample PTU + matching IRF PTU + a JSON of the parameters used) for cross-software validation. Optional reflection peaks, pile-up and background let you reproduce specific artefacts; `--sdt` also writes Becker & Hickl versions.
+
+```bash
+python synth_cli.py --out ./validation --tau 3.0,0.8 --amps 0.7,0.3 --photons 1e5
 ```
 
 ### Python API

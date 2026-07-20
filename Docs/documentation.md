@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.9.13** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.9.17** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -16,6 +16,8 @@
    - [Guided Terminal UI](#guided-terminal-ui-mainpy)
    - [Machine IRF Setup](#machine-irf-setup-required)
    - [FLIM Reconvolution Fitting (CLI)](#flim-reconvolution-fitting-cli)
+   - [Timelapse and Z-stack Fitting](#timelapse-and-z-stack-fitting)
+   - [Synthetic Data Generation (CLI)](#synthetic-data-generation-cli)
    - [Phasor Analysis (CLI)](#phasor-analysis-cli)
    - [Python API](#python-api)
 5. [Configuration Reference](#configuration-reference)
@@ -280,6 +282,8 @@ python main.py --cli
 | Phasor analysis | Opens the interactive phasor cursor tool |
 | Reconstruct a FOV and FLIM FIT | Stitches multi-tile PTU data from XLIF metadata then fits the mosaic |
 | Just stitch multiple tiles together | Tile stitching only, intensity images and FLIM histogram cubes |
+| Timelapse batch fit | Fits a time series of PTUs as one FOV with a shared reference lifetime |
+| Z-stack batch fit | Fits an axial stack of `region_zX.ptu` slices as one FOV |
 | About | Version info and roadmap |
 
 ---
@@ -352,7 +356,7 @@ python fit_cli.py [OPTIONS]
 | `--irf-xlsx PATH` | FLIM microscope software Excel export for analytical IRF fitting |
 | `--xlsx PATH` | FLIM microscope software export XLSX for comparison |
 | `--no-xlsx-irf` | Use XLSX for comparison only; don't use its IRF |
-| `--estimate-irf {raw,parametric,none}` | Estimate IRF from decay rising edge (default: `none`) |
+| `--estimate-irf {raw,parametric,machine_irf,machine_irf_sigma_full,machine_irf_sigma_half,none}` | Estimate IRF from decay rising edge, or reuse the machine IRF shape (default: `none`) |
 | `--irf-fwhm FLOAT` | IRF FWHM in ns |
 | `--irf-bins INT` | Number of bins for the IRF (default: 21) |
 | `--irf-fit-width FLOAT` | Region around time zero for IRF fitting in ns (default: 1.5) |
@@ -382,6 +386,8 @@ python fit_cli.py [OPTIONS]
 | `--workers INT` | CPU cores for DE (-1 = all; auto-limited to 1 in compiled app) |
 | `--no-polish` | Skip LM polish step after DE |
 | `--cost-function {poisson,chi2}` | Cost function (default: `poisson`) |
+| `--correct-pileup` | Apply Coates pile-up correction to the decay before fitting |
+| `--free-tau` | Let lifetimes float per pixel instead of locking them to the summed fit |
 | `--intensity-threshold INT` | Minimum photons per pixel mask |
 | `--tau-display-min FLOAT` | Min lifetime for exported tau images (ns) |
 | `--tau-display-max FLOAT` | Max lifetime for exported tau images (ns) |
@@ -399,6 +405,84 @@ By default the fit treats the baseline as a flat constant `Z`. When a sample has
 | `--out NAME` | Output file prefix (default: `flim_out`, anchored to PTU directory) |
 | `--no-plots` | Suppress plot generation |
 | `--channel INT` | Detection channel (default: auto-detect) |
+
+---
+
+### Timelapse and Z-stack Fitting
+
+Both fit a stack of PTUs as a single field of view: all slices are pooled to fit one shared reference lifetime, then each slice is fitted per-pixel with τ locked, so lifetime is held constant across the stack while amplitude and intensity vary. Timelapse uses time as the stack axis, z-stack uses depth. They share the same code path (`flimkit/FLIM/batch.py`).
+
+Reach them from the terminal UI (`python main.py --cli` → "Timelapse batch fit" / "Z-stack batch fit"), from the GUI (the Analysis toggle next to the input file in the Single FOV tab switches to Z-stack), or programmatically:
+
+```python
+from flimkit.interactive import timelapse_flim_fit, zstack_flim_fit
+
+zstack_flim_fit()      # parses sys.argv
+timelapse_flim_fit()
+```
+
+Expected filename patterns: `region_tX[_sY][_zZ].ptu` for timelapse, `region_zX.ptu` for a z-stack (as exported in Leica `.sptw` workspaces).
+
+| Argument | Description |
+|---|---|
+| `--ptu-dir PATH` | Folder of stack PTUs (required) |
+| `--output-dir PATH` | Base output directory (required) |
+| `--ref-tau1 FLOAT` | Reference τ₁ in ns; skips the pooled global fit |
+| `--ref-tau2 FLOAT` | Reference τ₂ in ns; required alongside `--ref-tau1` when `--nexp` ≥ 2 |
+| `--fit-start-ns FLOAT` | Fit window start in ns (default: auto from IRF onset) |
+| `--fit-end-ns FLOAT` | Fit window end in ns (default: auto) |
+| `--exclude-ns SPEC` | Bands to drop from the fit, e.g. `"7.2-8.8"` or `"7.2-8.8,11.0-11.5"` |
+| `--correct-pileup` | Coates pile-up correction |
+| `--no-stack` | Skip saving the `(T,H,W)` / `(Z,H,W)` map stacks |
+| `--bound-fraction` | Z-stack only: compute bound fraction α₂/(α₁+α₂) |
+
+`--nexp`, `--tau-min`, `--tau-max`, `--machine-irf`, `--estimate-irf`, `--irf-fwhm`, `--irf-bins`, `--irf-fit-width`, `--optimizer`, `--restarts`, `--de-population`, `--de-maxiter`, `--workers`, `--no-polish`, `--channel`, `--min-photons`, `--cost-function` and `--no-plots` behave as in `fit_cli.py`.
+
+Outputs land under `output-dir` in one folder per group: per-slice amplitude/intensity/lifetime maps, the pooled reference fit as `*_reference_fit.json`, stacked maps, and a series summary as `*_zseries.csv` / `.json` / `.png` (`*_timeseries.csv` for timelapse).
+
+#### Fit window and exclusion bands
+
+By default the fit spans the decay from the IRF onset to the end of the record. Two things break that: signal before the rise (IRF artefacts) and reflection peaks partway down the tail, which pull a multi-exponential fit toward a spurious short component. `--fit-start-ns` and `--fit-end-ns` set the window explicitly; `--exclude-ns` drops one or more bands inside it, given as comma-separated `lo-hi` pairs in ns.
+
+```bash
+--fit-start-ns 0.5 --fit-end-ns 12.0 --exclude-ns "7.2-8.8"
+```
+
+Excluded bins are removed from the cost function rather than zeroed, so the fit statistic stays comparable. The per-pixel path honours the window too (before v0.9.17 it projected over every bin regardless).
+
+In the Python API the same controls are `fit_start_ns=`, `fit_end_ns=` and `exclude_ns=` on `fit_summed` / `fit_per_pixel`, where `exclude_ns` takes a list of `(lo, hi)` tuples. `flimkit.interactive.parse_exclude_ns` converts the string form.
+
+---
+
+### Synthetic Data Generation (CLI)
+
+Generates FLIM data with a known ground truth: a sample PTU, a matching IRF PTU, and a JSON file recording the parameters used. Intended for cross-software validation, where the same file is fitted in FLIMKit and elsewhere and the recovered lifetimes are compared against truth.
+
+```bash
+python synth_cli.py --out ./validation --tau 3.0,0.8 --amps 0.7,0.3 --photons 1e5
+```
+
+| Argument | Description |
+|---|---|
+| `--out PATH` | Output directory for the PTUs and truth JSON (required) |
+| `--name NAME` | Base name for the files (default: `synth`) |
+| `--tau SPEC` | Lifetime(s) in ns, comma-separated for multi-exponential (default: `4.1`) |
+| `--amps SPEC` | Amplitudes for multi-exponential τ, comma-separated (default: equal) |
+| `--photons SPEC` | Summed photon count; comma-separated generates a series, e.g. `"2e4,1e5,5e5"` (default: `1e5`) |
+| `--period-ns FLOAT` | Laser period in ns, sets the sync rate (default: 50.0) |
+| `--res-ps FLOAT` | TCSPC bin width in ps (default: 25.0) |
+| `--irf-fwhm-ns FLOAT` | IRF FWHM in ns (default: 0.15) |
+| `--irf-center-ns FLOAT` | IRF peak position in ns (default: 2.0) |
+| `--reflection-ns FLOAT` | Plant a reflection peak at this time in ns, e.g. `8.0` |
+| `--reflection-frac FLOAT` | Reflection intensity as a fraction of total signal (default: 0.02) |
+| `--reflection-width-ns FLOAT` | Reflection peak FWHM in ns (default: 0.15) |
+| `--pileup-pp FLOAT` | Apply pile-up at this many photons per pulse, e.g. `0.1` |
+| `--background-frac FLOAT` | Flat background as a fraction of total signal (default: 0.0) |
+| `--image INT` | Image side length in pixels, square (default: 16) |
+| `--no-irf` | Skip writing the IRF PTU |
+| `--sdt` | Also write Becker & Hickl `.sdt` versions of sample and IRF |
+
+`--reflection-ns` pairs with `--exclude-ns` on the fitting side: plant a reflection at a known position, then confirm that excluding that band recovers the input lifetime.
 
 ---
 
@@ -741,6 +825,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 ├── main.py                        # Guided terminal UI
 ├── fit_cli.py                     # FLIM fitting CLI
 ├── phasor_cli.py                  # Phasor analysis CLI
+├── synth_cli.py                   # Synthetic known-truth PTU/SDT generator
 ├── build_and_sign.py              # PyInstaller build + codesign
 ├── validate_installation.py       # Installation sanity check (10 checks)
 ├── hardware_limits.py             # Hardware stress test - throughput & RAM headroom
