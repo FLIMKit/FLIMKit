@@ -22,6 +22,8 @@ ENV TZ=Etc/UTC
 WORKDIR /app
 COPY requirements.txt .
 RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
+    && pip install --no-cache-dir torch torchvision \
+       --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-docker.txt \
     && rm requirements-docker.txt
 COPY . .
