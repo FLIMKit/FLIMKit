@@ -68,13 +68,16 @@ def sample_cube(expected, ny, nx, seed=0):
     cube = rng.poisson(per_px[None, None, :] * np.ones((ny, nx, 1)))
     return cube.astype(np.uint32)
 
-def write_ptu(path, cube, period_ns, tcspc_res_ns, pixel_margin=10.0):
+def write_ptu(path, cube, period_ns, tcspc_res_ns, pixel_margin=10.0, n_sync=None):
     import ptufile
     cube = np.ascontiguousarray(cube, dtype=np.uint32)
     period_s = period_ns * 1e-9
     res_s = tcspc_res_ns * 1e-9
     max_px = int(cube.sum(axis=2).max()) if cube.size else 0
     pixel_time = max(max_px, 1) * period_s * pixel_margin
+    if n_sync:
+        n_px = max(int(cube.shape[0] * cube.shape[1]), 1)
+        pixel_time = max(float(n_sync) * period_s / n_px, max(max_px, 1) * period_s)
     w = ptufile.PtuWriter(str(path), shape=cube.shape,
                           global_resolution=period_s,
                           tcspc_resolution=res_s, pixel_time=pixel_time, mode='w')
@@ -106,7 +109,9 @@ def generate(out_dir, name='synth', ny=16, nx=16, with_irf=True, seed=0, sdt=Fal
     truth['image_shape'] = [ny, nx]
     truth['n_photons_written'] = int(cube.sum())
     sample_path = out_dir / f'{name}.ptu'
-    write_ptu(sample_path, cube, truth['period_ns'], truth['tcspc_res_ns'])
+    pileup_sync = (truth.get('pileup') or {}).get('n_sync')
+    write_ptu(sample_path, cube, truth['period_ns'], truth['tcspc_res_ns'],
+              n_sync=pileup_sync)
     truth['sample_ptu'] = sample_path.name
     if sdt:
         sdt_path = out_dir / f'{name}.sdt'
