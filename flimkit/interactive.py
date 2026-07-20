@@ -582,6 +582,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
                 n_sync=getattr(ptu, 'n_sync', None),
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
             )
@@ -1064,7 +1065,8 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
-                n_sync=ptu.n_sync,
+                n_sync=getattr(ptu, 'n_sync', None),
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
