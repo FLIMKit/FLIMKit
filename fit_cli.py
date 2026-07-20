@@ -14,7 +14,7 @@ from flimkit.FLIM.fit_tools import find_irf_peak_bin, coates_pileup_correction
 from flimkit.image.tools import make_intensity_image, apply_intensity_threshold, pick_intensity_threshold
 from flimkit.utils.enhanced_outputs import save_weighted_tau_images, save_individual_tau_maps
 from flimkit.configs import *
-from flimkit.interactive import _load_machine_irf_prompt
+from flimkit.interactive import _load_machine_irf_prompt, parse_exclude_ns
 from flimkit._version import fitter_version
 
 warnings.filterwarnings('ignore')
@@ -90,6 +90,13 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--intensity-display-max', type=float, default=INTENSITY_DISPLAY_MAX,
                     help='Max intensity for exported intensity images. '
                          'Out-of-range pixels are clipped to this value (FLIM microscope style).')
+    ap.add_argument('--fit-start-ns', type=float, default=None,
+                    help='fit window start in ns (default: auto from IRF onset)')
+    ap.add_argument('--fit-end-ns', type=float, default=None,
+                    help='fit window end in ns (default: auto)')
+    ap.add_argument('--exclude-ns', type=str, default=None,
+                    help='bands to exclude from the fit, eg "7.2-8.8" or '
+                         '"7.2-8.8,11.0-11.5" (for reflection peaks mid-decay)')
     ap.add_argument('--correct-pileup', action='store_true',
                     help='Apply Coates (1968) pile-up correction to the decay before '
                          'fitting. Recommended when count rate > 5%% of sync rate.')
@@ -144,9 +151,9 @@ def single_FOV_flim_fit_cli():
           f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
     print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
           f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
-    pu = ptu.pileup_fraction
+    pu = getattr(ptu, 'photons_per_pulse', None)
     if pu is not None:
-        acq_s = ptu.n_records / ptu.sync_rate
+        acq_s = getattr(ptu, 'acq_time_s', None) or (ptu.n_sync / ptu.sync_rate)
         cr_mhz = (decay.sum() / acq_s) / 1e6
         pu_pct = pu * 100
         pu_warn = ' ⚠ HIGH - use --correct-pileup' if pu_pct > 5 else ''
@@ -159,7 +166,7 @@ def single_FOV_flim_fit_cli():
             bg_pre = estimate_bg(decay, irf_peak_bin)
             decay_no_bg = np.maximum(decay - bg_pre, 0.0)
             decay_raw_sum = decay.sum()
-            decay = coates_pileup_correction(decay_no_bg, ptu.n_records) + bg_pre
+            decay = coates_pileup_correction(decay_no_bg, ptu.n_sync) + bg_pre
             print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
                   f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
     xlsx = None
@@ -275,6 +282,9 @@ def single_FOV_flim_fit_cli():
             cost_function=args.cost_function,
             sigma_max=sigma_max,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+            fit_start_ns=args.fit_start_ns,
+            fit_end_ns=args.fit_end_ns,
+            exclude_ns=parse_exclude_ns(args.exclude_ns),
         )
     if args.mode in ('summed', 'both'):
         print(f"\n[5] Summed decay fit  ({args.nexp}-exp, optimizer={args.optimizer})")
@@ -313,7 +323,8 @@ def single_FOV_flim_fit_cli():
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
             correct_pileup=getattr(args, 'correct_pileup', False),
-            n_sync=ptu.n_records,
+            n_sync=getattr(ptu, 'n_sync', None),
+            fit_idx=global_summary.get('fit_idx'),
             free_tau=getattr(args, 'free_tau', False),
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
