@@ -82,16 +82,23 @@ def write_ptu(path, cube, period_ns, tcspc_res_ns, pixel_margin=10.0):
     w.close()
     return str(path)
 
-def write_irf_ptu(path, truth, n_photons=2e5, ny=8, nx=8, seed=1):
+def irf_cube(truth, n_photons=2e5, ny=8, nx=8, seed=1):
     nb = truth['n_bins']
     res = truth['tcspc_res_ns']
     center_bin = truth['irf_center_ns'] / res
     fwhm_bins = truth['irf_fwhm_ns'] / res
     irf = gaussian_irf(nb, center_bin, fwhm_bins) * float(n_photons)
-    cube = sample_cube(irf, ny, nx, seed=seed)
-    return write_ptu(path, cube, truth['period_ns'], res)
+    return sample_cube(irf, ny, nx, seed=seed)
 
-def generate(out_dir, name='synth', ny=16, nx=16, with_irf=True, seed=0, **kwargs):
+def write_irf_ptu(path, truth, n_photons=2e5, ny=8, nx=8, seed=1):
+    cube = irf_cube(truth, n_photons, ny, nx, seed)
+    return write_ptu(path, cube, truth['period_ns'], truth['tcspc_res_ns'])
+
+def write_sdt(path, cube, period_ns, tcspc_res_ns):
+    from flimkit.formats.BH.writer import write_sdt as _write_sdt
+    return _write_sdt(path, cube, period_ns, tcspc_res_ns)
+
+def generate(out_dir, name='synth', ny=16, nx=16, with_irf=True, seed=0, sdt=False, **kwargs):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     expected, irf, truth = build_decay(**kwargs)
@@ -101,10 +108,19 @@ def generate(out_dir, name='synth', ny=16, nx=16, with_irf=True, seed=0, **kwarg
     sample_path = out_dir / f'{name}.ptu'
     write_ptu(sample_path, cube, truth['period_ns'], truth['tcspc_res_ns'])
     truth['sample_ptu'] = sample_path.name
+    if sdt:
+        sdt_path = out_dir / f'{name}.sdt'
+        write_sdt(sdt_path, cube, truth['period_ns'], truth['tcspc_res_ns'])
+        truth['sample_sdt'] = sdt_path.name
     if with_irf:
+        irf_c = irf_cube(truth)
         irf_path = out_dir / f'{name}_IRF.ptu'
-        write_irf_ptu(irf_path, truth)
+        write_ptu(irf_path, irf_c, truth['period_ns'], truth['tcspc_res_ns'])
         truth['irf_ptu'] = irf_path.name
+        if sdt:
+            irf_sdt = out_dir / f'{name}_IRF.sdt'
+            write_sdt(irf_sdt, irf_c, truth['period_ns'], truth['tcspc_res_ns'])
+            truth['irf_sdt'] = irf_sdt.name
     truth_path = out_dir / f'{name}_truth.json'
     truth_path.write_text(json.dumps(truth, indent=2))
     return dict(sample=str(sample_path), truth=truth, truth_json=str(truth_path))

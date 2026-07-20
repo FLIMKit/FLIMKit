@@ -58,3 +58,26 @@ def test_generate_series_shares_one_irf(tmp_path):
     assert len(irfs) == 1
     for r in res:
         assert r['truth']['reflection'] is not None
+
+def test_write_sdt_roundtrips_through_bh_reader(tmp_path):
+    from flimkit.formats.BH.reader import BHFile
+    expected, _, truth = synth.build_decay(tau_ns=3.2, n_bins=2000,
+                                           tcspc_res_ns=0.025, n_photons=8e4)
+    cube = synth.sample_cube(expected, 8, 8, seed=0)
+    path = synth.write_sdt(tmp_path / 's.sdt', cube,
+                           truth['period_ns'], truth['tcspc_res_ns'])
+    f = BHFile(path, verbose=False)
+    d = f.summed_decay()
+    assert int(d.sum()) == int(cube.sum())
+    assert f.n_bins == truth['n_bins']
+    assert round(f.tcspc_res * 1e9, 4) == round(truth['tcspc_res_ns'], 4)
+    assert f.pixel_stack().shape == (8, 8, 2000)
+
+def test_generate_sdt_writes_both_formats(tmp_path):
+    r = synth.generate(tmp_path, name='d', ny=8, nx=8, tau_ns=4.0,
+                       n_photons=5e4, sdt=True)
+    t = r['truth']
+    assert (tmp_path / t['sample_ptu']).exists()
+    assert (tmp_path / t['sample_sdt']).exists()
+    assert (tmp_path / t['irf_ptu']).exists()
+    assert (tmp_path / t['irf_sdt']).exists()

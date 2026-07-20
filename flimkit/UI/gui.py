@@ -504,9 +504,12 @@ class _UIBuilder:
             v = tk.StringVar(value=default)
             ttk.Entry(frm, textvariable=v, width=22).grid(row=i, column=1, sticky='ew', pady=2)
             vals[key] = v
+        also_sdt = tk.BooleanVar(value=False)
+        ttk.Checkbutton(frm, text='Also write Becker & Hickl .sdt', variable=also_sdt).grid(
+            row=len(fields), column=0, columnspan=2, sticky='w', pady=(6, 0))
         status = tk.StringVar(value='')
         ttk.Label(frm, textvariable=status, foreground='grey').grid(
-            row=len(fields), column=0, columnspan=2, sticky='w', pady=(8, 0))
+            row=len(fields) + 1, column=0, columnspan=2, sticky='w', pady=(8, 0))
 
         def _floats(s):
             return [float(x) for x in str(s).split(',') if x.strip()]
@@ -534,15 +537,17 @@ class _UIBuilder:
                 photons = _floats(vals['photons'].get())
                 if len(photons) == 1:
                     synth.generate(out_dir, name=vals['name'].get(), ny=side, nx=side,
-                                   n_photons=photons[0], reflection=refl, **common)
+                                   n_photons=photons[0], reflection=refl,
+                                   sdt=also_sdt.get(), **common)
                     n_files = 1
                 else:
                     synth.generate_series(out_dir, photons, name=vals['name'].get(),
                                           with_reflection=refl is not None, reflection=refl,
-                                          ny=side, nx=side, **common)
+                                          ny=side, nx=side, sdt=also_sdt.get(), **common)
                     n_files = len(photons)
-                messagebox.showinfo('Synthetic PTU',
-                                    f'Wrote {n_files} sample PTU(s) + IRF + truth JSON to\n{out_dir}')
+                fmt = 'PTU + SDT' if also_sdt.get() else 'PTU'
+                messagebox.showinfo('Synthetic data',
+                                    f'Wrote {n_files} sample(s) ({fmt}) + IRF + truth JSON to\n{out_dir}')
                 dlg.destroy()
             except Exception as e:
                 import traceback

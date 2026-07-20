@@ -40,6 +40,8 @@ def main():
     ap.add_argument('--image', type=int, default=16,
                     help='image side length in pixels (square)')
     ap.add_argument('--no-irf', action='store_true', help='skip writing the IRF PTU')
+    ap.add_argument('--sdt', action='store_true',
+                    help='also write Becker & Hickl .sdt versions (sample + IRF)')
     args = ap.parse_args()
     taus = _parse_floats(args.tau)
     tau_arg = taus[0] if len(taus) == 1 else taus
@@ -58,13 +60,13 @@ def main():
     if len(photons) == 1:
         r = synth.generate(args.out, name=args.name, ny=args.image, nx=args.image,
                            with_irf=not args.no_irf, n_photons=photons[0],
-                           reflection=reflection, **common)
+                           reflection=reflection, sdt=args.sdt, **common)
         _report(r)
     else:
         results = synth.generate_series(
             args.out, photons, name=args.name,
             with_reflection=reflection is not None,
-            reflection=reflection, ny=args.image, nx=args.image, **common)
+            reflection=reflection, ny=args.image, nx=args.image, sdt=args.sdt, **common)
         for r in results:
             _report(r)
     print('Done.')
