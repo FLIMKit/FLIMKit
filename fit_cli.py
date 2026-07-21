@@ -5,8 +5,8 @@ from pathlib import Path
 import matplotlib
 import argparse
 from flimkit.formats import FLIMFile
-from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu, irf_from_pck, irf_from_xlsx, irf_from_xlsx_analytical, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, reconstruct_irf_from_decay, compare_irfs, machine_irf_prompt
-from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, MIN_PHOTONS_PERPIX
+from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu, irf_from_pck, irf_from_measured_file, irf_from_xlsx, irf_from_xlsx_analytical, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, reconstruct_irf_from_decay, compare_irfs, machine_irf_prompt
+from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_tail, MIN_PHOTONS_PERPIX
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from flimkit.utils.misc import print_summary
 from flimkit.utils.xlsx_tools import load_xlsx
@@ -52,6 +52,14 @@ def single_FOV_flim_fit_cli():
                     help='IRF FWHM in ns. Default: 1 bin width from PTU '
                          '(e.g. 0.097 ns for 97 ps bins). Override for other systems.')
     ap.add_argument('--nexp',     type=int,   default=n_exp, choices=[1, 2, 3])
+    ap.add_argument('--fit-model', choices=['reconv', 'tail'], default='reconv',
+                    help="'reconv' (default) convolves the model with the IRF. "
+                         "'tail' fits bare exponentials past the peak and ignores "
+                         'the IRF entirely (Leica LAS X n-exponential tail fit).')
+    ap.add_argument('--fit-t0', action='store_true',
+                    help='Tail fit only: let the lifetime offset t0 float instead of '
+                         'pinning it to the decay peak. Correlated with the amplitudes, '
+                         'so leave it off unless the amplitudes matter more than stability.')
     ap.add_argument('--tau-min',  type=float, default=Tau_min, help='ns')
     ap.add_argument('--tau-max',  type=float, default=Tau_max, help='ns')
     ap.add_argument('--mode',     default=D_mode,
@@ -180,10 +188,7 @@ def single_FOV_flim_fit_cli():
     print(f"\n[4] Building IRF")
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
-        if str(args.irf).lower().endswith('.pck'):
-            irf_prompt = irf_from_pck(args.irf, ptu.n_bins, channel=args.channel)
-        else:
-            irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
+        irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
         strategy = 'scatter_ptu'
         has_tail = False
         fit_sigma = False
@@ -268,7 +273,25 @@ def single_FOV_flim_fit_cli():
     fit_tvb = tvb_profile is not None
     global_popt = None
     global_summary = None
+    _tail_fit = args.fit_model == 'tail'
     def _run_summed():
+        if _tail_fit:
+            return fit_summed_tail(
+                decay, ptu.tcspc_res, ptu.n_bins,
+                fit_bg, args.nexp, args.tau_min, args.tau_max,
+                fit_t0=args.fit_t0,
+                optimizer=args.optimizer,
+                n_restarts=args.restarts,
+                de_popsize=args.de_population,
+                de_maxiter=args.de_maxiter,
+                workers=args.workers,
+                polish=not args.no_polish,
+                cost_function=args.cost_function,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                fit_start_ns=args.fit_start_ns,
+                fit_end_ns=args.fit_end_ns,
+                exclude_ns=parse_exclude_ns(args.exclude_ns),
+            )
         return fit_summed(
             decay, ptu.tcspc_res, ptu.n_bins,
             irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -287,7 +310,8 @@ def single_FOV_flim_fit_cli():
             exclude_ns=parse_exclude_ns(args.exclude_ns),
         )
     if args.mode in ('summed', 'both'):
-        print(f"\n[5] Summed decay fit  ({args.nexp}-exp, optimizer={args.optimizer})")
+        print(f"\n[5] Summed decay fit  ({args.nexp}-exp"
+              f"{' tail' if _tail_fit else ''}, optimizer={args.optimizer})")
         global_popt, global_summary = _run_summed()
         print_summary(global_summary, strategy, args.nexp)
         if not args.no_plots:
@@ -327,6 +351,9 @@ def single_FOV_flim_fit_cli():
             fit_idx=global_summary.get('fit_idx'),
             free_tau=getattr(args, 'free_tau', False),
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+            fit_model=args.fit_model,
+            fit_t0=args.fit_t0 if _tail_fit else False,
+            t0_fixed=(global_summary['t0_ns'] * 1e-9) if _tail_fit else 0.0,
         )
         roi_name = Path(args.ptu).stem
         save_weighted_tau_images(

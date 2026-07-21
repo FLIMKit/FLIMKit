@@ -58,12 +58,15 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
     if xlsx is not None and xlsx.get('fit_t') is not None and xlsx.get('fit_c') is not None:
         ax1.semilogy(xlsx['fit_t'], np.clip(xlsx['fit_c'], 1, None),
                      'b-', lw=1.1, alpha=0.55, label='FLIM microscope fit')
+    is_tail = s.get('fit_model') == 'tail'
     ax1.semilogy(t_ns, np.clip(s['model'], 1, None), 'r-', lw=2,
-                 label=f"{n_exp}-exp reconv.")
+                 label=f"{n_exp}-exp {'tail' if is_tail else 'reconv.'}")
     ax1.set_xlim(0, min(t_ns[-1], 22))
     ax1.set_ylabel('Counts')
     ax1.legend(fontsize=8, loc='upper right')
-    ax1.set_title(f"Summed Decay - {n_exp}-exp | IRF: {strategy}", fontweight='bold')
+    ax1.set_title(f"Summed Decay - {n_exp}-exp "
+                  f"{'tail fit (no IRF)' if is_tail else '| IRF: ' + strategy}",
+                  fontweight='bold')
     ax1.axvspan(s['fit_window_ns'][0], s['fit_window_ns'][1],
                 alpha=0.06, color='green')
     plt.setp(ax1.get_xticklabels(), visible=False)
@@ -91,7 +94,8 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
              f"bg   = {s['bg_fit']:.1f} cts/bin",
              f"τ_mean(int) = {s['tau_mean_int_ns']:.4f} ns",
              f"τ_mean(amp) = {s['tau_mean_amp_ns']:.4f} ns",
-             f"IRF FWHM(eff) = {s['irf_fwhm_eff_ns']:.4f} ns", '']
+             (f"t0 = {s['t0_ns']:.4f} ns" if is_tail
+              else f"IRF FWHM(eff) = {s['irf_fwhm_eff_ns']:.4f} ns"), '']
     if 'tau_centers_ns' in s:
         width_label = 'σ' if s['dist_type'] == 'gaussian' else 'Γ'
         for i, (tau_c, w, frac) in enumerate(
@@ -104,7 +108,8 @@ def plot_summed(decay, summary, ptu, xlsx, n_exp, strategy, out_prefix,
              va='top', fontsize=9, family='monospace',
              bbox=dict(boxstyle='round,pad=0.4', fc='#f7f7f7', alpha=0.9))
 
-    plt.suptitle('FLIM Reconvolution Fit - FLIM microscope / PicoHarp',
+    plt.suptitle(f"FLIM {'Tail' if is_tail else 'Reconvolution'} Fit - "
+                 f"FLIM microscope / PicoHarp",
                  fontsize=12, fontweight='bold')
     out = f"{out_prefix}_summed_{n_exp}exp.png"
     plt.savefig(out, dpi=150, bbox_inches='tight')

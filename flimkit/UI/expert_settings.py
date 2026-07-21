@@ -20,6 +20,10 @@ _EXPERT_DEFAULTS = {
     'irf_align': 'steepest_rise',
     'irf_shift_bins': 2,
     'free_tau_perpixel': False,
+    'fit_start_ns': None,
+    'fit_end_ns': None,
+    'exclude_ns': '',
+    'fit_t0': False,
 }
 
 
@@ -131,9 +135,32 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Label(f, text='(2 = recommended; 5 = legacy)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
         row += 1
+        _start_val = vals.get('fit_start_ns')
+        _end_val = vals.get('fit_end_ns')
+        ttk.Label(f, text='Fit window start (ns):').grid(row=row, column=0, sticky='w', **PAD)
+        self._sv_fit_start = tk.StringVar(value='' if _start_val is None else str(_start_val))
+        ttk.Entry(f, textvariable=self._sv_fit_start, width=8).grid(row=row, column=1, sticky='w', **PAD)
+        ttk.Label(f, text='Fit window end (ns):').grid(row=row, column=2, sticky='w', **PAD)
+        self._sv_fit_end = tk.StringVar(value='' if _end_val is None else str(_end_val))
+        ttk.Entry(f, textvariable=self._sv_fit_end, width=8).grid(row=row, column=3, sticky='w', **PAD)
+
+        row += 1
+        ttk.Label(f, text='Exclude bands (ns):').grid(row=row, column=0, sticky='w', **PAD)
+        self._sv_exclude = tk.StringVar(value=str(vals.get('exclude_ns', '') or ''))
+        ttk.Entry(f, textvariable=self._sv_exclude, width=20).grid(row=row, column=1, sticky='w', **PAD)
+        ttk.Label(f, text='(blank = none, e.g. 7.2-8.8 or 7.2-8.8,11.0-11.5)',
+                  foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
+
+        row += 1
         self._bv_free_tau = tk.BooleanVar(value=bool(vals.get('free_tau_perpixel', False)))
         ttk.Checkbutton(f, text='Free τ per pixel  (slower - reveals τ spatial variation for n_exp > 1)',
                         variable=self._bv_free_tau).grid(
+            row=row, column=0, columnspan=4, sticky='w', **PAD)
+
+        row += 1
+        self._bv_fit_t0 = tk.BooleanVar(value=bool(vals.get('fit_t0', False)))
+        ttk.Checkbutton(f, text='Free t0  (tail fit only - correlated with the amplitudes, leave off unless they matter)',
+                        variable=self._bv_fit_t0).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
 
         row += 1
@@ -151,8 +178,13 @@ class ExpertSettingsDialog(tk.Toplevel):
         self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
 
     def _collect(self) -> dict:
+        from flimkit.interactive import parse_exclude_ns
         ch = self._sv_channels.get().strip()
         _fwhm_s = self._sv_irf_fwhm.get().strip()
+        _start_s = self._sv_fit_start.get().strip()
+        _end_s = self._sv_fit_end.get().strip()
+        _excl_s = self._sv_exclude.get().strip()
+        parse_exclude_ns(_excl_s or None)
         return {
             'optimizer': self._sv_optimizer.get(),
             'de_population': int(self._sv_de_pop.get() or 30),
@@ -167,6 +199,10 @@ class ExpertSettingsDialog(tk.Toplevel):
             'irf_align': self._sv_irf_align.get(),
             'irf_shift_bins': int(self._sv_irf_shift.get() or 2),
             'free_tau_perpixel': self._bv_free_tau.get(),
+            'fit_t0': self._bv_fit_t0.get(),
+            'fit_start_ns': float(_start_s) if _start_s else None,
+            'fit_end_ns': float(_end_s) if _end_s else None,
+            'exclude_ns': _excl_s,
         }
 
     def _confirm(self):
@@ -192,3 +228,7 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_irf_align.set('steepest_rise')
         self._sv_irf_shift.set('2')
         self._bv_free_tau.set(False)
+        self._bv_fit_t0.set(False)
+        self._sv_fit_start.set('')
+        self._sv_fit_end.set('')
+        self._sv_exclude.set('')

@@ -25,7 +25,7 @@ class FLIMKitController:
         a.irf_fwhm = cfg['IRF_FWHM']
         _model = self.b.sv_fit_model_fov.get()
         a.dist_type = _model
-        if _model == 'discrete':
+        if _model in ('discrete', 'tail'):
             a.nexp = self.b.iv_nexp_fov.get()
             a.dist_n_components = 1
         else:
@@ -81,7 +81,7 @@ class FLIMKitController:
         a.machine_irf = irf.get('machine_irf') or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
         _model_st = self.b.sv_fit_model_st.get()
         a.dist_type = _model_st
-        if _model_st == 'discrete':
+        if _model_st in ('discrete', 'tail'):
             a.nexp = self.b.iv_nexp_st.get()
             a.dist_n_components = 1
         else:

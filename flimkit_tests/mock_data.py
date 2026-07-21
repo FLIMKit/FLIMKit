@@ -197,7 +197,7 @@ def generate_mock_ptu_tiles(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    from ptu_writer import write_ptu
+    from flimkit_tests.ptu_writer import write_ptu
 
     ptu_files = []
 

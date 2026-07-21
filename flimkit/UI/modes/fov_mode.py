@@ -60,6 +60,8 @@ class FovMode(BaseMode):
                         value='gaussian').grid(row=0, column=2, sticky='w', padx=1)
         ttk.Radiobutton(fp, text='Lorentzian dist.', variable=self.b.sv_fit_model_fov,
                         value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='n-exp tail', variable=self.b.sv_fit_model_fov,
+                        value='tail').grid(row=0, column=4, sticky='w', padx=1)
         self.b.state.iv_nexp_fov = tk.IntVar(value=2)
         self.b.state.iv_ncomp_dist_fov = tk.IntVar(value=1)
         nexp_frame = ttk.Frame(fp)
@@ -75,13 +77,22 @@ class FovMode(BaseMode):
         ttk.Radiobutton(dist_frame, text='2 (bimodal)', variable=self.b.iv_ncomp_dist_fov,
                         value=2).pack(side='left', padx=1)
         
+        tail_note = ttk.Label(fp, text='Tail fit: no IRF used, fitted past the decay peak',
+                              foreground='#888')
         def _on_fov_model_change(*_):
-            if self.b.sv_fit_model_fov.get() == 'discrete':
+            _m = self.b.sv_fit_model_fov.get()
+            if _m in ('discrete', 'tail'):
                 dist_frame.grid_remove()
                 nexp_frame.grid(row=1, column=0, columnspan=5, sticky='w')
             else:
                 nexp_frame.grid_remove()
                 dist_frame.grid(row=1, column=0, columnspan=5, sticky='w')
+            if _m == 'tail':
+                tail_note.grid(row=5, column=0, columnspan=5, sticky='w', padx=4)
+                self.b._irf_fov.grid_remove()
+            else:
+                tail_note.grid_remove()
+                self.b._irf_fov.grid(row=1, column=0, sticky='ew', pady=(0, 6))
         self.b.sv_fit_model_fov.trace_add('write', _on_fov_model_change)
         mode_row = ttk.Frame(fp)
         mode_row.grid(row=2, column=0, columnspan=5, sticky='w', pady=(2, 0))

@@ -104,6 +104,8 @@ class BatchMode(BaseMode):
                         value='gaussian').grid(row=0, column=2, sticky='w', padx=1)
         ttk.Radiobutton(fp, text='Lorentzian dist.', variable=self.b.sv_fit_model_batch,
                         value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='n-exp tail', variable=self.b.sv_fit_model_batch,
+                        value='tail').grid(row=0, column=4, sticky='w', padx=1)
 
         self.b.state.iv_nexp_batch = tk.IntVar(value=2)
         self.b.state.iv_ncomp_dist_batch = tk.IntVar(value=1)
@@ -123,7 +125,7 @@ class BatchMode(BaseMode):
                         value=2).pack(side='left', padx=4)
 
         def _on_batch_model_change(*_):
-            if self.b.sv_fit_model_batch.get() == 'discrete':
+            if self.b.sv_fit_model_batch.get() in ('discrete', 'tail'):
                 dist_frame_batch.grid_remove()
                 nexp_frame_batch.grid(row=1, column=0, columnspan=5, sticky='w')
             else:

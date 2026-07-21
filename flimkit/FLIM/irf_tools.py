@@ -238,6 +238,12 @@ def irf_from_pck(path: str, n_bins: int, channel=None) -> np.ndarray:
     print(f'  IRF from .pck: channel {channel}, {int(s):,} photons, peak bin {peak}')
     return irf / s
 
+def irf_from_measured_file(path: str, ptu_ref: PTUFile,
+                           channel: int | None = None) -> np.ndarray:
+    if str(path).lower().endswith('.pck'):
+        return irf_from_pck(path, ptu_ref.n_bins, channel=channel)
+    return irf_from_scatter_ptu(path, ptu_ref, channel=channel)
+
 def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
                               verbose: bool = True) -> tuple[np.ndarray, dict]:
     if xlsx['irf_t'] is None or xlsx['irf_c'] is None:

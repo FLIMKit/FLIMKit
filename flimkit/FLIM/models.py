@@ -98,6 +98,112 @@ class _DECostPoissonLogTau(_DECostPoisson):
         params_lin[:self.n_exp] = 10.0 ** params_lin[:self.n_exp]
         return super().__call__(params_lin)
 
+def unpack_tail_params(params, n_exp, fit_t0, fit_bg, fit_tvb,
+                       t0_fixed=0.0, bg_fixed=0.0, tvb_fixed=0.0):
+    taus = np.clip(np.asarray(params[:n_exp], dtype=float), 1e-14, None)
+    amps = np.asarray(params[n_exp:2 * n_exp], dtype=float)
+    idx = 2 * n_exp
+    if fit_t0:
+        t0 = float(params[idx]); idx += 1
+    else:
+        t0 = float(t0_fixed)
+    if fit_bg:
+        bg = float(params[idx]); idx += 1
+    else:
+        bg = float(bg_fixed)
+    if fit_tvb:
+        tvb_scale = float(params[idx]); idx += 1
+    else:
+        tvb_scale = float(tvb_fixed)
+    return taus, amps, t0, bg, tvb_scale
+
+def tail_basis(tcspc_res, n_bins, taus, t0):
+    t = np.arange(n_bins, dtype=float) * tcspc_res - t0
+    live = t >= 0.0
+    t_pos = np.maximum(t, 0.0)
+    return np.array([np.where(live, np.exp(-t_pos / max(tau, 1e-15)), 0.0)
+                     for tau in taus])
+
+def tail_model(params, tcspc_res, n_bins, n_exp, bg_fixed, fit_bg,
+               fit_t0=False, t0_fixed=0.0,
+               tvb_profile=None, fit_tvb=False, tvb_fixed=0.0,
+               n_sync=None):
+    taus, amps, t0, bg, tvb_scale = unpack_tail_params(
+        params, n_exp, fit_t0, fit_bg, fit_tvb,
+        t0_fixed=t0_fixed, bg_fixed=bg_fixed, tvb_fixed=tvb_fixed)
+    order = np.argsort(-taus)
+    taus = taus[order]
+    amps = amps[order]
+    model = amps @ tail_basis(tcspc_res, n_bins, taus, t0) + bg
+    if tvb_profile is not None:
+        model = model + tvb_scale * tvb_profile
+    if n_sync:
+        model = apply_pileup(model, n_sync)
+    return model
+
+class _DECostTail:
+    def __init__(self, tcspc_res, n_bins, n_exp, bg_fixed, fit_bg,
+                 fit_idx, decay, weights,
+                 fit_t0=False, t0_fixed=0.0,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
+        self.tcspc_res = tcspc_res
+        self.n_bins = n_bins
+        self.n_exp = n_exp
+        self.bg_fixed = bg_fixed
+        self.fit_bg = fit_bg
+        self.fit_idx = fit_idx
+        self.decay = decay
+        self.weights = weights
+        self.fit_t0 = fit_t0
+        self.t0_fixed = t0_fixed
+        self.tvb_profile = tvb_profile
+        self.fit_tvb = fit_tvb
+        self.n_sync = n_sync
+
+    def _model(self, params):
+        return tail_model(
+            params, self.tcspc_res, self.n_bins, self.n_exp,
+            self.bg_fixed, self.fit_bg,
+            fit_t0=self.fit_t0, t0_fixed=self.t0_fixed,
+            tvb_profile=self.tvb_profile, fit_tvb=self.fit_tvb,
+            n_sync=self.n_sync)
+
+    def __call__(self, params):
+        model = self._model(params)
+        res = (model[self.fit_idx] - self.decay[self.fit_idx]) / self.weights
+        return np.sum(res ** 2)
+
+class _DECostTailLogTau(_DECostTail):
+    def __call__(self, params):
+        params_lin = np.array(params, dtype=float)
+        params_lin[:self.n_exp] = 10.0 ** params_lin[:self.n_exp]
+        return super().__call__(params_lin)
+
+class _DECostTailPoisson(_DECostTail):
+    def __init__(self, tcspc_res, n_bins, n_exp, bg_fixed, fit_bg,
+                 fit_idx, decay,
+                 fit_t0=False, t0_fixed=0.0,
+                 tvb_profile=None, fit_tvb=False, n_sync=None):
+        super().__init__(tcspc_res, n_bins, n_exp, bg_fixed, fit_bg,
+                         fit_idx, decay, None,
+                         fit_t0=fit_t0, t0_fixed=t0_fixed,
+                         tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+
+    def __call__(self, params):
+        model = self._model(params)
+        n = self.decay[self.fit_idx]
+        m = np.maximum(model[self.fit_idx], 1e-10)
+        dev = m - n
+        pos = n > 0
+        dev[pos] += n[pos] * np.log(n[pos] / m[pos])
+        return 2.0 * np.sum(dev)
+
+class _DECostTailPoissonLogTau(_DECostTailPoisson):
+    def __call__(self, params):
+        params_lin = np.array(params, dtype=float)
+        params_lin[:self.n_exp] = 10.0 ** params_lin[:self.n_exp]
+        return super().__call__(params_lin)
+
 def _alpha_gaussian(tau_grid, tau_center, sigma_tau):
     return np.exp(-0.5 * ((tau_grid - tau_center) / max(sigma_tau, 1e-15)) ** 2)
 
@@ -110,8 +216,8 @@ def _dist_kernel(tcspc_res, n_bins, tau_center, width, amp, dist_type, n_quad=_N
     tau_lo = max(tau_center - spread, 1e-12)
     tau_hi = max(tau_center + spread, tau_lo + 1e-12)
     tau_grid = np.linspace(tau_lo, tau_hi, n_quad)
-    alpha     = (_alpha_gaussian(tau_grid, tau_center, width) if dist_type == 'gaussian'
-                 else _alpha_lorentzian(tau_grid, tau_center, width))
+    alpha = (_alpha_gaussian(tau_grid, tau_center, width) if dist_type == 'gaussian'
+             else _alpha_lorentzian(tau_grid, tau_center, width))
     alpha_sum = alpha.sum()
     if alpha_sum > 0:
         alpha = alpha / alpha_sum

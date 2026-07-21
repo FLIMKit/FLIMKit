@@ -10,7 +10,7 @@ class IRFWidget:
         ('Machine IRF (.npy pre-built)',                 'machine_irf'),
         ('Machine IRF + full σ broadening',               'machine_irf_sigma_full'),
         ('Machine IRF + half σ broadening (σ≤0.5)',       'machine_irf_sigma_half'),
-        ('Scatter PTU (measured IRF)',                   'file'),
+        ('Measured IRF file (scatter PTU or .pck)',      'file'),
         ('Estimate from decay - raw',                    'raw'),
         ('Estimate from decay - parametric',             'parametric'),
         ('Gaussian (fallback)',                          'gaussian'),
@@ -49,7 +49,7 @@ class IRFWidget:
             from flimkit.formats import supported_extensions
             _flim = ' '.join('*' + e for e in supported_extensions())
             _browse_file(self.sv_path, 'Select IRF file',
-                         [('FLIM / XLSX', _flim + ' *.xlsx'), ('All', '*.*')])
+                         [('FLIM / PCK / XLSX', _flim + ' *.pck *.xlsx'), ('All', '*.*')])
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
@@ -80,6 +80,9 @@ class IRFWidget:
             self._hide_all()
     def grid(self, **kw):
         self.frame.grid(**kw)
+
+    def grid_remove(self):
+        self.frame.grid_remove()
     def get_args(self, xlsx_fallback: Optional[str] = None) -> dict:
         method = self.sv_method.get()
         path   = self.sv_path.get().strip() or None

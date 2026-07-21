@@ -70,6 +70,51 @@ def find_fit_start(decay: np.ndarray, irf_prompt: np.ndarray,
     return fit_start
 
 
+def find_tail_fit_start(decay, peak_bin, n_bins, frac=0.9):
+    d = np.asarray(decay, dtype=float)
+    peak_val = float(d[peak_bin]) if 0 <= peak_bin < n_bins else 0.0
+    if peak_val <= 0:
+        return min(peak_bin + 1, n_bins - 1)
+    below = np.where(d[peak_bin:] < frac * peak_val)[0]
+    if len(below) == 0:
+        return min(peak_bin + 1, n_bins - 1)
+    return int(min(peak_bin + below[0], n_bins - 1))
+
+def _build_bounds_tail(n_exp, tau_min, tau_max, decay_peak, fit_bg,
+                       bg_init=0.0, bg_upper=None,
+                       fit_t0=False, t0_init=0.0, t0_range=0.0,
+                       fit_tvb=False, tvb_init=0.0, tvb_upper=None):
+    lo = [tau_min] * n_exp + [0.0] * n_exp
+    hi = [tau_max] * n_exp + [10 * decay_peak] * n_exp
+    if fit_t0:
+        lo += [t0_init - t0_range];  hi += [t0_init + t0_range]
+    if fit_bg:
+        _bg_hi = bg_upper if bg_upper is not None else bg_init * 1.5 + 10
+        lo += [0.0];  hi += [_bg_hi]
+    if fit_tvb:
+        _tvb_hi = tvb_upper if tvb_upper is not None else tvb_init * 1.5 + 10
+        lo += [0.0];  hi += [_tvb_hi]
+    return lo, hi
+
+def _pack_p0_tail(n_exp, tau_min, tau_max, decay_peak, fit_bg, bg_init,
+                  tau_override=None, fit_t0=False, t0_init=0.0,
+                  fit_tvb=False, tvb_init=0.0):
+    if tau_override is not None:
+        taus0 = np.asarray(tau_override)
+    else:
+        tmin = max(tau_min, 1e-14) * 1.001
+        tmax = tau_max * 0.999
+        taus0 = np.logspace(np.log10(tmin), np.log10(tmax), n_exp)
+    amps0 = np.full(n_exp, decay_peak / n_exp)
+    base = np.concatenate([taus0, amps0])
+    if fit_t0:
+        base = np.concatenate([base, [t0_init]])
+    if fit_bg:
+        base = np.concatenate([base, [bg_init]])
+    if fit_tvb:
+        base = np.concatenate([base, [tvb_init]])
+    return base
+
 def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins):
     candidate = min(n_bins, peak_bin + int(6.0 * tau_max_s / tcspc_res))
     search_start = int(0.82 * n_bins)

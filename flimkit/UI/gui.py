@@ -2149,6 +2149,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.irf_shift_bins = ex['irf_shift_bins']
         if 'free_tau_perpixel' in ex:
             a.free_tau_perpixel = ex['free_tau_perpixel']
+        if 'fit_start_ns' in ex:
+            a.fit_start_ns = ex['fit_start_ns']
+        if 'fit_end_ns' in ex:
+            a.fit_end_ns = ex['fit_end_ns']
+        if 'exclude_ns' in ex:
+            a.exclude_ns = ex['exclude_ns'] or None
+        if 'fit_t0' in ex:
+            a.fit_t0 = ex['fit_t0']
 
     def _open_expert_settings(self):
         from flimkit.utils.config_manager import cfg
@@ -2432,7 +2440,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         cfg = _C()
         mirf = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
         _batch_model = self.sv_fit_model_batch.get()
-        n_exp = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
+        n_exp = self.iv_nexp_batch.get() if _batch_model in ('discrete', 'tail') else 2
         tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
         tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
         tau_lo = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
@@ -2474,7 +2482,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
                         nexp=n_exp,
                         dist_type=_batch_model,
-                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model != 'discrete' else 1),
+                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
+                        fit_t0=expert_overrides.get('fit_t0', False),
                         tau_min=tau_min,
                         tau_max=tau_max,
                         mode='both',
@@ -2550,7 +2559,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         cfg = _C()
         mirf = self.sv_batch_mirf.get().strip() or str(cfg['MACHINE_IRF_DEFAULT_PATH'])
         _batch_model = self.sv_fit_model_batch.get()
-        n_exp = self.iv_nexp_batch.get() if _batch_model == 'discrete' else 2
+        n_exp = self.iv_nexp_batch.get() if _batch_model in ('discrete', 'tail') else 2
         tau_min = float(self.sv_batch_tau_min.get() or cfg['Tau_min'])
         tau_max = float(self.sv_batch_tau_max.get() or cfg['Tau_max'])
         tau_lo = _flt(self.sv_batch_tau_lo) or cfg['TAU_DISPLAY_MIN'] or 0.0
@@ -2592,7 +2601,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 try:
                     fit_args = argparse.Namespace(
                         nexp=n_exp, dist_type=_batch_model,
-                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model != 'discrete' else 1),
+                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
+                        fit_t0=expert_overrides.get('fit_t0', False),
                         tau_min=tau_min, tau_max=tau_max,
                         optimizer=expert_overrides.get('optimizer', 'de'),
                         restarts=expert_overrides.get('lm_restarts', 1),
@@ -3593,12 +3603,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             taus = list(np.atleast_1d(taus))
             amps = list(np.atleast_1d(amps)) if amps is not None else []
             fracs = list(np.atleast_1d(fracs)) if fracs is not None else []
+            intens = list(np.atleast_1d(global_summary.get('intensities', [])))
+            ifracs = list(np.atleast_1d(global_summary.get('intensity_fractions', [])))
             for i in range(len(taus)):
                 rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))
                 if i < len(amps):
                     rows.append((f'α{i+1}', f'{amps[i]:.3e}', ''))
                 if i < len(fracs):
                     rows.append((f'f{i+1} (amp frac)', f'{fracs[i]:.4f}', ''))
+                if i < len(intens):
+                    rows.append((f'I{i+1} (intensity)', f'{intens[i]:.3e}', 'cts'))
+                if i < len(ifracs):
+                    rows.append((f'f{i+1} (int frac)', f'{ifracs[i]:.4f}', ''))
         for key, label in [
             ('tau_mean_amp_ns', 'τ_mean (amp-weighted)'),
             ('tau_mean_int_ns', 'τ_mean (int-weighted)'),
@@ -3628,9 +3644,18 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if a_k is not None:
                 rows.append((f'f{k} mean (amp frac)', f'{a_k:.4f}', ''))
             k += 1
+        i_sum = global_summary.get('i_sum')
+        if i_sum is not None:
+            rows.append(('I_sum', f'{i_sum:.3e}', 'cts'))
+        a_sum = global_summary.get('a_sum')
+        if a_sum is not None:
+            rows.append(('A_sum', f'{a_sum:.3e}', ''))
         bg_fit = global_summary.get('bg_fit')
         if bg_fit is not None:
             rows.append(('Background (fitted)', f'{bg_fit:.2f}', 'cts/bin'))
+        t0_ns = global_summary.get('t0_ns')
+        if t0_ns is not None:
+            rows.append(('t0 (lifetime offset)', f'{t0_ns:.4f}', 'ns'))
         irf_shift = global_summary.get('irf_shift_bins')
         if irf_shift is not None:
             rows.append(('IRF shift', f'{irf_shift:.3f}', 'bins'))

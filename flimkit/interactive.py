@@ -15,8 +15,9 @@ from flimkit.formats import FLIMFile
 from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting  
 from .utils.xml_utils import parse_xlif_tile_positions 
 from .FLIM.fit_tools import find_irf_peak_bin
-from .FLIM.irf_tools import irf_from_scatter_ptu, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
-from .FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_dist, fit_per_pixel_dist
+from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
+from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
+                           fit_per_pixel_dist, fit_summed_tail)
 from .utils.xlsx_tools import load_xlsx
 from .utils.misc import print_summary
 from .utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
@@ -430,7 +431,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     print(f'\nBuilding IRF (method: {args.estimate_irf})...')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None and Path(args.irf).exists():
-        irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
+        irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
         strategy = 'scatter_ptu'
         has_tail = False
         fit_sigma = False
@@ -496,7 +497,21 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     print(f'  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}')
     _dist_type = getattr(args, 'dist_type', 'discrete')
     _dist_nc = getattr(args, 'dist_n_components', 1)
-    if _dist_type != 'discrete':
+    if _dist_type == 'tail':
+        print(f'\nFitting summed decay ({args.nexp}-exp tail, optimizer={args.optimizer})...')
+        global_popt, global_summary = fit_summed_tail(
+            decay, tcspc_res, n_bins,
+            fit_bg, args.nexp, args.tau_min, args.tau_max,
+            fit_t0=getattr(args, 'fit_t0', False),
+            optimizer=args.optimizer,
+            n_restarts=args.restarts,
+            de_popsize=args.de_population,
+            de_maxiter=args.de_maxiter,
+            workers=args.workers,
+            polish=not args.no_polish,
+            cost_function=getattr(args, 'cost_function', 'poisson'),
+        )
+    elif _dist_type != 'discrete':
         print(f'\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...')
         global_popt, global_summary = fit_summed_dist(
             decay, tcspc_res, n_bins, irf_prompt,
@@ -562,7 +577,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         print(f'Per-pixel fitting (min_photons={args.min_photons})...')
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
-        if _dist_type != 'discrete':
+        if _dist_type not in ('discrete', 'tail'):
             pixel_maps = fit_per_pixel_dist(
                 pixel_stack, tcspc_res, n_bins, irf_prompt,
                 global_popt, _dist_nc, _dist_type,
@@ -573,6 +588,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 progress_callback=perpixel_progress_cb,
             )
         else:
+            _is_tail = _dist_type == 'tail'
             pixel_maps = fit_per_pixel(
                 pixel_stack, tcspc_res, n_bins,
                 irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -585,6 +601,9 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
+                fit_model='tail' if _is_tail else 'reconv',
+                fit_t0=getattr(args, 'fit_t0', False) if _is_tail else False,
+                t0_fixed=(global_summary['t0_ns'] * 1e-9) if _is_tail else 0.0,
             )
         if getattr(args, 'save_weighted', True):
             save_weighted_tau_images(
@@ -726,7 +745,7 @@ def single_FOV_flim_fit_inquire():
         args.intensity_threshold = None
     return args
 def _recommended_photons(n_exp, dist_type='discrete'):
-    if dist_type != 'discrete':
+    if dist_type not in ('discrete', 'tail'):
         return 500
     return {1: 100, 2: 500}.get(int(n_exp), 1000)
 def _bin_intensity(intensity, k):
@@ -790,8 +809,12 @@ def _photon_budget_warning(stack, n_exp, min_photons, cur_binning,
     return qual_bin or floor_bin
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     _dt = getattr(args, 'dist_type', 'discrete')
-    _model_label = (f"{args.nexp}-exp" if _dt == 'discrete'
-                    else f"{getattr(args, 'dist_n_components', 1)}-comp {_dt} dist.")
+    if _dt == 'discrete':
+        _model_label = f"{args.nexp}-exp"
+    elif _dt == 'tail':
+        _model_label = f"{args.nexp}-exp tail"
+    else:
+        _model_label = f"{getattr(args, 'dist_n_components', 1)}-comp {_dt} dist."
     print(f"\n{'='*60}")
     print(f'  flim_fit_v{fitter_version}  |  {_model_label}  |  mode={args.mode}  |  optimizer={args.optimizer}')
     print(f"{'='*60}")
@@ -884,7 +907,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f'\n[4] Building IRF')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
-        irf_prompt = irf_from_scatter_ptu(args.irf, ptu, channel=args.channel)
+        irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
         strategy = 'scatter_ptu'
         has_tail = False
         fit_sigma = False
@@ -979,6 +1002,23 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tvb_profile = tvb_from_reference_ptu(_tvb_ptu, ptu, channel=_tvb_chan)
     fit_tvb = tvb_profile is not None
     def _run_summed():
+        if _dist_type == 'tail':
+            return fit_summed_tail(
+                decay, ptu.tcspc_res, ptu.n_bins,
+                fit_bg, args.nexp, args.tau_min, args.tau_max,
+                fit_t0=getattr(args, 'fit_t0', False),
+                optimizer=args.optimizer,
+                n_restarts=args.restarts,
+                de_popsize=args.de_population,
+                de_maxiter=args.de_maxiter,
+                workers=args.workers,
+                polish=not args.no_polish,
+                cost_function=getattr(args, 'cost_function', 'poisson'),
+                fit_start_ns=getattr(args, 'fit_start_ns', None),
+                fit_end_ns=getattr(args, 'fit_end_ns', None),
+                exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+            )
         if _dist_type != 'discrete':
             return fit_summed_dist(
                 decay, ptu.tcspc_res, ptu.n_bins, irf_prompt,
@@ -1045,7 +1085,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
         print(f'\n[8] Per-pixel fitting (min_photons={args.min_photons})')
         perpixel_progress_cb = _make_operation_progress_callback(
             'Per-pixel fitting', progress_window_manager) or progress_callback
-        if _dist_type != 'discrete':
+        if _dist_type not in ('discrete', 'tail'):
             pixel_maps = fit_per_pixel_dist(
                 stack, ptu.tcspc_res, ptu.n_bins, irf_prompt,
                 global_popt, _dist_nc, _dist_type,
@@ -1057,6 +1097,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
         else:
+            _is_tail = _dist_type == 'tail'
             pixel_maps = fit_per_pixel(
                 stack, ptu.tcspc_res, ptu.n_bins,
                 irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -1070,6 +1111,9 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 progress_callback=perpixel_progress_cb,
                 free_tau=getattr(args, 'free_tau_perpixel', False),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                fit_model='tail' if _is_tail else 'reconv',
+                fit_t0=getattr(args, 'fit_t0', False) if _is_tail else False,
+                t0_fixed=(global_summary['t0_ns'] * 1e-9) if _is_tail else 0.0,
             )
         if not args.no_plots:
             matplotlib.use('Agg')
