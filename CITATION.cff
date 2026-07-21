@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: "If you use FLIMKit, please cite it using the metadata below."
+title: "FLIMKit: fluorescence lifetime imaging analysis"
+authors:
+  - family-names: Hunt
+    given-names: Alexander
+    affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
+    orcid: "https://orcid.org/0009-0006-2990-649X"
+  - family-names: Russell
+    given-names: Ava
+    affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
+    orcid: "https://orcid.org/0009-0004-6340-1167"
+  - family-names: Mathieson
+    given-names: Layla
+    affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
+    orcid: "https://orcid.org/0000-0001-8258-7025"
+  - family-names: Veremen
+    given-names: Matthieu
+    affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
+    orcid: "https://orcid.org/0000-0003-3584-0387"
+  - family-names: Akram
+    given-names: Ahsan
+    affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
+    orcid: "https://orcid.org/0000-0003-4605-1682"
+type: software
+license: MIT
+version: 0.9.16
+repository-code: "https://github.com/alex1075/FLIMKit"
+keywords:
+  - FLIM
+  - TCSPC
+  - fluorescence lifetime
+  - phasor
+  - microscopy
+abstract: >-
+  FLIMKit is an analysis package for time-domain fluorescence lifetime imaging
+  microscopy (FLIM). It reads the common instrument formats (PicoQuant .ptu,
+  Becker & Hickl .sdt, Photonscore .photons, ISS FastFLIM/Vista) through one
+  loader, reconstructs per-pixel decay cubes, and fits them with n-exponential
+  iterative reconvolution, alongside phasor analysis, tile stitching and batch
+  processing.
+references:
+  - type: software
+    title: "photonsfile: a pure-Python reader for Photonscore LINCam .photons (D7) files"
+    authors:
+      - family-names: Hunt
+        given-names: Alexander
+      - family-names: Akram
+        given-names: Ahsan
+    doi: 10.5281/zenodo.21360199
+    repository-code: "https://github.com/alex1075/photonsfile"

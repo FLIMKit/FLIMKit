@@ -15,6 +15,24 @@ _FORMATS = [
      'modality': 'frequency', 'reader': 'flimkit.formats.ISS.fdflim:ISSFdFlim'},
     {'id': 'ps', 'label': 'Photonscore .photons', 'exts': ('.photons',),
      'modality': 'time', 'reader': 'flimkit.formats.PS.reader:PSFile'},
+    {'id': 'pq_bin', 'label': 'PicoQuant BIN', 'exts': ('.bin',),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:PQBinFile'},
+    {'id': 'simfcs_bh', 'label': 'SimFCS B&H', 'exts': ('.b&h',),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:SimfcsBHFile'},
+    {'id': 'simfcs_bhz', 'label': 'SimFCS BHZ', 'exts': ('.bhz',),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:SimfcsBHZFile'},
+    {'id': 'imspector_tiff', 'label': 'ImSpector FLIM TIFF', 'exts': ('.tif', '.tiff'),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:ImspectorTIFFFile'},
+    {'id': 'iss_vista_tdflim', 'label': 'ISS Vista TDFLIM', 'exts': ('.iss-tdflim', '.tdflim'),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:VistaTdflimFile'},
+    {'id': 'simfcs_referenced', 'label': 'SimFCS referenced (phasor)', 'exts': ('.ref', '.r64'),
+     'modality': 'frequency', 'reader': 'flimkit.formats.phasor:SimfcsReferencedFile'},
+    {'id': 'ometiff_phasor', 'label': 'PhasorPy OME-TIFF (phasor)', 'exts': ('.ome.tif',),
+     'modality': 'frequency', 'reader': 'flimkit.formats.phasor:OmeTiffPhasorFile'},
+    {'id': 'flimlabs_phasor', 'label': 'FLIM LABS phasor (JSON)', 'exts': ('.json',),
+     'modality': 'frequency', 'reader': 'flimkit.formats.phasor:FlimLabsPhasorFile'},
+    {'id': 'flimlabs_signal', 'label': 'FLIM LABS imaging (JSON)', 'exts': (),
+     'modality': 'time', 'reader': 'flimkit.formats.signal:FlimLabsSignalFile'},
 ]
 
 _EXT_TO_ID = {ext: f['id'] for f in _FORMATS for ext in f['exts']}
@@ -35,6 +53,55 @@ def _find_sibling(stem, ext_lower):
 def _has_iss_triplet(p):
     stem = p.with_suffix('') if p.suffix else p
     return _find_sibling(stem, '.tagtime') is not None
+
+def _sniff_tiff(p):
+    try:
+        with open(p, 'rb') as fh:
+            head = fh.read(4)
+    except OSError:
+        return 'unknown'
+    if head not in (b'II*\x00', b'MM\x00*'):
+        return 'unknown'
+    try:
+        import tifffile
+        with tifffile.TiffFile(str(p)) as tif:
+            make = tif.pages.first.tags.valueof(271, '')
+            if make == 'ImSpector':
+                return 'imspector_tiff'
+            names = [s.name for s in tif.series[:3]]
+            if tif.is_ome and names == ['Phasor mean', 'Phasor real', 'Phasor imag']:
+                return 'ometiff_phasor'
+    except Exception:
+        pass
+    return 'unknown'
+
+def _scan_bytes(p, needle, chunk=1 << 20):
+    try:
+        with open(p, 'rb') as fh:
+            tail = b''
+            while True:
+                buf = fh.read(chunk)
+                if not buf:
+                    return False
+                if needle in tail + buf:
+                    return True
+                tail = buf[-len(needle):]
+    except OSError:
+        return False
+
+def _sniff_json(p):
+    try:
+        with open(p, 'rb') as fh:
+            head = fh.read(8192)
+    except OSError:
+        return 'unknown'
+    if b'"file_id"' not in head or b'"laser_period_ns"' not in head:
+        return 'unknown'
+    if _scan_bytes(p, b'"phasors_data"'):
+        return 'flimlabs_phasor'
+    if _scan_bytes(p, b'"intensities_data"') or _scan_bytes(p, b'"data"'):
+        return 'flimlabs_signal'
+    return 'unknown'
 
 def _sniff_magic(p):
     try:
@@ -61,6 +128,10 @@ def _clean_path(path):
 def detect_format(path):
     p = Path(_clean_path(path))
     ext = p.suffix.lower()
+    if ext in ('.tif', '.tiff'):
+        return _sniff_tiff(p)
+    if ext == '.json':
+        return _sniff_json(p)
     if ext in _EXT_TO_ID:
         return _EXT_TO_ID[ext]
     if _has_iss_triplet(p):

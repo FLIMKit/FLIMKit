@@ -116,6 +116,28 @@ state = launch_phasor('data.ptu', irf_path='irf.xlsx',
 
 FLIMKit auto-detects the file type and routes every format through one loader (`FLIMFile` in `flimkit.formats`), so the fitting, phasor, stitching, and ROI workflows are identical whatever the instrument wrote.
 
+| Format | Extension | Loads as | Reader | Validated against real files |
+|---|---|---|---|---|
+| PicoQuant PTU | `.ptu` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Yes (32 files) |
+| Becker & Hickl SDT | `.sdt` | Fitting + phasor | [`sdtfile`](https://github.com/cgohlke/sdtfile) | Yes (bit-identical) |
+| Photonscore LINCam | `.photons` | Fitting + phasor | [`photonsfile`](https://github.com/alex1075/photonsfile) | Yes (bit-exact vs SDK) |
+| PicoQuant BIN | `.bin` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
+| SimFCS B&H | `.b&h` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
+| SimFCS BHZ | `.bhz` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
+| ImSpector FLIM TIFF | `.tif`, `.tiff` (sniffed) | Fitting + phasor | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
+| ISS Vista TDFLIM | `.iss-tdflim`, `.tdflim` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream |
+| FLIM LABS imaging | `.json` (sniffed) | Fitting + phasor | [`phasorpy`](https://github.com/phasorpy/phasorpy) | Upstream |
+| ISS time-tag | `.tagtime`, `.tagchannel`, `.tagdecay` | Fitting + phasor | FLIMKit (from ISS spec) | **No** |
+| ISS FD-FLIM | `.ifli` | Phasor only | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream |
+| SimFCS referenced | `.ref`, `.r64` | Phasor only | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no frequency in file) |
+| PhasorPy OME-TIFF | `.ome.tif` (sniffed) | Phasor only | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
+| FLIM LABS phasor | `.json` (sniffed) | Phasor only | [`phasorpy`](https://github.com/phasorpy/phasorpy) | Upstream |
+| ISS intensity image | `.ifi` | Intensity only | FLIMKit (from ISS spec) | **No** |
+
+"Upstream" means decoding is delegated to a maintained third-party reader that is tested against real files by its own author; FLIMKit has not independently re-validated it. "Sniffed" means the extension is ambiguous, so the file is identified by content, not by its name.
+
+Formats whose files carry no time axis (`.b&h`, `.bhz`) or no modulation frequency (`.ref`, `.r64`) will prompt for the missing value, since fits and the universal circle cannot be computed without it.
+
 **PicoQuant `.ptu` (T3 mode):**
 
 - PicoHarp T3 (Leica FALCON / STELLARIS)
@@ -133,9 +155,9 @@ Decoding and image reconstruction use Christoph Gohlke's [`ptufile`](https://git
 
 **ISS `.ifi` (intensity image):** ISS's plain intensity-image export (`VISTAIMAGE` header, float pixels per channel and frame). No lifetime data, so it loads as an intensity image only (no fitting or phasor).
 
-**ISS `.ifli` (frequency-domain / FD-FLIM):** ISS's FD-FLIM lifetime-image export (`VistaFLImage` header). This is already phasor data (per-pixel phase and modulation at each modulation frequency), so it loads straight into phasor analysis with fitting disabled - there is no decay to fit. The reader applies the file's reference-sample calibration. Written from ISS's `.ifli` specification and checked against synthetic files; not yet validated against a real acquisition.
+**ISS `.ifli` (frequency-domain / FD-FLIM):** ISS's FD-FLIM lifetime-image export (`VistaFLImage` header). This is already phasor data (per-pixel phase and modulation at each modulation frequency), so it loads straight into phasor analysis with fitting disabled - there is no decay to fit. Decoding is delegated to Christoph Gohlke's [`lfdfiles`](https://github.com/cgohlke/lfdfiles) (`VistaIfli`), which handles the version-dependent header and the multi-position / spectral axes; FLIMKit applies the file's reference-sample calibration on top. ISS's time-domain `.iss-tdflim` / `.tdflim` archives are read through the same library.
 
-> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and so far checked only against synthetic files - they have **not yet been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat ISS results as unverified and cross-check them; see issue #19. If you have ISS `.TAGTIME`/`.ifi` data, trying it and reporting back is very welcome. PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
+> **The ISS time-tag and `.ifi` readers are experimental and need testing.** The `.TAGTIME`/`.TAGCHANNEL`/`.TAGDECAY` triplet and `.ifi` readers were written from ISS's format specifications and have **not been validated against real ISS acquisitions** (byte order and the marker conventions are assumptions). Treat their results as unverified and cross-check them. If you have ISS data, trying it and reporting back is very welcome. The `.ifli` and `.tdflim` paths are delegated to `lfdfiles` and so inherit that library's own testing. PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files.
 
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their markers (PTU scan-line markers, B&H image blocks, ISS frame/line/pixel markers) or, for Photonscore, from each photon's (x, y) position; the intensity image is that cube summed over the time axis.
 

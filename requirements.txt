@@ -7,7 +7,7 @@ lz4>=4.0
 matplotlib==3.10.8
 numba
 numpy==2.4.2
-opencv_python==4.13.0.90
+opencv-python-headless==4.13.0.90
 openpyxl==3.1.5
 pandas==3.0.1
 Pillow>=10.0.0

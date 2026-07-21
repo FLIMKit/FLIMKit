@@ -3216,7 +3216,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             mach_irf = self.sv_ph_mirf.get().strip() or None
             irf_path = xlsx_irf or mach_irf
 
+            from flimkit.formats import file_modality
+            modality = file_modality(ptu)
+
             def _worker():
+                if modality == 'frequency':
+                    from flimkit.phasor.signal import process_ifli
+                    return process_ifli(ptu, channel=channel)
                 from flimkit.phasor_launcher import _process_ptu
                 return _process_ptu(ptu, irf_path=irf_path, channel=channel)
 
@@ -3224,11 +3230,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if isinstance(result, Exception):
                     messagebox.showerror('Phasor error', str(result))
                     return
+                frequency = result.get('frequency') or 0.0
+                if not frequency:
+                    frequency = self._prompt_frequency(ptu) or 0.0
+                    result['frequency'] = frequency
                 self._phasor_panel.set_data(
                     result['real_cal'],
                     result['imag_cal'],
                     result['mean'],
-                    result['frequency'],
+                    frequency,
                     display_image=result.get('display_image'),
                     min_photons=min_ph,
                 )
@@ -3278,6 +3288,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 f'Available channels: {available}',
                 parent=self.root,
             )
+
+    def _prompt_frequency(self, path: str) -> Optional[float]:
+        prompt = (
+            f'No laser repetition frequency is stored in:\n{Path(path).name}\n\n'
+            'This format carries no frequency metadata, so the universal circle\n'
+            'and lifetime overlays cannot be drawn without it.\n\n'
+            'Enter the modulation frequency in MHz (leave blank to skip):'
+        )
+        return simpledialog.askfloat(
+            'Enter Frequency (MHz)',
+            prompt,
+            parent=self.root,
+            minvalue=0.0,
+        )
 
     def _phasor_thread(self, worker_fn, done_cb, *, status='  Working...'):
         self._btn_ph.configure(state='disabled')

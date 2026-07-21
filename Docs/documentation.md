@@ -9,9 +9,10 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Requirements & Installation](#requirements--installation)
-3. [Quick Start](#quick-start)
-4. [Workflows](#workflows)
+2. [Supported Input Formats](#supported-input-formats)
+3. [Requirements & Installation](#requirements--installation)
+4. [Quick Start](#quick-start)
+5. [Workflows](#workflows)
    - [Desktop GUI](#desktop-gui)
    - [Guided Terminal UI](#guided-terminal-ui-mainpy)
    - [Machine IRF Setup](#machine-irf-setup-required)
@@ -20,14 +21,14 @@
    - [Synthetic Data Generation (CLI)](#synthetic-data-generation-cli)
    - [Phasor Analysis (CLI)](#phasor-analysis-cli)
    - [Python API](#python-api)
-5. [Configuration Reference](#configuration-reference)
-6. [Module Reference](#module-reference)
-7. [Project Structure](#project-structure)
-8. [Compiled App](#compiled-app-macos--windows--linux)
-9. [Testing](#testing)
-10. [Outputs & File Formats](#outputs--file-formats)
-11. [Troubleshooting](#troubleshooting)
-12. [Contact](#contact)
+6. [Configuration Reference](#configuration-reference)
+7. [Module Reference](#module-reference)
+8. [Project Structure](#project-structure)
+9. [Compiled App](#compiled-app-macos--windows--linux)
+10. [Testing](#testing)
+11. [Outputs & File Formats](#outputs--file-formats)
+12. [Troubleshooting](#troubleshooting)
+13. [Contact](#contact)
 
 ---
 
@@ -43,22 +44,46 @@ FLIMKit handles FLIM data from FLIM microscope systems and common TCSPC / time-t
 
 Both are accessible through a desktop GUI, guided terminal UI, CLI scripts, or the Python API.
 
-### Input formats
-
-FLIMKit auto-detects the file type and routes everything through one loader (`FLIMFile` in `flimkit.formats`), so every workflow behaves the same regardless of instrument:
-
-| Format | Notes |
-|---|---|
-| PicoQuant `.ptu` (T3) | PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic. Read with Christoph Gohlke's `ptufile`; the original FLIMKit decoder is kept as a cross-checked reference in `flim-native-decoders` (`flimkit/formats/PTU/NOTICE.md`) |
-| Becker & Hickl `.sdt` | SPCM histogram / image files (per-pixel decays already binned). Read with Christoph Gohlke's `sdtfile`; FLIMKit's own decoder (from B&H's SPCM docs, checked bit-for-bit against `sdtfile`) is kept as a reference in `flim-native-decoders` (`flimkit/formats/BH/NOTICE.md`) |
-| Photonscore `.photons` | Photonscore LINCam D7 container (position-sensitive). Read with `photonsfile`, a pure-Python reader spun out of FLIMKit (no native dependency, validated bit-exact against the Photonscore SDK); `dt` calibration from the `TacChannel` attribute (`flimkit/formats/PS/NOTICE.md`) |
-| ISS `.TAGTIME` / `.TAGCHANNEL` / `.TAGDECAY` | FastFLIM / Vista time-domain triplet, read together from any one of the three paths or their shared basename. Experimental: not yet validated against real ISS data (issue #19) |
-| ISS `.ifi` | Intensity image (`VISTAIMAGE`); float pixels per channel and frame. No lifetime data, so it loads as an intensity image only (no fitting or phasor). Experimental, not yet validated on real ISS files (issue #19) |
-| ISS `.ifli` | FD-FLIM lifetime image (`VistaFLImage`); per-pixel phase / modulation. Frequency-domain, so it loads straight into phasor analysis with fitting disabled; the reader applies the file's reference calibration. Written from the ISS spec, checked on synthetic files, not yet validated on real ISS data (issue #19) |
-
-> **ISS support is experimental and needs testing.** Both ISS readers were written from ISS's format specifications and checked only against synthetic files - **not yet validated against real ISS acquisitions** (byte order and marker conventions are assumptions). Treat ISS results as unverified and cross-check them (issue #19). PicoQuant `.ptu`, Becker & Hickl `.sdt` and Photonscore `.photons` are validated against real files; ISS is not yet.
-
 Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from their scan / frame / line / pixel markers, and the intensity image is that cube summed over the time axis. Files without imaging markers (point, single-spot, FCS) are fit as a single decay with no image.
+
+---
+
+## Supported Input Formats
+
+FLIMKit auto-detects the file type and routes everything through one loader (`FLIMFile` in `flimkit.formats`), so every workflow behaves the same regardless of instrument.
+
+**Loads as** says what the file can drive: *Fitting + phasor* means it carries a time-resolved decay per pixel; *Phasor only* means the file already stores computed phasor coordinates, so there is no decay to fit; *Intensity only* means no lifetime data at all.
+
+| Format | Extension | Loads as | Reader | Validated against real files |
+|---|---|---|---|---|
+| PicoQuant PTU | `.ptu` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Yes (32 files) |
+| Becker & Hickl SDT | `.sdt` | Fitting + phasor | [`sdtfile`](https://github.com/cgohlke/sdtfile) | Yes (bit-identical) |
+| Photonscore LINCam | `.photons` | Fitting + phasor | [`photonsfile`](https://github.com/alex1075/photonsfile) | Yes (bit-exact vs SDK) |
+| PicoQuant BIN | `.bin` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
+| SimFCS B&H | `.b&h` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
+| SimFCS BHZ | `.bhz` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
+| ImSpector FLIM TIFF | `.tif`, `.tiff` (sniffed) | Fitting + phasor | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
+| ISS Vista TDFLIM | `.iss-tdflim`, `.tdflim` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream |
+| FLIM LABS imaging | `.json` (sniffed) | Fitting + phasor | [`phasorpy`](https://github.com/phasorpy/phasorpy) | Upstream |
+| ISS time-tag | `.tagtime`, `.tagchannel`, `.tagdecay` | Fitting + phasor | FLIMKit (from ISS spec) | **No** |
+| ISS FD-FLIM | `.ifli` | Phasor only | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream |
+| SimFCS referenced | `.ref`, `.r64` | Phasor only | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no frequency in file) |
+| PhasorPy OME-TIFF | `.ome.tif` (sniffed) | Phasor only | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
+| FLIM LABS phasor | `.json` (sniffed) | Phasor only | [`phasorpy`](https://github.com/phasorpy/phasorpy) | Upstream |
+| ISS intensity image | `.ifi` | Intensity only | FLIMKit (from ISS spec) | **No** |
+
+"Upstream" means decoding is delegated to a maintained third-party reader that is tested against real files by its own author; FLIMKit has not independently re-validated it. "Sniffed" means the extension is ambiguous (an ordinary TIFF or JSON is not claimed), so the file is identified by its content rather than its name.
+
+Formats whose files carry no time axis (`.b&h`, `.bhz`) or no modulation frequency (`.ref`, `.r64`) will prompt for the missing value, since fits and the universal circle cannot be computed without it.
+
+### Provenance
+
+- **PicoQuant `.ptu` (T3)** - PicoHarp, HydraHarp v1/v2, TimeHarp 260 N/P, MultiHarp / generic. The original FLIMKit decoder is kept as a cross-checked reference in `flim-native-decoders` (`flimkit/formats/PTU/NOTICE.md`).
+- **Becker & Hickl `.sdt`** - SPCM histogram / image files (per-pixel decays already binned). FLIMKit's own decoder, written from B&H's SPCM docs and checked bit-for-bit against `sdtfile`, is kept as a reference in `flim-native-decoders` (`flimkit/formats/BH/NOTICE.md`).
+- **Photonscore `.photons`** - LINCam D7 container (position-sensitive). `photonsfile` is a pure-Python reader spun out of FLIMKit, with no native dependency; `dt` calibration comes from the `TacChannel` attribute (`flimkit/formats/PS/NOTICE.md`).
+- **ISS** - the `.TAGTIME`/`.TAGCHANNEL`/`.TAGDECAY` triplet is read together from any one of the three paths or their shared basename. Format specifications were provided by ISS (`flimkit/formats/ISS/NOTICE.md`).
+
+> **The ISS time-tag and `.ifi` readers are experimental and need testing.** They were written from ISS's format specifications and have **not been validated against real ISS acquisitions** - byte order and the marker conventions are assumptions. Treat their results as unverified and cross-check them. If you have ISS data, trying it and reporting back is very welcome. The `.ifli` and `.tdflim` paths are delegated to `lfdfiles` and inherit that library's own testing.
 
 Not decoded yet: T2-mode PTUs, older PicoQuant `.pt3` / `.ht3` / `.phu`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
 

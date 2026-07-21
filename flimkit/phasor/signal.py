@@ -11,9 +11,9 @@ def return_phasor_from_PTUFile(ptu_file):
     return mean, real, imag
 
 def process_ifli(ifli_path, phasor_filter=None, filter_kwargs=None, channel=None):
-    from ..formats.ISS.fdflim import ISSFdFlim
-    print(f"Loading ISS FD-FLIM file: {ifli_path}")
-    iss = ISSFdFlim(str(ifli_path), verbose=True, channel=channel)
+    from ..formats import FLIMFile
+    print(f"Loading frequency-domain file: {ifli_path}")
+    iss = FLIMFile(str(ifli_path), verbose=True, channel=channel)
     mean, real, imag, frequency = iss.phasor(channel=channel)
     print(f"  FD-FLIM phasor coordinates (frequency = {frequency:.2f} MHz)")
     real_cal, imag_cal = real, imag
@@ -38,7 +38,7 @@ def process_ifli(ifli_path, phasor_filter=None, filter_kwargs=None, channel=None
 def get_phasor_irf(irf_xlsx):
     df = pd.read_excel(irf_xlsx, sheet_name='Fit', header=None)
     irf_time_ns = pd.to_numeric(df.iloc[2:, 2], errors='coerce').dropna().values
-    irf_counts  = pd.to_numeric(df.iloc[2:, 3], errors='coerce').dropna().values
+    irf_counts = pd.to_numeric(df.iloc[2:, 3], errors='coerce').dropna().values
     return irf_time_ns, irf_counts
 
 def calibrate_signal_with_irf(signal, real, imag, irf_time_ns, irf_counts, frequency):
@@ -66,13 +66,11 @@ def calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy: str,
     import json
     from pathlib import Path
 
-    npy_path  = Path(machine_irf_npy)
+    npy_path = Path(machine_irf_npy)
     meta_path = npy_path.with_name(npy_path.stem + '_meta.json')
 
     irf_arr = np.load(str(npy_path))
 
-    # Load tcspc_res from companion _meta.json if available, else infer from
-    # the signal time axis spacing.
     if meta_path.exists():
         with open(meta_path) as f:
             meta = json.load(f)
@@ -86,7 +84,6 @@ def calibrate_signal_with_machine_irf(signal, real, imag, machine_irf_npy: str,
     if tcspc_res_ns is not None:
         irf_time_ns = np.arange(n_irf) * tcspc_res_ns
     else:
-        # Assume same time axis length as signal - direct mapping
         irf_time_ns = np.linspace(signal_time_ns[0], signal_time_ns[-1], n_irf)
 
     return calibrate_signal_with_irf(signal, real, imag,
