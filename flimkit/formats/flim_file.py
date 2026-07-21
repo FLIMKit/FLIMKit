@@ -15,6 +15,8 @@ _FORMATS = [
      'modality': 'frequency', 'reader': 'flimkit.formats.ISS.fdflim:ISSFdFlim'},
     {'id': 'ps', 'label': 'Photonscore .photons', 'exts': ('.photons',),
      'modality': 'time', 'reader': 'flimkit.formats.PS.reader:PSFile'},
+    {'id': 'pq_phu', 'label': 'PicoQuant PHU (histogram)', 'exts': ('.phu',),
+     'modality': 'time', 'reader': 'flimkit.formats.PTU.phu:PHUFile'},
     {'id': 'pq_bin', 'label': 'PicoQuant BIN', 'exts': ('.bin',),
      'modality': 'time', 'reader': 'flimkit.formats.signal:PQBinFile'},
     {'id': 'simfcs_bh', 'label': 'SimFCS B&H', 'exts': ('.b&h',),
@@ -109,6 +111,8 @@ def _sniff_magic(p):
             head = fh.read(64)
     except OSError:
         return 'unknown'
+    if b'PQHISTO' in head:
+        return 'pq_phu'
     if b'PQTTTR' in head or b'PTU' in head:
         return 'ptu'
     if head[:12] == b'VistaFLImage':

@@ -60,6 +60,7 @@ FLIMKit auto-detects the file type and routes everything through one loader (`FL
 | Becker & Hickl SDT | `.sdt` | Fitting + phasor | [`sdtfile`](https://github.com/cgohlke/sdtfile) | Yes (bit-identical) |
 | Photonscore LINCam | `.photons` | Fitting + phasor | [`photonsfile`](https://github.com/alex1075/photonsfile) | Yes (bit-exact vs SDK) |
 | PicoQuant BIN | `.bin` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
+| PicoQuant PHU | `.phu` | Fitting (no image) | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
 | SimFCS B&H | `.b&h` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
 | SimFCS BHZ | `.bhz` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
 | ImSpector FLIM TIFF | `.tif`, `.tiff` (sniffed) | Fitting + phasor | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
@@ -85,7 +86,7 @@ Formats whose files carry no time axis (`.b&h`, `.bhz`) or no modulation frequen
 
 > **The ISS time-tag and `.ifi` readers are experimental and need testing.** They were written from ISS's format specifications and have **not been validated against real ISS acquisitions** - byte order and the marker conventions are assumptions. Treat their results as unverified and cross-check them. If you have ISS data, trying it and reporting back is very welcome. The `.ifli` and `.tdflim` paths are delegated to `lfdfiles` and inherit that library's own testing.
 
-Not decoded yet: T2-mode PTUs, older PicoQuant `.pt3` / `.ht3` / `.phu`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
+Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not build a decay cube from them), older PicoQuant `.pt3` / `.ht3`, Becker & Hickl raw `.spc` photon streams, and Leica `.lif`.
 
 ---
 

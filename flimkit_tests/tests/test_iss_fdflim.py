@@ -9,24 +9,34 @@ def _write_ifli(path, phasor, mod_freq, ref_lifetime_ns, ref_phasor,
                 n_x, n_y, n_freq=1, n_ch=1, n_z=1, n_ts=1):
     hdr = bytearray(1024)
     struct.pack_into('<12s', hdr, 0, b'VistaFLImage')
-    hdr[12] = 1
-    struct.pack_into('<I', hdr, 20, 1)
-    struct.pack_into('<5H', hdr, 25, n_x, n_y, n_z, n_ch, n_ts)
-    struct.pack_into('<i', hdr, 76, n_freq)
+    hdr[12] = 16
+    fields = struct.pack('<3?', False, False, False)
+    fields += struct.pack('<I', 256)
+    fields += struct.pack('<I', (1 << n_ch) - 1)
+    fields += struct.pack('<B', 0)
+    fields += struct.pack('<5H', n_x, n_y, n_z, n_ch, n_ts)
+    fields += struct.pack('<6f', 0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+    fields += struct.pack('<B', 1)
+    fields += struct.pack('<4f', 1.0, 1.0, 1.0, 1.0)
+    fields += struct.pack('<i', n_freq)
+    fields += struct.pack('<f', 0.0)
+    fields += struct.pack('<H', 1)
+    hdr[13:13 + len(fields)] = fields
     pixel_bytes = np.asarray(phasor, dtype='<f4').tobytes()
     data_off = 1024
     modfreq_off = data_off + len(pixel_bytes)
     reflt_off = modfreq_off + n_freq * 4
-    refph_off = reflt_off + 4
-    struct.pack_into('<Q', hdr, 86, data_off)
-    struct.pack_into('<Q', hdr, 102, modfreq_off)
-    struct.pack_into('<Q', hdr, 110, reflt_off)
-    struct.pack_into('<Q', hdr, 118, refph_off)
+    refph_off = reflt_off + n_ch * 3 * 4
+    offsets = [data_off, 0, modfreq_off, reflt_off, refph_off,
+               0, 0, 0, 0, 0, 0, 0, 0]
+    struct.pack_into('<13Q', hdr, 256, *offsets)
     with open(path, 'wb') as fh:
         fh.write(hdr)
         fh.write(pixel_bytes)
         fh.write(np.asarray(mod_freq, '<f4').tobytes())
-        fh.write(np.asarray([ref_lifetime_ns], '<f4').tobytes())
+        fh.write(np.asarray([ref_lifetime_ns] * n_ch, '<f4').tobytes())
+        fh.write(np.asarray([1.0] * n_ch, '<f4').tobytes())
+        fh.write(np.asarray([0.0] * n_ch, '<f4').tobytes())
         fh.write(np.asarray(ref_phasor, '<f4').tobytes())
     return path
 
@@ -69,8 +79,6 @@ def test_fitting_disabled(tmp_path):
         iss.summed_decay()
 
 def test_reference_calibration(tmp_path):
-    # a sample pixel equal to the measured reference must calibrate back to the
-    # theoretical phasor of the reference lifetime at that frequency
     tau_ns, freq_mhz = 4.0, 20.0
     w = 2.0 * np.pi * (freq_mhz * 1e6)
     wt = w * tau_ns * 1e-9

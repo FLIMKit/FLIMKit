@@ -1,6 +1,8 @@
 # <img src="flimkit/UI/icon.png" alt="" width="32" height="32"> FLIMKit
 
 [![tests](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/alex1075/FLIMKit/actions/workflows/test.yml)
+[![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://github.com/alex1075/FLIMKit#installation)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
@@ -122,6 +124,7 @@ FLIMKit auto-detects the file type and routes every format through one loader (`
 | Becker & Hickl SDT | `.sdt` | Fitting + phasor | [`sdtfile`](https://github.com/cgohlke/sdtfile) | Yes (bit-identical) |
 | Photonscore LINCam | `.photons` | Fitting + phasor | [`photonsfile`](https://github.com/alex1075/photonsfile) | Yes (bit-exact vs SDK) |
 | PicoQuant BIN | `.bin` | Fitting + phasor | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
+| PicoQuant PHU | `.phu` | Fitting (no image) | [`ptufile`](https://github.com/cgohlke/ptufile) | Upstream |
 | SimFCS B&H | `.b&h` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
 | SimFCS BHZ | `.bhz` | Fitting + phasor | [`lfdfiles`](https://github.com/cgohlke/lfdfiles) | Upstream (no time axis in file) |
 | ImSpector FLIM TIFF | `.tif`, `.tiff` (sniffed) | Fitting + phasor | [`tifffile`](https://github.com/cgohlke/tifffile) | Upstream |
@@ -175,7 +178,7 @@ A `.pck` IRF must come from the same instrument and TCSPC resolution as the data
 **Not supported yet:**
 
 - **T2-mode PTUs.** FLIMKit decodes T3 mode only (one TCSPC histogram per sync period). T2 records are raw global timestamps with no per-period decay, so a T2 `.ptu` will not produce a meaningful decay.
-- Older PicoQuant formats (`.pt3`, `.ht3`, `.phu`, `.pt2`) and Becker & Hickl raw `.spc` photon streams.
+- Older PicoQuant formats (`.pt3`, `.ht3`, `.pt2`) and Becker & Hickl raw `.spc` photon streams.
 - Leica `.lif` and proprietary LMSCOMPRESSED blocks. Export `.ptu` from LAS X instead.
 
 ## Machine IRF (do this first)

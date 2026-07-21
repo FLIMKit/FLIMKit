@@ -3,6 +3,7 @@ colorama==0.4.6
 inquirer==3.4.1
 ipython==9.10.0
 ipywidgets==8.1.8
+lfdfiles
 lz4>=4.0
 matplotlib==3.10.8
 numba
@@ -12,7 +13,7 @@ openpyxl==3.1.5
 pandas==3.0.1
 Pillow>=10.0.0
 psutil
-phasorpy==0.11
+phasorpy==0.12
 photonsfile
 ptufile
 PyWavelets>=1.4.0

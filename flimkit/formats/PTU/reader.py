@@ -1,21 +1,6 @@
 import math
-import struct
 import numpy as np
 from pathlib import Path
-
-_TAG_TYPES = {
-    0xFFFF0008: ('Empty8',      None),
-    0x00000008: ('Bool8',       'q'),
-    0x10000008: ('Int8',        'q'),
-    0x11000008: ('BitSet64',    'Q'),
-    0x12000008: ('Color8',      'Q'),
-    0x20000008: ('Float8',      'd'),
-    0x21000008: ('TDateTime',   'd'),
-    0x2001FFFF: ('Float8Array', 'arr'),
-    0x4001FFFF: ('AnsiString',  'str'),
-    0x4002FFFF: ('WideString',  'str'),
-    0xFFFFFFFF: ('BinaryBlob',  'blob'),
-}
 
 def _load_ptufile():
     try:
@@ -63,44 +48,17 @@ def _bin_cube(cube, binning):
     return cube.reshape(ny2 // binning, binning, nx2 // binning, binning, nh).sum(axis=(1, 3))
 
 def read_pck(path):
-    with open(path, 'rb') as fh:
-        magic = fh.read(8)
-        if b'PQCHECK' not in magic:
-            raise ValueError(f'Not a PicoQuant Check (.pck) file: magic={magic!r}')
-        fh.read(8)
-        buf = fh.read()
-    tags = {}
-    hist_blob = None
-    pos = 0
-    while pos + 48 <= len(buf):
-        ident = buf[pos:pos+32].decode('ascii', errors='replace').rstrip('\x00')
-        tagidx = struct.unpack_from('<i', buf, pos+32)[0]
-        tagtyp = struct.unpack_from('<I', buf, pos+36)[0]
-        tagval = buf[pos+40:pos+48]
-        pos += 48
-        if ident == 'Header_End':
-            break
-        info = _TAG_TYPES.get(tagtyp)
-        if info is None:
-            continue
-        name, fmt = info
-        if fmt in ('arr', 'str', 'blob'):
-            blen = struct.unpack('<q', tagval)[0]
-            blob = bytes(buf[pos:pos+blen])
-            pos += blen
-            if ident == 'ChkHistogram':
-                hist_blob = blob
-            val = blob.decode('utf-8', errors='replace').rstrip('\x00') if fmt == 'str' else blob
-        elif fmt:
-            val = struct.unpack(f'<{fmt}', tagval)[0]
-        else:
-            val = None
-        key = f'{ident}[{tagidx}]' if tagidx >= 0 else ident
-        tags[key] = val
-    if hist_blob is None:
+    ptufile = _load_ptufile()
+    try:
+        with ptufile.PqFile(str(path)) as f:
+            tags = dict(f.tags)
+    except Exception as exc:
+        raise ValueError(f'Not a PicoQuant Check (.pck) file: {path!r}') from exc
+    hist = tags.get('ChkHistogram')
+    if hist is None:
         raise ValueError(f'No ChkHistogram block in {path!r} - not a Check/IRF .pck?')
+    hist = np.frombuffer(np.asarray(hist).tobytes(), dtype='<u4')
     n_chan = max(1, int(tags.get('ChkChannels', 1)))
-    hist = np.frombuffer(hist_blob, dtype='<u4')
     if hist.size % n_chan == 0:
         hist = hist.reshape(n_chan, hist.size // n_chan)
     else:
@@ -135,7 +93,6 @@ class PTUFile:
         self.n_records = int(getattr(p, 'number_records', 0) or 0)
         self.n_photons = int(getattr(p, 'number_photons', 0) or 0)
         self.n_frames = int(getattr(p, 'number_images', 0) or 0) or 1
-        # ptufile 'global_*_time' are in units of global_resolution, i.e. sync periods.
         self.n_sync = int(getattr(p, 'global_acquisition_time', 0) or 0) or None
         self.acq_time_s = float(getattr(p, 'acquisition_time', 0.0) or 0.0) or None
         self.time_ns = (np.arange(self.n_bins) + 0.5) * self.tcspc_res * 1e9
