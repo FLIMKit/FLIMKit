@@ -24,31 +24,9 @@ def _ask_path(message, *, optional=False):
     return val
 
 def _pick_save_file(title: str, default_name: str) -> str | None:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        existing = tk._default_root
-        if existing is not None:
-            parent = existing
-            need_destroy = False
-        else:
-            parent = tk.Tk()
-            parent.withdraw()
-            need_destroy = True
-        parent.attributes('-topmost', True)
-        parent.update()
-        path = filedialog.asksaveasfilename(
-            parent=parent,
-            title=title,
-            defaultextension='.npz',
-            initialfile=default_name,
-            filetypes=[('NumPy archive', '*.npz'), ('All files', '*')])
-        if need_destroy:
-            parent.destroy()
-        return path or None
-    except Exception:
-        path = input(f'Save path [{default_name}]: ').strip().strip('"')
-        return path or default_name
+    from .dialogs import ask_save_path
+    return ask_save_path(title, default_name, defaultextension='.npz',
+                         filetypes=[('NumPy archive', '*.npz'), ('All files', '*')])
 
 def save_session(path, *,
                  real_cal,

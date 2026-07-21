@@ -10,9 +10,7 @@ from phasorpy.lifetime import (
 )
 from phasorpy.component import phasor_component_fraction
 
-# Default palette for up to 6 cursors
 _COLORS = ['#d62728', '#1f77b4', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b']
-
 
 def _in_notebook():
     try:
@@ -23,7 +21,6 @@ def _in_notebook():
         return shell.__class__.__name__ == 'ZMQInteractiveShell'
     except Exception:
         return False
-
 
 def _ellipse_angle_rad(cg, cs, mode):
     if mode == 'semicircle':
@@ -46,18 +43,16 @@ def phasor_cursor_tool(
 ):
     notebook = _in_notebook()
 
-    # Prepare data
     rc = np.asarray(real_cal).squeeze().astype(float)
     ic = np.asarray(imag_cal).squeeze().astype(float)
     mn = np.asarray(mean).squeeze().astype(float)
-    # Spatially-correct image for the pseudo-colour FOV overlay
+
     disp = (np.asarray(display_image).squeeze().astype(float)
             if display_image is not None else mn)
     valid = (mn >= min_photons) & ~np.isnan(rc)
     g_all = rc[valid]
     s_all = ic[valid]
 
-    # Mutable state returned to caller
     state = {
         'cursors': [],
         'masks': None,
@@ -66,13 +61,11 @@ def phasor_cursor_tool(
     }
     cursor_artists = []
 
-    # Parameter store (values read by helpers)
     params = dict(radius=0.05, radius_minor=0.03, angle_mode='semicircle')
     if initial_params:
         params.update({k: v for k, v in initial_params.items()
                        if k in params})
 
-    # Output helper (notebook vs stdout)
     if notebook:
         import ipywidgets as widgets
         from IPython.display import display, clear_output
@@ -123,7 +116,6 @@ def phasor_cursor_tool(
                           zorder=11)
             cursor_artists.append(txt)
 
-        # Semicircle-intersection line for cursors 1 & 2
         if len(cursors) >= 2:
             g0, s0 = cursors[0]['center_g'], cursors[0]['center_s']
             g1, s1 = cursors[1]['center_g'], cursors[1]['center_s']
@@ -159,7 +151,7 @@ def phasor_cursor_tool(
 
         disp_arr = np.asarray(disp)
         if disp_arr.ndim != 2 or min(disp_arr.shape) < 2:
-            # point / FCS measurement: one phasor coordinate, no spatial map to draw
+
             _begin_output()
             g_pt = float(np.ravel(rc)[0])
             s_pt = float(np.ravel(ic)[0])
@@ -198,7 +190,6 @@ def phasor_cursor_tool(
         if n_cols == 1:
             axes2 = [axes2]
 
-        # Panel 0 - pseudo-colour overlay
         ax_pc = axes2[0]
         mask_list = [masks[i] for i in range(n_cursors)]
         colors_rgb = np.array([
@@ -217,7 +208,6 @@ def phasor_cursor_tool(
                 f'C{i+1}: {int(masks[i].sum())} px',
                 color=c['color'], fontsize=9, fontweight='bold')
 
-        # Per-cursor τ_φ maps
         for ci in range(n_cursors):
             ax_cur = axes2[1 + ci]
             mask_i = masks[ci]
@@ -231,7 +221,6 @@ def phasor_cursor_tool(
             tau_phi, tau_mod = phasor_to_apparent_lifetime(
                 g_sel, s_sel, frequency)
 
-            # τ_m can be NaN/inf for points outside the universal semicircle
             valid_mod = tau_mod[np.isfinite(tau_mod)]
 
             fmap = np.full_like(rc, np.nan)
@@ -255,7 +244,6 @@ def phasor_cursor_tool(
                 f"(med {med:.2f})  │  "
                 f"τ_m med = {mod_str} ns")
 
-        # Two-component decomposition (C1 ↔ C2)
         if has_decomp:
             ax_dec = axes2[-1]
             g0, s0 = centers_g[0], centers_s[0]
@@ -375,7 +363,7 @@ def phasor_cursor_tool(
     if notebook:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        # Leave room at the bottom for matplotlib sliders / buttons
+
         fig, ax = plt.subplots(figsize=(figsize[0], figsize[1] + 1.8))
         fig.subplots_adjust(bottom=0.30)
 
@@ -395,7 +383,6 @@ def phasor_cursor_tool(
 
     fig.canvas.mpl_connect('button_press_event', _on_click)
 
-    # Restore initial cursors if provided
     if initial_cursors:
         for cur in initial_cursors:
             state['cursors'].append(dict(
@@ -411,22 +398,11 @@ def phasor_cursor_tool(
             on_save(state, params)
 
     def _on_export(_ignored=None):
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes('-topmost', True)
-            root.update()
-            path = filedialog.asksaveasfilename(
-                title='Export phasor figure',
-                defaultextension='.png',
-                initialfile='phasor_plot.png',
-                filetypes=[('PNG', '*.png'), ('PDF', '*.pdf'),
-                           ('SVG', '*.svg'), ('All files', '*')])
-            root.destroy()
-        except Exception:
-            path = input('Save image path [phasor_plot.png]: ').strip() or 'phasor_plot.png'
+        from ..dialogs import ask_save_path
+        path = ask_save_path(
+            'Export phasor figure', 'phasor_plot.png', defaultextension='.png',
+            filetypes=[('PNG', '*.png'), ('PDF', '*.pdf'),
+                       ('SVG', '*.svg'), ('All files', '*')])
         if path:
             state['fig'].savefig(path, dpi=300, bbox_inches='tight')
             print(f"Figure exported → {path}")
@@ -435,7 +411,7 @@ def phasor_cursor_tool(
 
     def _on_peaks(_ignored=None):
         from .peaks import find_phasor_peaks, print_peaks, _annotate_peaks
-        # Remove previous peak annotations if any
+
         for art in _peak_artists:
             try:
                 art.remove()
@@ -456,8 +432,8 @@ def phasor_cursor_tool(
         _end_output()
 
     if notebook:
-        import ipywidgets as widgets  # noqa: F811
-        from IPython.display import display  # noqa: F811
+        import ipywidgets as widgets
+        from IPython.display import display
 
         w_radius = widgets.FloatSlider(
             value=params['radius'], min=0.01, max=0.25, step=0.005,
@@ -529,13 +505,13 @@ def phasor_cursor_tool(
         rb_angle = RadioButtons(ax_angle, ['semicircle', 'phase'],
                                 active=0)
 
-        ax_undo  = fig.add_axes([0.35, 0.02, 0.10, 0.05])
-        ax_clr   = fig.add_axes([0.46, 0.02, 0.10, 0.05])
+        ax_undo = fig.add_axes([0.35, 0.02, 0.10, 0.05])
+        ax_clr = fig.add_axes([0.46, 0.02, 0.10, 0.05])
         ax_peaks = fig.add_axes([0.57, 0.02, 0.10, 0.05])
-        ax_exp   = fig.add_axes([0.68, 0.02, 0.10, 0.05])
-        mpl_btn_undo   = Button(ax_undo,  'Undo')
-        mpl_btn_clear  = Button(ax_clr,   'Clear')
-        mpl_btn_peaks  = Button(ax_peaks, 'Peaks')
+        ax_exp = fig.add_axes([0.68, 0.02, 0.10, 0.05])
+        mpl_btn_undo = Button(ax_undo,  'Undo')
+        mpl_btn_clear = Button(ax_clr,   'Clear')
+        mpl_btn_peaks = Button(ax_peaks, 'Peaks')
         mpl_btn_export = Button(ax_exp,   'Export')
         if on_save:
             ax_save = fig.add_axes([0.79, 0.02, 0.10, 0.05])
@@ -565,7 +541,6 @@ def phasor_cursor_tool(
         if mpl_btn_save:
             mpl_btn_save.on_clicked(lambda _: _on_save())
 
-        # Keep references alive so callbacks aren't GC'd
         state['_mpl_widgets'] = (sl_radius, sl_radius_minor, rb_angle,
                                  mpl_btn_undo, mpl_btn_clear,
                                  mpl_btn_peaks, mpl_btn_export,

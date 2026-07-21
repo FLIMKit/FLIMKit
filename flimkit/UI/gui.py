@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 import matplotlib
-matplotlib.use('TkAgg')
+from flimkit.mpl_backend import select_backend
+select_backend()
 matplotlib.rcParams.update({
     'text.color': 'white',
     'axes.labelcolor': 'white',

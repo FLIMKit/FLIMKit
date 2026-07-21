@@ -64,8 +64,8 @@ def apply_intensity_threshold(intensity_image, threshold):
     return intensity_image >= threshold
 
 def pick_intensity_threshold(intensity_image, initial=None):
-    import matplotlib
-    matplotlib.use('TkAgg')
+    from flimkit.mpl_backend import select_backend
+    select_backend()
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider, Button
     img = intensity_image.astype(float)
