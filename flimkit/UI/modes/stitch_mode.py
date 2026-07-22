@@ -85,6 +85,8 @@ class StitchMode(BaseMode):
                         value='gaussian').grid(row=0, column=2, sticky='w', padx=1)
         ttk.Radiobutton(fp, text='Lorentzian dist.', variable=self.b.sv_fit_model_st,
                         value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
+        ttk.Radiobutton(fp, text='n-exp tail', variable=self.b.sv_fit_model_st,
+                        value='tail').grid(row=0, column=4, sticky='w', padx=1)
 
         self.b.state.iv_nexp_st = tk.IntVar(value=2)
         self.b.state.iv_ncomp_dist_st = tk.IntVar(value=1)
@@ -103,13 +105,22 @@ class StitchMode(BaseMode):
         ttk.Radiobutton(dist_frame_st, text='2 (bimodal)', variable=self.b.iv_ncomp_dist_st,
                         value=2).pack(side='left', padx=4)
 
+        tail_note_st = ttk.Label(fp, text='Tail fit: no IRF used, fitted past the decay peak',
+                                 foreground='#888')
         def _on_st_model_change(*_):
-            if self.b.sv_fit_model_st.get() == 'discrete':
+            _m = self.b.sv_fit_model_st.get()
+            if _m in ('discrete', 'tail'):
                 dist_frame_st.grid_remove()
                 nexp_frame_st.grid(row=1, column=0, columnspan=5, sticky='w')
             else:
                 nexp_frame_st.grid_remove()
                 dist_frame_st.grid(row=1, column=0, columnspan=5, sticky='w')
+            if _m == 'tail':
+                tail_note_st.grid(row=6, column=0, columnspan=5, sticky='w', padx=4)
+                self.b._irf_st.grid_remove()
+            else:
+                tail_note_st.grid_remove()
+                self.b._irf_st.grid(row=0, column=0, sticky='ew', pady=(0, 6))
         self.b.sv_fit_model_st.trace_add('write', _on_st_model_change)
 
         self.b.state.bv_perpix = tk.BooleanVar(value=False)

@@ -31,7 +31,12 @@ def single_FOV_flim_fit_cli():
                     help='Print raw xlsx row contents and detected columns to diagnose '
                          'parsing failures.')
     ap.add_argument('--irf',   default=None,
-                    help='Scatter PTU for measured IRF (highest priority)')
+                    help='Measured IRF file, scatter PTU or PicoQuant .pck (highest priority)')
+    ap.add_argument('--align-irf', action='store_true',
+                    help='Shift the measured IRF so its peak lands on the decay rising edge. '
+                         'Needed when the IRF came from a separate acquisition with a '
+                         'different sync delay. Off by default, since a scatter IRF measured '
+                         'in the same session carries a real timing offset worth keeping.')
     ap.add_argument('--irf-xlsx', default=None,
                     help='Path to a reference xlsx exported from FLIM microscope software, used ONLY '
                          'to extract the IRF shape for fitting. The IRF is '

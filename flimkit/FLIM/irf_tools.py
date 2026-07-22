@@ -238,6 +238,19 @@ def irf_from_pck(path: str, n_bins: int, channel=None) -> np.ndarray:
     print(f'  IRF from .pck: channel {channel}, {int(s):,} photons, peak bin {peak}')
     return irf / s
 
+def align_irf_to_bin(irf_prompt: np.ndarray, target_bin: int,
+                     n_bins: int) -> tuple[np.ndarray, int]:
+    current = int(np.argmax(irf_prompt))
+    shift = int(target_bin) - current
+    if shift == 0:
+        return irf_prompt, 0
+    x = np.arange(n_bins, dtype=float)
+    shifted = np.interp(x - shift, x, irf_prompt, left=0.0, right=0.0)
+    s = shifted.sum()
+    if s > 0:
+        shifted = shifted / s
+    return shifted, shift
+
 def irf_from_measured_file(path: str, ptu_ref: PTUFile,
                            channel: int | None = None) -> np.ndarray:
     if str(path).lower().endswith('.pck'):

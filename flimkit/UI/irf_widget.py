@@ -39,7 +39,7 @@ class IRFWidget:
             self.frame,
             text='Uses the XLSX entered in Input Files above',
             foreground='grey')
-        self._note.grid(row=r, column=0, columnspan=3, sticky='w', padx=8, pady=3)
+        self._note.grid(row=r + 1, column=0, columnspan=3, sticky='w', padx=8, pady=3)
         self._update()
     def _browse_irf_path(self):
         if self.sv_method.get().startswith('machine_irf'):

@@ -2021,8 +2021,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if getattr(self, '_current_form', None) == 'stitch':
                 xlif = self.sv_xlif.get().strip() if hasattr(self, 'sv_xlif') else ''
                 if xlif:
-                    from flimkit.utils.xml_utils import get_pixel_size_from_xlif
-                    pixel_size_m, _ = get_pixel_size_from_xlif(Path(xlif))
+                    from flimkit.utils.xml_utils import get_pixel_size
+                    basename = getattr(self, 'sv_ptu_basename', None)
+                    basename = basename.get().strip() if basename is not None else Path(xlif).stem
+                    pixel_size_m, _ = get_pixel_size(Path(xlif), basename or Path(xlif).stem)
                     if pixel_size_m and pixel_size_m > 0:
                         return pixel_size_m * 1e6
             ptu_path = getattr(self._fov_preview, '_ptu_path', None)
@@ -2149,6 +2151,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.irf_shift_bins = ex['irf_shift_bins']
         if 'free_tau_perpixel' in ex:
             a.free_tau_perpixel = ex['free_tau_perpixel']
+        if 'align_irf' in ex:
+            a.align_irf = ex['align_irf']
         if 'fit_start_ns' in ex:
             a.fit_start_ns = ex['fit_start_ns']
         if 'fit_end_ns' in ex:

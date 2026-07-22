@@ -7,8 +7,8 @@ from tqdm import tqdm
 tqdm.disable = True
 
 from ...utils.xml_utils import (
-    parse_xlif_tile_positions,
-    get_pixel_size_from_xlif,
+    parse_tile_positions,
+    get_pixel_size,
     compute_tile_pixel_positions,
 )
 from .decode import get_flim_histogram_from_ptufile, create_time_axis
@@ -45,14 +45,14 @@ def stitch_flim_tiles(
         print(f"{'='*60}")
         print(f"FLIM TILE STITCHING")
         print(f"{'='*60}")
-        print(f"XLIF: {xlif_path}")
+        print(f"Metadata: {xlif_path}")
         print(f"PTUs: {ptu_dir}")
         print(f"Output: {output_dir}")
         print()
-        print('Parsing XLIF metadata...')
+        print('Parsing tile metadata...')
     if tile_positions is None:
-        tile_positions = parse_xlif_tile_positions(xlif_path, ptu_basename)
-    pixel_size_m, n_pixels = get_pixel_size_from_xlif(xlif_path)
+        tile_positions = parse_tile_positions(xlif_path, ptu_basename)
+    pixel_size_m, n_pixels = get_pixel_size(xlif_path, ptu_basename)
     if verbose:
         print(f"  Found {len(tile_positions)} tiles")
         print(f"  Pixel size: {pixel_size_m * 1e6:.4f} µm")
@@ -676,8 +676,8 @@ def fit_flim_tiles(
         if verbose:
             print(f"  TVB background from: {_tvb_ptu_path} ({float(_tvb_bg_raw.sum()):,.0f} photons)")
     _fit_tvb = _tvb_bg_raw is not None
-    tile_positions = parse_xlif_tile_positions(xlif_path, ptu_basename)
-    pixel_size_m, _ = get_pixel_size_from_xlif(xlif_path)
+    tile_positions = parse_tile_positions(xlif_path, ptu_basename)
+    pixel_size_m, _ = get_pixel_size(xlif_path, ptu_basename)
     effective_pixel_size_m = pixel_size_m * binning
     tile_positions, canvas_w, canvas_h = compute_tile_pixel_positions(
         tile_positions, effective_pixel_size_m,
@@ -686,7 +686,7 @@ def fit_flim_tiles(
         print(f"\n{'='*60}")
         print(f"  PER-TILE FLIM FITTING - POOLED MACHINE IRF")
         print(f"{'='*60}")
-        print(f"  XLIF:        {xlif_path}")
+        print(f"  Metadata:    {xlif_path}")
         print(f"  PTUs:        {ptu_dir}")
         print(f"  Tiles:       {len(tile_positions)}")
         print(f"  Canvas:      {canvas_h} × {canvas_w} px")

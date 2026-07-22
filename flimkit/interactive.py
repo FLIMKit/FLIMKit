@@ -15,7 +15,7 @@ from flimkit.formats import FLIMFile
 from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting  
 from .utils.xml_utils import parse_xlif_tile_positions 
 from .FLIM.fit_tools import find_irf_peak_bin
-from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
+from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, align_irf_to_bin, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
 from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
                            fit_per_pixel_dist, fit_summed_tail)
 from .utils.xlsx_tools import load_xlsx
@@ -82,6 +82,21 @@ def parse_exclude_ns(spec):
             raise ValueError(f'bad --exclude-ns band {part!r}; hi must exceed lo')
         bands.append((lo, hi))
     return bands or None
+
+def _align_measured_irf(args, irf_prompt, irf_peak_bin, n_bins, tcspc_res):
+    offset = int(np.argmax(irf_prompt)) - int(irf_peak_bin)
+    if getattr(args, 'align_irf', False):
+        irf_prompt, shift = align_irf_to_bin(irf_prompt, irf_peak_bin, n_bins)
+        print(f'  Measured IRF aligned: shifted {shift:+d} bins '
+              f'({shift * tcspc_res * 1e9:+.3f} ns) onto the decay rising edge')
+        return irf_prompt, 'measured_irf (aligned to decay)'
+    if abs(offset) > 10:
+        print(f'  WARNING: measured IRF peak sits {offset:+d} bins '
+              f'({offset * tcspc_res * 1e9:+.2f} ns) from the decay rising edge, and the '
+              f'fit can only shift it by ±{getattr(args, "irf_shift_bins", 2)} bins.')
+        print(f'           Lifetimes from this fit will be wrong. Enable IRF alignment '
+              f'(--align-irf) if the IRF came from a separate acquisition.')
+    return irf_prompt, 'measured_irf'
 
 def apply_point_mode_limits(args, ptu):
     if getattr(ptu, 'is_image', True):
@@ -432,7 +447,8 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None and Path(args.irf).exists():
         irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
-        strategy = 'scatter_ptu'
+        irf_prompt, strategy = _align_measured_irf(
+            args, irf_prompt, irf_peak_bin, n_bins, tcspc_res)
         has_tail = False
         fit_sigma = False
         fit_bg = True
@@ -908,7 +924,8 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
         irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
-        strategy = 'scatter_ptu'
+        irf_prompt, strategy = _align_measured_irf(
+            args, irf_prompt, irf_peak_bin, ptu.n_bins, ptu.tcspc_res)
         has_tail = False
         fit_sigma = False
         fit_bg = True

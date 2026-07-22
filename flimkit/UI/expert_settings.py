@@ -20,6 +20,7 @@ _EXPERT_DEFAULTS = {
     'irf_align': 'steepest_rise',
     'irf_shift_bins': 2,
     'free_tau_perpixel': False,
+    'align_irf': False,
     'fit_start_ns': None,
     'fit_end_ns': None,
     'exclude_ns': '',
@@ -135,6 +136,13 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Label(f, text='(2 = recommended; 5 = legacy)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
 
         row += 1
+        self._bv_align_irf = tk.BooleanVar(value=bool(vals.get('align_irf', False)))
+        ttk.Checkbutton(f, text='Align measured IRF peak to the decay rising edge  '
+                                '(for a scatter PTU or .pck from a separate acquisition)',
+                        variable=self._bv_align_irf).grid(
+            row=row, column=0, columnspan=4, sticky='w', **PAD)
+
+        row += 1
         _start_val = vals.get('fit_start_ns')
         _end_val = vals.get('fit_end_ns')
         ttk.Label(f, text='Fit window start (ns):').grid(row=row, column=0, sticky='w', **PAD)
@@ -198,6 +206,7 @@ class ExpertSettingsDialog(tk.Toplevel):
             'irf_fwhm': float(_fwhm_s) if _fwhm_s else None,
             'irf_align': self._sv_irf_align.get(),
             'irf_shift_bins': int(self._sv_irf_shift.get() or 2),
+            'align_irf': self._bv_align_irf.get(),
             'free_tau_perpixel': self._bv_free_tau.get(),
             'fit_t0': self._bv_fit_t0.get(),
             'fit_start_ns': float(_start_s) if _start_s else None,
@@ -227,6 +236,7 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_irf_fwhm.set('')
         self._sv_irf_align.set('steepest_rise')
         self._sv_irf_shift.set('2')
+        self._bv_align_irf.set(False)
         self._bv_free_tau.set(False)
         self._bv_fit_t0.set(False)
         self._sv_fit_start.set('')
