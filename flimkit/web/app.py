@@ -253,7 +253,16 @@ def buildApp():
     map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
-    tool = pn.widgets.RadioButtonGroup(name='Tool', options=['Single FOV', 'ROI analysis'], value='Single FOV')
+    nav = pn.widgets.RadioButtonGroup(
+        name='Function', orientation='vertical',
+        options=['Single FOV', 'ROI analysis', 'Phasor', 'Stitch', 'Batch', 'IRF builder'],
+        value='Single FOV', sizing_mode='stretch_width')
+    proj_status = pn.pane.Markdown('**Project:** none open', sizing_mode='stretch_width')
+    proj_files = pn.widgets.Tabulator(value=None, show_index=False, height=180,
+                                      sizing_mode='stretch_width', selectable=1)
+    roi_nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
+    roi_tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01)
+    roi_tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1)
     roi_fig, roi_img_src, roi_box_src, roi_mapper = make_roi_figure()
     roi_load = pn.widgets.Button(name='Load image', button_type='default', width=140)
     roi_clear = pn.widgets.Button(name='Clear boxes', button_type='default', width=140)
@@ -305,12 +314,38 @@ def buildApp():
             set_pane(preview, blank_figure('preview failed'))
             status.object = f'**Preview failed:** {exc}'
 
+    def refresh_project(path):
+        import pandas as pd
+        p = Path(path)
+        folder = p.parent
+        proj_status.object = f'**Project:** `{folder.name}/`  \nfile: `{p.name}`'
+        rows = []
+        for f in sorted(folder.glob('*')):
+            if f.suffix.lower() in ('.ptu', '.sdt', '.json', '.png', '.tif', '.tiff', '.csv'):
+                rows.append({'file': f.name, 'kind': f.suffix.lstrip('.')})
+        proj_files.value = pd.DataFrame(rows, columns=['file', 'kind'])
+
     def on_path(event):
         path = (event.new or '').strip()
         if path and Path(path).is_file():
             status.object = 'Building intensity preview...'
             load_preview(path)
+            refresh_project(path)
     ptu.param.watch(on_path, 'value')
+
+    def on_proj_pick(event):
+        if not event.new or proj_files.value is None:
+            return
+        row = event.new[0]
+        try:
+            name = proj_files.value.iloc[row]['file']
+        except (KeyError, IndexError):
+            return
+        cur = Path(ptu.value.strip())
+        cand = cur.parent / name
+        if cand.suffix.lower() in ('.ptu', '.sdt') and cand.is_file():
+            ptu.value = str(cand)
+    proj_files.param.watch(on_proj_pick, 'selection')
 
     def redraw_lifetime(event=None):
         res = store['res']
@@ -439,35 +474,24 @@ def buildApp():
         if not boxes:
             roi_status.object = '**No boxes drawn.** Use the Box Edit tool on the image.'
             return
-        params = {'nexp': nexp.value, 'tau_min': tau_min.value, 'tau_max': tau_max.value}
+        params = {'nexp': roi_nexp.value, 'tau_min': roi_tau_min.value, 'tau_max': roi_tau_max.value}
         roi_fit.disabled = True
         roi_status.object = 'Fitting ROI decay...'
         threading.Thread(target=roi_worker, args=(path, boxes, params), daemon=True).start()
     roi_fit.on_click(do_roi_fit)
 
-    fov_params = pn.Column(
-        model, nexp, ncomp, mode, irf_source,
-        pn.Row(tau_min, tau_max),
-        pileup, out,
-        pn.layout.Divider(),
-        run, bar, status,
-    )
-    roi_params = pn.Column(
-        pn.Row(nexp),
-        pn.Row(tau_min, tau_max),
-        pn.pane.Markdown('ROI reuses the main-fit IRF when available, else a Gaussian estimate.'),
-    )
-    param_area = pn.Column(fov_params)
     controls = pn.Column(
-        pn.pane.Markdown('### Tool'),
-        tool,
+        pn.pane.Markdown('### Function'),
+        nav,
         pn.layout.Divider(),
         ptu,
         browse,
         pn.layout.Divider(),
-        param_area,
+        proj_status,
+        proj_files,
         width=380,
     )
+
     lifetime_tab = pn.Column(
         pn.Row(map_key, disp_min, disp_max),
         taumap,
@@ -475,32 +499,60 @@ def buildApp():
     decay_tab = pn.Column(pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
                           pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
                           sizing_mode='stretch_width')
-    fov_view = pn.Tabs(
+    fov_tabs = pn.Tabs(
         ('Preview', preview),
         ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
-    roi_view = pn.Column(
-        pn.Row(roi_load, roi_clear, roi_fit),
-        roi_status,
-        pn.pane.Bokeh(roi_fig, sizing_mode='stretch_width'),
-        pn.pane.Markdown('### ROI decay fit'),
-        pn.pane.Bokeh(roi_top, sizing_mode='stretch_width'),
-        pn.pane.Bokeh(roi_bot, sizing_mode='stretch_width'),
-        roi_table,
+    fov_view = pn.Column(
+        pn.pane.Markdown('## Single FOV fit'),
+        pn.Row(
+            pn.Column(model, nexp, ncomp, mode, irf_source, pn.Row(tau_min, tau_max),
+                      pileup, out, run, bar, status, width=320),
+            fov_tabs,
+        ),
         sizing_mode='stretch_width',
     )
-    main_area = pn.Column(fov_view, sizing_mode='stretch_width')
+    roi_view = pn.Column(
+        pn.pane.Markdown('## ROI analysis'),
+        pn.Row(
+            pn.Column(roi_nexp, pn.Row(roi_tau_min, roi_tau_max),
+                      pn.Row(roi_load, roi_clear, roi_fit), roi_status,
+                      pn.pane.Markdown('Reuses the main-fit IRF when available, '
+                                       'else a Gaussian estimate.'), width=320),
+            pn.Column(
+                pn.pane.Bokeh(roi_fig, sizing_mode='stretch_width'),
+                pn.pane.Markdown('### ROI decay fit'),
+                pn.pane.Bokeh(roi_top, sizing_mode='stretch_width'),
+                pn.pane.Bokeh(roi_bot, sizing_mode='stretch_width'),
+                roi_table,
+                sizing_mode='stretch_width',
+            ),
+        ),
+        sizing_mode='stretch_width',
+    )
 
-    def switch_tool(event):
-        if event.new == 'ROI analysis':
-            param_area[:] = [roi_params]
-            main_area[:] = [roi_view]
-        else:
-            param_area[:] = [fov_params]
-            main_area[:] = [fov_view]
-    tool.param.watch(switch_tool, 'value')
+    def placeholder(name):
+        return pn.Column(
+            pn.pane.Markdown(f'## {name}\n\nNot yet ported to the web UI. '
+                             f'Available in the tkinter GUI (`flimkit-gui`).'),
+            sizing_mode='stretch_width',
+        )
+
+    views = {
+        'Single FOV': fov_view,
+        'ROI analysis': roi_view,
+        'Phasor': placeholder('Phasor analysis'),
+        'Stitch': placeholder('Tile stitch / fit'),
+        'Batch': placeholder('Batch processing'),
+        'IRF builder': placeholder('Machine IRF builder'),
+    }
+    main_area = pn.Column(views['Single FOV'], sizing_mode='stretch_width')
+
+    def switch_nav(event):
+        main_area[:] = [views.get(event.new, placeholder(event.new))]
+    nav.param.watch(switch_nav, 'value')
 
     template.sidebar.append(controls)
     template.main.append(main_area)
