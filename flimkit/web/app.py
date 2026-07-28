@@ -9,10 +9,145 @@ from matplotlib.figure import Figure
 from flimkit.UI.utils import _C
 from flimkit.web.args import build_fov_args
 
-pn.extension('tabulator', notifications=True)
+ACCENT = '#6366f1'
+ACCENT_LIGHT = '#818cf8'
+BG = '#0a0a0b'
+PANEL = '#0d0d0f'
+BORDER = '#1f1f23'
+BORDER2 = '#1a1a1f'
+FG = '#e4e4e7'
+MUTED = '#a1a1aa'
+DIM = '#71717a'
+FAINT = '#52525b'
 
-BG = 'black'
-FG = 'white'
+THEME_CSS = f'''
+:root {{
+  --panel-bg: {BG};
+  --card-bg: {PANEL};
+  --border: {BORDER};
+}}
+body, .bk-root {{ font-family: 'Inter', system-ui, sans-serif; }}
+.mono, .tabulator {{ font-family: 'JetBrains Mono', ui-monospace, monospace; }}
+#header, .pn-bar {{ border-bottom: 1px solid {BORDER}; }}
+#sidebar {{ background: {PANEL}; border-right: 1px solid {BORDER}; }}
+.card, .bk-panel-models-layout-Card {{
+  background: {PANEL} !important;
+  border: 1px solid {BORDER} !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}}
+.bk-btn-primary, button.solid.primary {{ background: {ACCENT} !important; border-color: {ACCENT} !important; }}
+.bk-btn-primary:hover {{ background: #5457e5 !important; }}
+label, .bk-input-group label {{ color: {MUTED} !important; font-size: 11px; font-weight: 500; }}
+input, select, .bk-input {{
+  background: {BG} !important; color: {FG} !important;
+  border: 1px solid #27272d !important; border-radius: 6px !important;
+}}
+.bk-slider-title, .noUi-connect {{ color: {ACCENT} !important; }}
+.tabulator {{ background: {PANEL} !important; color: {FG} !important; border: 1px solid {BORDER} !important; }}
+.tabulator .tabulator-header {{ background: {BORDER2} !important; color: {MUTED} !important; border: none !important; }}
+.tabulator-row {{ background: {PANEL} !important; color: {FG} !important; border-color: {BORDER2} !important; }}
+.tabulator-row.tabulator-selectable:hover {{ background: {BORDER2} !important; }}
+.bk-tabs-header .bk-tab {{ color: {DIM} !important; font-size: 12px; }}
+.bk-tabs-header .bk-tab.bk-active {{ color: {FG} !important; background: #16161a !important; border-radius: 6px; }}
+h1, h2, h3 {{ letter-spacing: -0.02em; color: {FG}; }}
+'''
+
+FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap'
+
+PAGE_CSS = f'''
+@import url('{FONT_URL}');
+html, body {{ margin: 0; height: 100%; background: {BG}; }}
+.bk-root, body {{ font-family: 'Inter', system-ui, sans-serif; color: {FG}; }}
+'''
+
+SIDEBAR_CSS = f'''
+:host {{
+  background: {PANEL};
+  border-right: 1px solid {BORDER};
+  height: 100vh;
+  padding: 0;
+}}
+'''
+
+NAV_ITEM_CSS = f'''
+:host {{ margin: 1px 0; }}
+:host(.solid) .bk-btn, .bk-btn {{
+  background: transparent !important;
+  border: none !important;
+  color: {MUTED} !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 8px 10px !important;
+  border-radius: 6px !important;
+  display: flex; align-items: center; gap: 10px;
+}}
+.bk-btn:hover {{ background: #141418 !important; color: {FG} !important; }}
+'''
+
+NAV_ACTIVE_CSS = f'''
+:host {{ margin: 1px 0; }}
+.bk-btn {{
+  background: #1a1a20 !important;
+  border: none !important;
+  color: #fafafa !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 8px 10px !important;
+  border-radius: 6px !important;
+  display: flex; align-items: center; gap: 10px;
+}}
+.bk-btn svg, .bk-btn i {{ color: {ACCENT_LIGHT} !important; stroke: {ACCENT_LIGHT} !important; }}
+'''
+
+HEADER_CSS = f'''
+:host {{
+  background: {PANEL};
+  border-bottom: 1px solid {BORDER};
+  height: 56px;
+  padding: 0 20px;
+  align-items: center;
+}}
+'''
+
+CARD_CSS = f'''
+:host {{
+  background: {PANEL};
+  border: 1px solid {BORDER};
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+}}
+'''
+
+def _labeled_html(text, cls):
+    return pn.pane.HTML(f'<div class="{cls}">{text}</div>', margin=0,
+                        sizing_mode='stretch_width')
+
+def card(title, *objs, **kw):
+    head = pn.pane.HTML(
+        f'<div style="padding:10px 16px;border-bottom:1px solid {BORDER2};'
+        f'font-size:12px;font-weight:500;color:#d4d4d8;">{title}</div>',
+        margin=0, sizing_mode='stretch_width')
+    body = pn.Column(*objs, margin=(4, 8, 8, 8), sizing_mode='stretch_width')
+    return pn.Column(head, body, stylesheets=[CARD_CSS],
+                     sizing_mode=kw.get('sizing_mode', 'stretch_width'),
+                     margin=kw.get('margin', (0, 0, 12, 0)))
+
+NAV_FUNCS = [
+    ('Single FOV', 'scan'),
+    ('ROI analysis', 'crop'),
+    ('Phasor', 'circle-dot'),
+    ('Stitch', 'layout-grid'),
+    ('Batch', 'stack-2'),
+    ('IRF builder', 'wave-sine'),
+]
+
+pn.extension('tabulator', notifications=True, raw_css=[THEME_CSS, PAGE_CSS])
 
 def style_dark(fig, ax):
     fig.patch.set_facecolor(BG)
@@ -253,10 +388,11 @@ def buildApp():
     map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
-    nav = pn.widgets.RadioButtonGroup(
-        name='Function', orientation='vertical',
-        options=['Single FOV', 'ROI analysis', 'Phasor', 'Stitch', 'Batch', 'IRF builder'],
-        value='Single FOV', sizing_mode='stretch_width')
+    nav_buttons = {}
+    for label, icon in NAV_FUNCS:
+        nav_buttons[label] = pn.widgets.Button(
+            name=label, icon=icon, icon_size='16px',
+            sizing_mode='stretch_width', stylesheets=[NAV_ITEM_CSS])
     proj_status = pn.pane.Markdown('**Project:** none open', sizing_mode='stretch_width')
     proj_files = pn.widgets.Tabulator(value=None, show_index=False, height=180,
                                       sizing_mode='stretch_width', selectable=1)
@@ -289,21 +425,32 @@ def buildApp():
         nexp.visible = event.new in ('discrete', 'tail')
     model.param.watch(toggle_ncomp, 'value')
 
-    template = pn.template.FastListTemplate(
-        title='FLIMKit',
-        theme='dark',
-        sidebar_width=400,
+    overlay = pn.Column(
+        pn.Column(
+            pn.pane.HTML(f'<div style="font-size:14px;font-weight:600;color:{FG};'
+                         f'padding:4px 0 10px;">Select a file</div>'),
+            picker, pick_ok,
+            stylesheets=[f''':host {{ background:{PANEL}; border:1px solid {BORDER};
+                border-radius:10px; padding:18px; width:720px; max-width:92vw; }}'''],
+        ),
+        visible=False,
+        stylesheets=['''
+            :host { position: fixed; inset: 0; z-index: 1000;
+                    background: rgba(0,0,0,0.6); align-items: center;
+                    justify-content: center; }
+        '''],
+        sizing_mode='stretch_both',
     )
 
     def open_browser(event):
-        template.open_modal()
+        overlay.visible = True
     browse.on_click(open_browser)
 
     def use_pick(event):
         sel = picker.value
         if sel:
             ptu.value = sel[0]
-        template.close_modal()
+        overlay.visible = False
     pick_ok.on_click(use_pick)
 
     def load_preview(path):
@@ -480,22 +627,33 @@ def buildApp():
         threading.Thread(target=roi_worker, args=(path, boxes, params), daemon=True).start()
     roi_fit.on_click(do_roi_fit)
 
-    controls = pn.Column(
-        pn.pane.Markdown('### Function'),
-        nav,
-        pn.layout.Divider(),
-        ptu,
-        browse,
-        pn.layout.Divider(),
-        proj_status,
-        proj_files,
-        width=380,
+    logo = pn.pane.HTML(
+        f'<div style="padding:0 20px;height:56px;display:flex;align-items:center;'
+        f'border-bottom:1px solid {BORDER};">'
+        f'<span style="font-size:15px;font-weight:600;letter-spacing:-0.03em;color:{FG};">'
+        f'FLIM<span style="color:{ACCENT};">Kit</span></span>'
+        f'<span style="margin-left:8px;font-size:10px;font-weight:500;padding:2px 6px;'
+        f'border-radius:4px;background:#1a1a1f;color:{DIM};">0.9.18</span></div>',
+        margin=0, sizing_mode='stretch_width')
+
+    project_panel = pn.Column(
+        pn.pane.HTML(f'<div style="padding:2px;font-size:10px;font-weight:600;'
+                     f'letter-spacing:0.06em;color:{FAINT};">PROJECT</div>', margin=0),
+        proj_status, proj_files,
+        margin=(0, 12), sizing_mode='stretch_width',
+    )
+    sidebar = pn.Column(
+        logo,
+        pn.pane.HTML(f'<div style="padding:14px 14px 6px;font-size:10px;font-weight:600;'
+                     f'letter-spacing:0.06em;color:{FAINT};">FUNCTIONS</div>', margin=0),
+        pn.Column(*nav_buttons.values(), margin=(0, 10)),
+        pn.layout.VSpacer(),
+        pn.pane.HTML(f'<div style="border-top:1px solid {BORDER};margin:8px 0;"></div>', margin=0),
+        project_panel,
+        stylesheets=[SIDEBAR_CSS], width=256, sizing_mode='stretch_height',
     )
 
-    lifetime_tab = pn.Column(
-        pn.Row(map_key, disp_min, disp_max),
-        taumap,
-    )
+    lifetime_tab = pn.Column(pn.Row(map_key, disp_min, disp_max), taumap)
     decay_tab = pn.Column(pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
                           pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
                           sizing_mode='stretch_width')
@@ -505,40 +663,37 @@ def buildApp():
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
-    fov_view = pn.Column(
-        pn.pane.Markdown('## Single FOV fit'),
-        pn.Row(
-            pn.Column(model, nexp, ncomp, mode, irf_source, pn.Row(tau_min, tau_max),
-                      pileup, out, run, bar, status, width=320),
-            fov_tabs,
-        ),
+    fov_params = pn.Column(model, nexp, ncomp, mode, irf_source, pn.Row(tau_min, tau_max),
+                           pileup, out, run, bar, status, width=300)
+    fov_view = pn.Row(
+        card('Parameters', fov_params, sizing_mode='fixed', margin=(0, 16, 0, 0)),
+        pn.Column(fov_tabs, sizing_mode='stretch_width'),
         sizing_mode='stretch_width',
     )
-    roi_view = pn.Column(
-        pn.pane.Markdown('## ROI analysis'),
-        pn.Row(
-            pn.Column(roi_nexp, pn.Row(roi_tau_min, roi_tau_max),
-                      pn.Row(roi_load, roi_clear, roi_fit), roi_status,
-                      pn.pane.Markdown('Reuses the main-fit IRF when available, '
-                                       'else a Gaussian estimate.'), width=320),
-            pn.Column(
-                pn.pane.Bokeh(roi_fig, sizing_mode='stretch_width'),
-                pn.pane.Markdown('### ROI decay fit'),
-                pn.pane.Bokeh(roi_top, sizing_mode='stretch_width'),
-                pn.pane.Bokeh(roi_bot, sizing_mode='stretch_width'),
-                roi_table,
-                sizing_mode='stretch_width',
-            ),
+    roi_params = pn.Column(roi_nexp, pn.Row(roi_tau_min, roi_tau_max),
+                           pn.Row(roi_load, roi_clear, roi_fit), roi_status,
+                           pn.pane.HTML(f'<div style="font-size:11px;color:{DIM};">Reuses the '
+                                        f'main-fit IRF when available, else a Gaussian estimate.</div>'),
+                           width=300)
+    roi_view = pn.Row(
+        card('Parameters', roi_params, sizing_mode='fixed', margin=(0, 16, 0, 0)),
+        pn.Column(
+            card('Draw ROI boxes', pn.pane.Bokeh(roi_fig, sizing_mode='stretch_width')),
+            card('ROI decay fit',
+                 pn.pane.Bokeh(roi_top, sizing_mode='stretch_width'),
+                 pn.pane.Bokeh(roi_bot, sizing_mode='stretch_width'),
+                 roi_table),
+            sizing_mode='stretch_width',
         ),
         sizing_mode='stretch_width',
     )
 
     def placeholder(name):
-        return pn.Column(
-            pn.pane.Markdown(f'## {name}\n\nNot yet ported to the web UI. '
-                             f'Available in the tkinter GUI (`flimkit-gui`).'),
-            sizing_mode='stretch_width',
-        )
+        return pn.pane.HTML(
+            f'<div style="padding:40px;color:{DIM};"><div style="font-size:18px;'
+            f'font-weight:600;color:{FG};margin-bottom:8px;">{name}</div>'
+            f'Not yet ported to the web UI. Available in the tkinter GUI '
+            f'(<code>flimkit-gui</code>).</div>', sizing_mode='stretch_width')
 
     views = {
         'Single FOV': fov_view,
@@ -548,16 +703,32 @@ def buildApp():
         'Batch': placeholder('Batch processing'),
         'IRF builder': placeholder('Machine IRF builder'),
     }
-    main_area = pn.Column(views['Single FOV'], sizing_mode='stretch_width')
+    titles = {
+        'Single FOV': 'Single FOV fit', 'ROI analysis': 'ROI analysis',
+        'Phasor': 'Phasor analysis', 'Stitch': 'Tile stitch / fit',
+        'Batch': 'Batch processing', 'IRF builder': 'Machine IRF builder',
+    }
+    page_title = pn.pane.HTML('', margin=0)
+    main_area = pn.Column(views['Single FOV'], margin=(16, 20), sizing_mode='stretch_both')
 
-    def switch_nav(event):
-        main_area[:] = [views.get(event.new, placeholder(event.new))]
-    nav.param.watch(switch_nav, 'value')
+    def select_nav(label):
+        for lbl, btn in nav_buttons.items():
+            btn.stylesheets = [NAV_ACTIVE_CSS if lbl == label else NAV_ITEM_CSS]
+        page_title.object = (f'<span style="font-size:15px;font-weight:600;'
+                             f'letter-spacing:-0.02em;color:{FG};">{titles[label]}</span>')
+        main_area[:] = [views[label]]
 
-    template.sidebar.append(controls)
-    template.main.append(main_area)
-    template.modal.append(pn.Column('## Select a file', picker, pick_ok, sizing_mode='stretch_width'))
-    return template
+    for label, btn in nav_buttons.items():
+        btn.on_click(lambda event, lb=label: select_nav(lb))
+    select_nav('Single FOV')
+
+    header = pn.Row(page_title, pn.layout.HSpacer(), browse,
+                    stylesheets=[HEADER_CSS], sizing_mode='stretch_width', height=56)
+    main = pn.Column(header, main_area, sizing_mode='stretch_both',
+                     styles={'background': BG})
+    page = pn.Row(sidebar, main, overlay, sizing_mode='stretch_both',
+                  styles={'background': BG, 'gap': '0'})
+    return page
 
 def serve(port=5006, show=True):
     pn.serve(buildApp, port=port, show=show, threaded=False)
