@@ -41,9 +41,10 @@ def blank_figure(msg):
 def intensity_figure(ptu_path):
     from flimkit.image.tools import make_intensity_image
     img = make_intensity_image(ptu_path, rotate_90_cw=False, save_image=False)
+    clipped = np.clip(img, 0, np.percentile(img, 99))
     fig = Figure(figsize=(4.5, 4))
     ax = fig.add_subplot(111)
-    im = ax.imshow(img, cmap='gray')
+    im = ax.imshow(clipped, cmap='inferno', origin='upper')
     ax.set_title(f'{Path(ptu_path).name}  {img.shape[1]}x{img.shape[0]}', fontsize=8)
     ax.set_axis_off()
     style_dark(fig, ax)
@@ -145,10 +146,11 @@ def _rows_to_frame(rows):
 
 def buildApp():
     cfg = _C()
-    store = {'res': None}
+    store = {'res': None, 'doc': None}
     ptu = pn.widgets.TextInput(name='PTU / SDT file', placeholder='/path/to/file.ptu', sizing_mode='stretch_width')
-    picker = pn.widgets.FileSelector('~', file_pattern='*.*', only_files=True, height=260)
-    file_card = pn.Card(picker, title='Browse files', collapsed=True, sizing_mode='stretch_width')
+    browse = pn.widgets.Button(name='Browse for file...', button_type='default', sizing_mode='stretch_width')
+    picker = pn.widgets.FileSelector('~', file_pattern='*.*', only_files=True, height=420)
+    pick_ok = pn.widgets.Button(name='Use selected file', button_type='primary', width=180)
     model = pn.widgets.Select(name='Model', options=['discrete', 'tail', 'gaussian', 'lognormal'], value='discrete')
     nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
     ncomp = pn.widgets.IntSlider(name='Distribution components', start=1, end=3, value=1, visible=False)
@@ -172,8 +174,9 @@ def buildApp():
     cancel = threading.Event()
 
     def push(fn):
-        if pn.state.curdoc is not None:
-            pn.state.execute(fn)
+        doc = store['doc'] or pn.state.curdoc
+        if doc is not None:
+            doc.add_next_tick_callback(fn)
         else:
             fn()
 
@@ -186,11 +189,22 @@ def buildApp():
         nexp.visible = event.new in ('discrete', 'tail')
     model.param.watch(toggle_ncomp, 'value')
 
-    def take_pick(event):
-        if event.new:
-            ptu.value = event.new[0]
-            file_card.collapsed = True
-    picker.param.watch(take_pick, 'value')
+    template = pn.template.FastListTemplate(
+        title='FLIMKit',
+        theme='dark',
+        sidebar_width=400,
+    )
+
+    def open_browser(event):
+        template.open_modal()
+    browse.on_click(open_browser)
+
+    def use_pick(event):
+        sel = picker.value
+        if sel:
+            ptu.value = sel[0]
+        template.close_modal()
+    pick_ok.on_click(use_pick)
 
     def load_preview(path):
         try:
@@ -270,6 +284,7 @@ def buildApp():
         push(done)
 
     def do_run(event):
+        store['doc'] = pn.state.curdoc
         path = ptu.value.strip()
         if not path or not Path(path).is_file():
             status.object = '**No such file.** Pick a valid PTU/SDT path.'
@@ -286,7 +301,7 @@ def buildApp():
 
     controls = pn.Column(
         ptu,
-        file_card,
+        browse,
         pn.layout.Divider(),
         model, nexp, ncomp, mode, irf_source,
         pn.Row(tau_min, tau_max),
@@ -305,13 +320,10 @@ def buildApp():
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
-    return pn.template.FastListTemplate(
-        title='FLIMKit',
-        theme='dark',
-        sidebar=[controls],
-        main=[results],
-        sidebar_width=400,
-    )
+    template.sidebar.append(controls)
+    template.main.append(results)
+    template.modal.append(pn.Column('## Select a file', picker, pick_ok, sizing_mode='stretch_width'))
+    return template
 
 def serve(port=5006, show=True):
     pn.serve(buildApp, port=port, show=show, threaded=False)
