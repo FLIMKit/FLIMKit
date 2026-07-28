@@ -115,6 +115,46 @@ def lifetime_map_key(maps):
         key = next((k for k in maps if isinstance(maps[k], np.ndarray) and np.asarray(maps[k]).ndim == 2), None)
     return key
 
+def make_roi_figure():
+    from bokeh.plotting import figure
+    from bokeh.models import ColumnDataSource, LinearColorMapper, BoxEditTool, Range1d
+    img_src = ColumnDataSource(dict(image=[np.zeros((1, 1))], x=[0], y=[0], dw=[1], dh=[1]))
+    box_src = ColumnDataSource(dict(x=[], y=[], width=[], height=[]))
+    mapper = LinearColorMapper(palette='Inferno256', low=0, high=1)
+    fig = figure(height=460, sizing_mode='stretch_width', match_aspect=True,
+                 background_fill_color=BG, border_fill_color=BG,
+                 outline_line_color='#444', title='Draw ROI boxes (Box Edit tool)')
+    fig.image(image='image', x='x', y='y', dw='dw', dh='dh', source=img_src, color_mapper=mapper)
+    rects = fig.rect('x', 'y', 'width', 'height', source=box_src,
+                     fill_alpha=0.18, fill_color='#4fc3f7', line_color='#4fc3f7', line_width=1.5)
+    tool = BoxEditTool(renderers=[rects], num_objects=30)
+    fig.add_tools(tool)
+    fig.toolbar.active_drag = tool
+    fig.y_range = Range1d(1, 0)
+    fig.title.text_color = FG
+    fig.xaxis.major_label_text_color = FG
+    fig.yaxis.major_label_text_color = FG
+    return fig, img_src, box_src, mapper
+
+def load_roi_image(img_src, mapper, fig, ptu_path, channel=None):
+    from bokeh.models import Range1d
+    from flimkit.web.roi import intensity_map
+    img = np.asarray(intensity_map(ptu_path, channel=channel), dtype=float)
+    ny, nx = img.shape
+    img_src.data = dict(image=[img], x=[0], y=[0], dw=[nx], dh=[ny])
+    mapper.high = float(np.percentile(img, 99)) or 1.0
+    mapper.low = 0.0
+    fig.x_range.start, fig.x_range.end = 0, nx
+    fig.y_range = Range1d(ny, 0)
+    return img.shape
+
+def boxes_from_source(box_src):
+    d = box_src.data
+    boxes = []
+    for cx, cy, w, h in zip(d.get('x', []), d.get('y', []), d.get('width', []), d.get('height', [])):
+        boxes.append((cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0))
+    return boxes
+
 def autoscale(res, key):
     maps = res.get('pixel_maps')
     if not maps:
@@ -213,6 +253,15 @@ def buildApp():
     map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
+    tool = pn.widgets.RadioButtonGroup(name='Tool', options=['Single FOV', 'ROI analysis'], value='Single FOV')
+    roi_fig, roi_img_src, roi_box_src, roi_mapper = make_roi_figure()
+    roi_load = pn.widgets.Button(name='Load image', button_type='default', width=140)
+    roi_clear = pn.widgets.Button(name='Clear boxes', button_type='default', width=140)
+    roi_fit = pn.widgets.Button(name='Fit ROI decay', button_type='primary', width=160)
+    roi_status = pn.pane.Markdown('Load an image, then draw boxes.', sizing_mode='stretch_width')
+    roi_top, roi_bot, roi_sd, roi_sm, roi_sr = make_decay_bokeh()
+    roi_decay_sources = (roi_sd, roi_sm, roi_sr)
+    roi_table = pn.widgets.Tabulator(value=None, show_index=False, height=260, sizing_mode='stretch_width')
     cancel = threading.Event()
 
     def push(fn):
@@ -310,6 +359,7 @@ def buildApp():
             return
         def done():
             store['res'] = res
+            store['irf'] = res.get('irf_prompt')
             bar.visible = False
             run.disabled = False
             status.object = f"Done. Output in `{Path(a.out).parent}`."
@@ -341,15 +391,81 @@ def buildApp():
         threading.Thread(target=worker, args=(a,), daemon=True).start()
     run.on_click(do_run)
 
-    controls = pn.Column(
-        ptu,
-        browse,
-        pn.layout.Divider(),
+    def do_roi_load(event):
+        path = ptu.value.strip()
+        if not path or not Path(path).is_file():
+            roi_status.object = '**No file.** Pick a PTU/SDT first.'
+            return
+        try:
+            ny, nx = load_roi_image(roi_img_src, roi_mapper, roi_fig, path)
+            roi_status.object = f'Loaded `{Path(path).name}` ({nx}x{ny}). Draw boxes with the Box Edit tool.'
+        except Exception as exc:
+            roi_status.object = f'**Load failed:** {exc}'
+    roi_load.on_click(do_roi_load)
+
+    def do_roi_clear(event):
+        roi_box_src.data = dict(x=[], y=[], width=[], height=[])
+        roi_status.object = 'Boxes cleared.'
+    roi_clear.on_click(do_roi_clear)
+
+    def roi_worker(path, boxes, params):
+        from flimkit.web.roi import fit_roi
+        try:
+            roi_decay, summary = fit_roi(path, boxes, params, irf_cached=store.get('irf'))
+        except Exception as exc:
+            def fail():
+                roi_fit.disabled = False
+                roi_status.object = f'**ROI fit failed:** {exc}'
+            push(fail)
+            return
+        def done_roi():
+            roi_fit.disabled = False
+            tc = summary.get('tcspc_res', 1.0)
+            t = np.arange(len(roi_decay), dtype=float) * tc * 1e9
+            res_like = {'time_ns': t, 'decay': roi_decay, 'global_summary': summary}
+            update_decay_bokeh(roi_decay_sources, res_like)
+            roi_table.value = _rows_to_frame(summary_rows(res_like))
+            roi_status.object = (f"ROI fit done: {summary.get('n_pixels', 0):,} px, "
+                                 f"IRF {summary.get('irf_source', '?')}.")
+        push(done_roi)
+
+    def do_roi_fit(event):
+        store['doc'] = pn.state.curdoc
+        path = ptu.value.strip()
+        if not path or not Path(path).is_file():
+            roi_status.object = '**No file.** Pick a PTU/SDT first.'
+            return
+        boxes = boxes_from_source(roi_box_src)
+        if not boxes:
+            roi_status.object = '**No boxes drawn.** Use the Box Edit tool on the image.'
+            return
+        params = {'nexp': nexp.value, 'tau_min': tau_min.value, 'tau_max': tau_max.value}
+        roi_fit.disabled = True
+        roi_status.object = 'Fitting ROI decay...'
+        threading.Thread(target=roi_worker, args=(path, boxes, params), daemon=True).start()
+    roi_fit.on_click(do_roi_fit)
+
+    fov_params = pn.Column(
         model, nexp, ncomp, mode, irf_source,
         pn.Row(tau_min, tau_max),
         pileup, out,
         pn.layout.Divider(),
         run, bar, status,
+    )
+    roi_params = pn.Column(
+        pn.Row(nexp),
+        pn.Row(tau_min, tau_max),
+        pn.pane.Markdown('ROI reuses the main-fit IRF when available, else a Gaussian estimate.'),
+    )
+    param_area = pn.Column(fov_params)
+    controls = pn.Column(
+        pn.pane.Markdown('### Tool'),
+        tool,
+        pn.layout.Divider(),
+        ptu,
+        browse,
+        pn.layout.Divider(),
+        param_area,
         width=380,
     )
     lifetime_tab = pn.Column(
@@ -359,14 +475,35 @@ def buildApp():
     decay_tab = pn.Column(pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
                           pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
                           sizing_mode='stretch_width')
-    results = pn.Tabs(
+    fov_view = pn.Tabs(
         ('Preview', preview),
         ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
+    roi_view = pn.Column(
+        pn.Row(roi_load, roi_clear, roi_fit),
+        roi_status,
+        pn.pane.Bokeh(roi_fig, sizing_mode='stretch_width'),
+        pn.pane.Markdown('### ROI decay fit'),
+        pn.pane.Bokeh(roi_top, sizing_mode='stretch_width'),
+        pn.pane.Bokeh(roi_bot, sizing_mode='stretch_width'),
+        roi_table,
+        sizing_mode='stretch_width',
+    )
+    main_area = pn.Column(fov_view, sizing_mode='stretch_width')
+
+    def switch_tool(event):
+        if event.new == 'ROI analysis':
+            param_area[:] = [roi_params]
+            main_area[:] = [roi_view]
+        else:
+            param_area[:] = [fov_params]
+            main_area[:] = [fov_view]
+    tool.param.watch(switch_tool, 'value')
+
     template.sidebar.append(controls)
-    template.main.append(results)
+    template.main.append(main_area)
     template.modal.append(pn.Column('## Select a file', picker, pick_ok, sizing_mode='stretch_width'))
     return template
 
