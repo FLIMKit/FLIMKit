@@ -52,21 +52,62 @@ def intensity_figure(ptu_path):
     fig.tight_layout()
     return fig
 
-def decay_figure(res):
+def make_decay_bokeh():
+    from bokeh.plotting import figure
+    from bokeh.models import ColumnDataSource
+    src_data = ColumnDataSource(dict(t=[], y=[]))
+    src_model = ColumnDataSource(dict(t=[], y=[]))
+    src_resid = ColumnDataSource(dict(t=[], r=[]))
+    top = figure(height=320, sizing_mode='stretch_width', y_axis_type='log',
+                 background_fill_color=BG, border_fill_color=BG,
+                 outline_line_color='#444', title='Summed decay')
+    top.scatter('t', 'y', source=src_data, size=2, color='#aaaaaa', legend_label='data')
+    top.line('t', 'y', source=src_model, line_width=2, color='#e63946', legend_label='fit')
+    bot = figure(height=140, sizing_mode='stretch_width', x_range=top.x_range,
+                 background_fill_color=BG, border_fill_color=BG,
+                 outline_line_color='#444', title='weighted residuals')
+    bot.line('t', 'r', source=src_resid, color='#457b9d')
+    bot.xaxis.axis_label = 'time (ns)'
+    for fg in (top, bot):
+        fg.title.text_color = FG
+        fg.xaxis.axis_label_text_color = FG
+        fg.yaxis.axis_label_text_color = FG
+        fg.xaxis.major_label_text_color = FG
+        fg.yaxis.major_label_text_color = FG
+        fg.xgrid.grid_line_color = '#333333'
+        fg.ygrid.grid_line_color = '#333333'
+    top.legend.label_text_color = FG
+    top.legend.background_fill_color = BG
+    top.legend.border_line_color = '#444'
+    top.yaxis.axis_label = 'counts'
+    return top, bot, src_data, src_model, src_resid
+
+def update_decay_bokeh(sources, res):
+    src_data, src_model, src_resid = sources
     t = res.get('time_ns')
     d = res.get('decay')
+    g = res.get('global_summary') or {}
     if t is None or d is None:
-        return blank_figure('no decay')
-    fig = Figure(figsize=(4.5, 3.2))
-    ax = fig.add_subplot(111)
-    ax.semilogy(t, np.clip(d, 1e-1, None), lw=0.8, color='#4fc3f7')
-    ax.set_xlabel('time (ns)')
-    ax.set_ylabel('photons')
-    ax.set_title('summed decay', fontsize=9)
-    ax.grid(True, which='both', color='#333', lw=0.4)
-    style_dark(fig, ax)
-    fig.tight_layout()
-    return fig
+        src_data.data = dict(t=[], y=[])
+        src_model.data = dict(t=[], y=[])
+        src_resid.data = dict(t=[], r=[])
+        return
+    t = np.asarray(t, dtype=float)
+    d = np.clip(np.asarray(d, dtype=float), 1.0, None)
+    src_data.data = dict(t=t, y=d)
+    model = g.get('model')
+    if model is not None:
+        src_model.data = dict(t=t, y=np.clip(np.asarray(model, dtype=float), 1.0, None))
+    else:
+        src_model.data = dict(t=[], y=[])
+    resid = g.get('residuals')
+    fw = g.get('fit_window_bins')
+    if resid is not None and fw is not None:
+        fs, fe = int(fw[0]), int(fw[1])
+        r = np.clip(np.asarray(resid, dtype=float)[fs:fe], -5, 5)
+        src_resid.data = dict(t=t[fs:fe], r=r)
+    else:
+        src_resid.data = dict(t=[], r=[])
 
 def lifetime_map_key(maps):
     key = next((k for k in ('tau_mean_int', 'tau_mean_amp') if k in maps), None)
@@ -164,7 +205,8 @@ def buildApp():
     status = pn.pane.Markdown('Idle.', sizing_mode='stretch_width')
     bar = pn.indicators.Progress(value=0, max=100, sizing_mode='stretch_width', visible=False)
     preview = pn.pane.Matplotlib(blank_figure('no file loaded'), dpi=110, tight=True)
-    decay = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
+    decay_top, decay_bot, src_data, src_model, src_resid = make_decay_bokeh()
+    decay_sources = (src_data, src_model, src_resid)
     taumap = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
     disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1)
     disp_max = pn.widgets.FloatInput(name='Display max (ns)', value=5.0, step=0.1)
@@ -275,7 +317,7 @@ def buildApp():
                 table.value = _rows_to_frame(summary_rows(res))
             except Exception as exc:
                 log.object = f'summary render failed: {exc}'
-            set_pane(decay, decay_figure(res))
+            update_decay_bokeh(decay_sources, res)
             lo, hi = autoscale(res, map_key.value)
             if lo is not None:
                 disp_min.value = round(float(lo), 3)
@@ -314,9 +356,12 @@ def buildApp():
         pn.Row(map_key, disp_min, disp_max),
         taumap,
     )
+    decay_tab = pn.Column(pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
+                          pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
+                          sizing_mode='stretch_width')
     results = pn.Tabs(
         ('Preview', preview),
-        ('Decay', decay),
+        ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
