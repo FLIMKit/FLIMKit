@@ -9,8 +9,8 @@ from matplotlib.figure import Figure
 from flimkit.UI.utils import _C
 from flimkit.web.args import build_fov_args
 
-ACCENT = '#6366f1'
-ACCENT_LIGHT = '#818cf8'
+ACCENT = '#10b981'
+ACCENT_LIGHT = '#34d399'
 BG = '#0a0a0b'
 PANEL = '#0d0d0f'
 BORDER = '#1f1f23'
@@ -123,6 +123,29 @@ CARD_CSS = f'''
   overflow: hidden;
 }}
 '''
+
+def _session_path():
+    import json
+    d = Path.home() / '.flimkit'
+    try:
+        d.mkdir(exist_ok=True)
+    except Exception:
+        pass
+    return d / 'web_session.json'
+
+def load_session():
+    import json
+    try:
+        return json.loads(_session_path().read_text())
+    except Exception:
+        return {}
+
+def save_session(vals):
+    import json
+    try:
+        _session_path().write_text(json.dumps(vals, indent=2, default=str))
+    except Exception:
+        pass
 
 def flim_extensions():
     try:
@@ -412,11 +435,38 @@ def buildApp():
     nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
     ncomp = pn.widgets.IntSlider(name='Distribution components', start=1, end=3, value=1, visible=False)
     mode = pn.widgets.Select(name='Mode', options=['summed', 'perPixel', 'both'], value=cfg['D_mode'])
-    irf_source = pn.widgets.Select(name='IRF', options={'Machine IRF': 'machine', 'Estimate from data': 'estimate'}, value='machine')
+    irf_method = pn.widgets.Select(name='IRF method', options={
+        'Machine IRF': 'machine_irf',
+        'Machine IRF (σ half)': 'machine_irf_sigma_half',
+        'Machine IRF (σ full)': 'machine_irf_sigma_full',
+        'Gaussian': 'gaussian',
+        'Estimate (parametric)': 'parametric',
+        'Estimate (raw)': 'raw',
+    }, value='machine_irf')
     tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01)
     tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1)
+    channel = pn.widgets.TextInput(name='Channel (blank = auto)', placeholder='auto', width=140)
+    threshold = pn.widgets.TextInput(name='Intensity threshold', placeholder='none', width=140)
     pileup = pn.widgets.Checkbox(name='Pile-up correction', value=False)
+    cell_mask = pn.widgets.Checkbox(name='Cell mask (cellpose)', value=False)
     out = pn.widgets.TextInput(name='Output name', value=cfg['OUT_NAME'])
+    optimizer = pn.widgets.Select(name='Optimizer', options=['de', 'lm'], value=cfg['Optimizer'])
+    cost_function = pn.widgets.Select(name='Cost function', options=['poisson', 'chi2'], value='poisson')
+    min_photons = pn.widgets.IntInput(name='Min photons/px', value=int(cfg['MIN_PHOTONS_PERPIX']), start=0)
+    binning = pn.widgets.IntInput(name='Binning factor', value=int(cfg['binning_factor']), start=1)
+    restarts = pn.widgets.IntInput(name='LM restarts', value=int(cfg['lm_restarts']), start=1)
+    de_population = pn.widgets.IntInput(name='DE population', value=int(cfg['de_population']), start=1)
+    de_maxiter = pn.widgets.IntInput(name='DE maxiter', value=int(cfg['de_maxiter']), start=1)
+    workers = pn.widgets.IntInput(name='Workers (-1 = all)', value=int(cfg['n_workers']))
+    irf_fwhm = pn.widgets.TextInput(name='IRF FWHM ns (blank = auto)', placeholder='auto', width=180)
+    fit_start_ns = pn.widgets.TextInput(name='Fit start (ns)', placeholder='auto', width=140)
+    fit_end_ns = pn.widgets.TextInput(name='Fit end (ns)', placeholder='auto', width=140)
+    exclude_ns = pn.widgets.TextInput(name='Exclude ranges (ns)', placeholder='e.g. 7.5-8.5', sizing_mode='stretch_width')
+    fit_t0 = pn.widgets.Checkbox(name='Fit t0', value=False)
+    align_irf = pn.widgets.Checkbox(name='Align IRF', value=False)
+    free_tau = pn.widgets.Checkbox(name='Free tau per-pixel', value=False)
+    tvb_ptu = pn.widgets.TextInput(name='TVB reference file', placeholder='optional', sizing_mode='stretch_width')
+    xlsx = pn.widgets.TextInput(name='FLIM microscope XLSX', placeholder='optional', sizing_mode='stretch_width')
     run = pn.widgets.Button(name='Run fit', button_type='primary', sizing_mode='stretch_width')
     status = pn.pane.Markdown('Idle.', sizing_mode='stretch_width')
     bar = pn.indicators.Progress(value=0, max=100, sizing_mode='stretch_width', visible=False)
@@ -537,12 +587,74 @@ def buildApp():
             'nexp': nexp.value,
             'ncomp': ncomp.value,
             'mode': mode.value,
-            'irf_source': irf_source.value,
+            'irf_method': irf_method.value,
             'tau_min': tau_min.value,
             'tau_max': tau_max.value,
+            'channel': channel.value,
+            'threshold': threshold.value,
             'correct_pileup': pileup.value,
+            'cell_mask': cell_mask.value,
             'out': out.value,
+            'optimizer': optimizer.value,
+            'cost_function': cost_function.value,
+            'min_photons': min_photons.value,
+            'binning': binning.value,
+            'restarts': restarts.value,
+            'de_population': de_population.value,
+            'de_maxiter': de_maxiter.value,
+            'workers': workers.value,
+            'irf_fwhm': irf_fwhm.value,
+            'fit_start_ns': fit_start_ns.value,
+            'fit_end_ns': fit_end_ns.value,
+            'exclude_ns': exclude_ns.value,
+            'fit_t0': fit_t0.value,
+            'align_irf': align_irf.value,
+            'free_tau': free_tau.value,
+            'tvb_ptu': tvb_ptu.value,
+            'xlsx': xlsx.value,
         }
+
+    _persist_widgets = [
+        model, nexp, ncomp, mode, irf_method, tau_min, tau_max, channel, threshold,
+        pileup, cell_mask, out, optimizer, cost_function, min_photons, binning,
+        restarts, de_population, de_maxiter, workers, irf_fwhm, fit_start_ns,
+        fit_end_ns, exclude_ns, fit_t0, align_irf, free_tau, tvb_ptu, xlsx,
+    ]
+
+    def persist(event=None):
+        save_session({'ptu': ptu.value, 'nav': store.get('nav', 'Single FOV'), **collect()})
+
+    def restore_session():
+        sess = load_session()
+        if not sess:
+            return
+        keymap = {
+            'model': model, 'nexp': nexp, 'ncomp': ncomp, 'mode': mode,
+            'irf_method': irf_method, 'tau_min': tau_min, 'tau_max': tau_max,
+            'channel': channel, 'threshold': threshold, 'correct_pileup': pileup,
+            'cell_mask': cell_mask, 'out': out, 'optimizer': optimizer,
+            'cost_function': cost_function, 'min_photons': min_photons, 'binning': binning,
+            'restarts': restarts, 'de_population': de_population, 'de_maxiter': de_maxiter,
+            'workers': workers, 'irf_fwhm': irf_fwhm, 'fit_start_ns': fit_start_ns,
+            'fit_end_ns': fit_end_ns, 'exclude_ns': exclude_ns, 'fit_t0': fit_t0,
+            'align_irf': align_irf, 'free_tau': free_tau, 'tvb_ptu': tvb_ptu, 'xlsx': xlsx,
+        }
+        for key, widget in keymap.items():
+            if key in sess and sess[key] is not None:
+                try:
+                    widget.value = sess[key]
+                except Exception:
+                    pass
+        if sess.get('ptu') and Path(sess['ptu']).is_file():
+            ptu.value = sess['ptu']
+
+    def persist_guarded(event=None):
+        if store.get('restoring'):
+            return
+        persist()
+    for _w in _persist_widgets:
+        _w.param.watch(persist_guarded, 'value')
+    ptu.param.watch(persist_guarded, 'value')
 
     def on_progress(current, total):
         try:
@@ -691,8 +803,22 @@ def buildApp():
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
-    fov_params = pn.Column(model, nexp, ncomp, mode, irf_source, pn.Row(tau_min, tau_max),
-                           pileup, out, run, bar, status, width=300)
+    advanced = pn.Card(
+        pn.Row(channel, threshold),
+        cell_mask,
+        pn.layout.Divider(),
+        pn.Row(optimizer, cost_function),
+        pn.Row(min_photons, binning),
+        pn.Row(restarts, workers),
+        pn.Row(de_population, de_maxiter),
+        pn.layout.Divider(),
+        irf_fwhm, align_irf, fit_t0, free_tau,
+        pn.Row(fit_start_ns, fit_end_ns),
+        exclude_ns, tvb_ptu, xlsx,
+        title='Advanced', collapsed=True, sizing_mode='stretch_width',
+    )
+    fov_params = pn.Column(model, nexp, ncomp, mode, irf_method, pn.Row(tau_min, tau_max),
+                           pileup, out, advanced, run, bar, status, width=300)
     fov_view = pn.Row(
         card('Parameters', fov_params, sizing_mode='fixed', margin=(0, 16, 0, 0)),
         pn.Column(fov_tabs, sizing_mode='stretch_width'),
@@ -740,15 +866,24 @@ def buildApp():
     main_area = pn.Column(views['Single FOV'], margin=(16, 20), sizing_mode='stretch_both')
 
     def select_nav(label):
+        store['nav'] = label
         for lbl, btn in nav_buttons.items():
             btn.stylesheets = [NAV_ACTIVE_CSS if lbl == label else NAV_ITEM_CSS]
         page_title.object = (f'<span style="font-size:15px;font-weight:600;'
                              f'letter-spacing:-0.02em;color:{FG};">{titles[label]}</span>')
         main_area[:] = [views[label]]
+        persist_guarded()
 
     for label, btn in nav_buttons.items():
         btn.on_click(lambda event, lb=label: select_nav(lb))
-    select_nav('Single FOV')
+
+    store['restoring'] = True
+    try:
+        restore_session()
+    finally:
+        store['restoring'] = False
+    _sess = load_session()
+    select_nav(_sess.get('nav', 'Single FOV') if _sess.get('nav') in views else 'Single FOV')
 
     header = pn.Row(page_title, pn.layout.HSpacer(), browse,
                     stylesheets=[HEADER_CSS], sizing_mode='stretch_width', height=56)
