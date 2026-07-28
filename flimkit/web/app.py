@@ -124,6 +124,49 @@ CARD_CSS = f'''
 }}
 '''
 
+def flim_extensions():
+    try:
+        from flimkit.formats.flim_file import _FORMATS
+    except Exception:
+        return ['ptu', 'sdt', 'ifli', 'photons', 'phu', 'bin', 'tif', 'tiff']
+    exts = []
+    for f in _FORMATS:
+        for e in f.get('exts', ()):
+            e = e.lstrip('.').split('.')[-1].lower()
+            if e and e not in exts:
+                exts.append(e)
+    return exts
+
+def native_pick_file():
+    import sys
+    import subprocess
+    exts = flim_extensions()
+    if sys.platform == 'darwin':
+        type_list = ', '.join(f'"{e}"' for e in exts)
+        script = (f'set f to choose file with prompt "Select a FLIM file" '
+                  f'of type {{{type_list}}}\n'
+                  'POSIX path of f')
+        try:
+            out = subprocess.run(['osascript', '-e', script],
+                                 capture_output=True, text=True, timeout=600)
+            path = out.stdout.strip()
+            return path or None
+        except Exception:
+            return None
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        patterns = ' '.join(f'*.{e}' for e in exts)
+        root = tk.Tk()
+        root.withdraw()
+        path = filedialog.askopenfilename(
+            title='Select a FLIM file',
+            filetypes=[('FLIM files', patterns), ('All files', '*.*')])
+        root.destroy()
+        return path or None
+    except Exception:
+        return None
+
 def _labeled_html(text, cls):
     return pn.pane.HTML(f'<div class="{cls}">{text}</div>', margin=0,
                         sizing_mode='stretch_width')
@@ -365,8 +408,6 @@ def buildApp():
     store = {'res': None, 'doc': None}
     ptu = pn.widgets.TextInput(name='PTU / SDT file', placeholder='/path/to/file.ptu', sizing_mode='stretch_width')
     browse = pn.widgets.Button(name='Browse for file...', button_type='default', sizing_mode='stretch_width')
-    picker = pn.widgets.FileSelector('~', file_pattern='*.*', only_files=True, height=420)
-    pick_ok = pn.widgets.Button(name='Use selected file', button_type='primary', width=180)
     model = pn.widgets.Select(name='Model', options=['discrete', 'tail', 'gaussian', 'lognormal'], value='discrete')
     nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
     ncomp = pn.widgets.IntSlider(name='Distribution components', start=1, end=3, value=1, visible=False)
@@ -425,33 +466,20 @@ def buildApp():
         nexp.visible = event.new in ('discrete', 'tail')
     model.param.watch(toggle_ncomp, 'value')
 
-    overlay = pn.Column(
-        pn.Column(
-            pn.pane.HTML(f'<div style="font-size:14px;font-weight:600;color:{FG};'
-                         f'padding:4px 0 10px;">Select a file</div>'),
-            picker, pick_ok,
-            stylesheets=[f''':host {{ background:{PANEL}; border:1px solid {BORDER};
-                border-radius:10px; padding:18px; width:720px; max-width:92vw; }}'''],
-        ),
-        visible=False,
-        stylesheets=['''
-            :host { position: fixed; inset: 0; z-index: 1000;
-                    background: rgba(0,0,0,0.6); align-items: center;
-                    justify-content: center; }
-        '''],
-        sizing_mode='stretch_both',
-    )
-
     def open_browser(event):
-        overlay.visible = True
-    browse.on_click(open_browser)
+        store['doc'] = pn.state.curdoc
+        browse.disabled = True
 
-    def use_pick(event):
-        sel = picker.value
-        if sel:
-            ptu.value = sel[0]
-        overlay.visible = False
-    pick_ok.on_click(use_pick)
+        def pick():
+            path = native_pick_file()
+
+            def apply():
+                browse.disabled = False
+                if path:
+                    ptu.value = path
+            push(apply)
+        threading.Thread(target=pick, daemon=True).start()
+    browse.on_click(open_browser)
 
     def load_preview(path):
         try:
@@ -726,7 +754,7 @@ def buildApp():
                     stylesheets=[HEADER_CSS], sizing_mode='stretch_width', height=56)
     main = pn.Column(header, main_area, sizing_mode='stretch_both',
                      styles={'background': BG})
-    page = pn.Row(sidebar, main, overlay, sizing_mode='stretch_both',
+    page = pn.Row(sidebar, main, sizing_mode='stretch_both',
                   styles={'background': BG, 'gap': '0'})
     return page
 
