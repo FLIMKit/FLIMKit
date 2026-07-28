@@ -11,10 +11,30 @@ from flimkit.web.args import build_fov_args
 
 pn.extension('tabulator', notifications=True)
 
+BG = 'black'
+FG = 'white'
+
+def style_dark(fig, ax):
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
+    ax.title.set_color(FG)
+    ax.xaxis.label.set_color(FG)
+    ax.yaxis.label.set_color(FG)
+    ax.tick_params(colors=FG)
+    for spine in ax.spines.values():
+        spine.set_color(FG)
+
+def style_cbar(cbar):
+    cbar.ax.yaxis.set_tick_params(color=FG, labelcolor=FG)
+    cbar.ax.yaxis.label.set_color(FG)
+    cbar.outline.set_edgecolor(FG)
+
 def blank_figure(msg):
     fig = Figure(figsize=(4.5, 4))
     ax = fig.add_subplot(111)
-    ax.text(0.5, 0.5, msg, ha='center', va='center', color='#888', fontsize=9)
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
+    ax.text(0.5, 0.5, msg, ha='center', va='center', color='#aaa', fontsize=9)
     ax.set_axis_off()
     return fig
 
@@ -26,7 +46,8 @@ def intensity_figure(ptu_path):
     im = ax.imshow(img, cmap='gray')
     ax.set_title(f'{Path(ptu_path).name}  {img.shape[1]}x{img.shape[0]}', fontsize=8)
     ax.set_axis_off()
-    fig.colorbar(im, ax=ax, fraction=0.046, label='photons')
+    style_dark(fig, ax)
+    style_cbar(fig.colorbar(im, ax=ax, fraction=0.046, label='photons'))
     fig.tight_layout()
     return fig
 
@@ -37,30 +58,54 @@ def decay_figure(res):
         return blank_figure('no decay')
     fig = Figure(figsize=(4.5, 3.2))
     ax = fig.add_subplot(111)
-    ax.semilogy(t, np.clip(d, 1e-1, None), lw=0.8)
+    ax.semilogy(t, np.clip(d, 1e-1, None), lw=0.8, color='#4fc3f7')
     ax.set_xlabel('time (ns)')
     ax.set_ylabel('photons')
     ax.set_title('summed decay', fontsize=9)
+    ax.grid(True, which='both', color='#333', lw=0.4)
+    style_dark(fig, ax)
     fig.tight_layout()
     return fig
 
-def lifetime_figure(res):
-    maps = res.get('pixel_maps')
-    if not maps:
-        return blank_figure('per-pixel not run\n(mode = summed)')
+def lifetime_map_key(maps):
     key = next((k for k in ('tau_mean_int', 'tau_mean_amp') if k in maps), None)
     if key is None:
-        key = next((k for k in maps if isinstance(maps[k], np.ndarray) and maps[k].ndim == 2), None)
-    if key is None:
+        key = next((k for k in maps if isinstance(maps[k], np.ndarray) and np.asarray(maps[k]).ndim == 2), None)
+    return key
+
+def autoscale(res, key):
+    maps = res.get('pixel_maps')
+    if not maps:
+        return None, None
+    key = key or lifetime_map_key(maps)
+    if key is None or key not in maps:
+        return None, None
+    arr = np.asarray(maps[key], dtype=float)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return None, None
+    return np.nanpercentile(finite, 2), np.nanpercentile(finite, 98)
+
+def lifetime_figure(res, vmin=None, vmax=None, key=None):
+    maps = res.get('pixel_maps')
+    if not maps:
+        return blank_figure('per-pixel not run\n(mode = summed or perPixel)')
+    key = key or lifetime_map_key(maps)
+    if key is None or key not in maps:
         return blank_figure('no 2-D lifetime map')
     cfg = _C()
     arr = np.asarray(maps[key], dtype=float)
+    if vmin is None:
+        vmin = cfg['TAU_DISPLAY_MIN']
+    if vmax is None:
+        vmax = cfg['TAU_DISPLAY_MAX']
     fig = Figure(figsize=(4.5, 4))
     ax = fig.add_subplot(111)
-    im = ax.imshow(arr, cmap='viridis', vmin=cfg['TAU_DISPLAY_MIN'], vmax=cfg['TAU_DISPLAY_MAX'])
+    im = ax.imshow(arr, cmap='viridis', vmin=vmin, vmax=vmax)
     ax.set_title(key, fontsize=9)
     ax.set_axis_off()
-    fig.colorbar(im, ax=ax, fraction=0.046, label='ns')
+    style_dark(fig, ax)
+    style_cbar(fig.colorbar(im, ax=ax, fraction=0.046, label='ns'))
     fig.tight_layout()
     return fig
 
@@ -94,12 +139,16 @@ def summary_rows(res):
         rows.append({'quantity': 'count rate', 'value': f"{res['count_rate_mhz']:.3f}", 'unit': 'MHz'})
     return rows
 
+def _rows_to_frame(rows):
+    import pandas as pd
+    return pd.DataFrame(rows, columns=['quantity', 'value', 'unit'])
+
 def buildApp():
     cfg = _C()
+    store = {'res': None}
     ptu = pn.widgets.TextInput(name='PTU / SDT file', placeholder='/path/to/file.ptu', sizing_mode='stretch_width')
-    browse = pn.widgets.Button(name='Browse', width=90)
-    picker = pn.widgets.FileSelector('~', file_pattern='*.*', only_files=True, height=280, visible=False)
-    load = pn.widgets.Button(name='Load preview', button_type='default', width=130)
+    picker = pn.widgets.FileSelector('~', file_pattern='*.*', only_files=True, height=260)
+    file_card = pn.Card(picker, title='Browse files', collapsed=True, sizing_mode='stretch_width')
     model = pn.widgets.Select(name='Model', options=['discrete', 'tail', 'gaussian', 'lognormal'], value='discrete')
     nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
     ncomp = pn.widgets.IntSlider(name='Distribution components', start=1, end=3, value=1, visible=False)
@@ -115,38 +164,56 @@ def buildApp():
     preview = pn.pane.Matplotlib(blank_figure('no file loaded'), dpi=110, tight=True)
     decay = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
     taumap = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
+    disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1)
+    disp_max = pn.widgets.FloatInput(name='Display max (ns)', value=5.0, step=0.1)
+    map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
     cancel = threading.Event()
+
+    def push(fn):
+        if pn.state.curdoc is not None:
+            pn.state.execute(fn)
+        else:
+            fn()
+
+    def set_pane(pane, fig):
+        pane.object = fig
+        pane.param.trigger('object')
 
     def toggle_ncomp(event):
         ncomp.visible = event.new in ('gaussian', 'lognormal')
         nexp.visible = event.new in ('discrete', 'tail')
     model.param.watch(toggle_ncomp, 'value')
 
-    def toggle_browse(event):
-        picker.visible = not picker.visible
-    browse.on_click(toggle_browse)
-
     def take_pick(event):
         if event.new:
             ptu.value = event.new[0]
-            picker.visible = False
+            file_card.collapsed = True
     picker.param.watch(take_pick, 'value')
 
-    def do_load(event):
-        path = ptu.value.strip()
-        if not path or not Path(path).exists():
-            status.object = '**No such file.** Pick a valid PTU/SDT path.'
-            return
-        status.object = 'Building intensity preview...'
+    def load_preview(path):
         try:
-            preview.object = intensity_figure(path)
+            set_pane(preview, intensity_figure(path))
             status.object = f'Loaded `{Path(path).name}`.'
         except Exception as exc:
-            preview.object = blank_figure('preview failed')
+            set_pane(preview, blank_figure('preview failed'))
             status.object = f'**Preview failed:** {exc}'
-    load.on_click(do_load)
+
+    def on_path(event):
+        path = (event.new or '').strip()
+        if path and Path(path).is_file():
+            status.object = 'Building intensity preview...'
+            load_preview(path)
+    ptu.param.watch(on_path, 'value')
+
+    def redraw_lifetime(event=None):
+        res = store['res']
+        if res is None:
+            return
+        set_pane(taumap, lifetime_figure(res, vmin=disp_min.value, vmax=disp_max.value, key=map_key.value))
+    for w in (disp_min, disp_max, map_key):
+        w.param.watch(redraw_lifetime, 'value')
 
     def collect():
         return {
@@ -161,12 +228,6 @@ def buildApp():
             'correct_pileup': pileup.value,
             'out': out.value,
         }
-
-    def push(fn):
-        if pn.state.curdoc is not None:
-            pn.state.execute(fn)
-        else:
-            fn()
 
     def on_progress(current, total):
         try:
@@ -192,17 +253,25 @@ def buildApp():
             push(fail)
             return
         def done():
+            store['res'] = res
             bar.visible = False
             run.disabled = False
             status.object = f"Done. Output in `{Path(a.out).parent}`."
-            table.value = _rows_to_frame(summary_rows(res))
-            decay.object = decay_figure(res)
-            taumap.object = lifetime_figure(res)
+            try:
+                table.value = _rows_to_frame(summary_rows(res))
+            except Exception as exc:
+                log.object = f'summary render failed: {exc}'
+            set_pane(decay, decay_figure(res))
+            lo, hi = autoscale(res, map_key.value)
+            if lo is not None:
+                disp_min.value = round(float(lo), 3)
+                disp_max.value = round(float(hi), 3)
+            set_pane(taumap, lifetime_figure(res, vmin=disp_min.value, vmax=disp_max.value, key=map_key.value))
         push(done)
 
     def do_run(event):
         path = ptu.value.strip()
-        if not path or not Path(path).exists():
+        if not path or not Path(path).is_file():
             status.object = '**No such file.** Pick a valid PTU/SDT path.'
             return
         cancel.clear()
@@ -216,9 +285,8 @@ def buildApp():
     run.on_click(do_run)
 
     controls = pn.Column(
-        pn.Row(ptu, browse),
-        picker,
-        load,
+        ptu,
+        file_card,
         pn.layout.Divider(),
         model, nexp, ncomp, mode, irf_source,
         pn.Row(tau_min, tau_max),
@@ -227,22 +295,23 @@ def buildApp():
         run, bar, status,
         width=380,
     )
+    lifetime_tab = pn.Column(
+        pn.Row(map_key, disp_min, disp_max),
+        taumap,
+    )
     results = pn.Tabs(
         ('Preview', preview),
         ('Decay', decay),
-        ('Lifetime map', taumap),
+        ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
     )
     return pn.template.FastListTemplate(
         title='FLIMKit',
+        theme='dark',
         sidebar=[controls],
         main=[results],
         sidebar_width=400,
     )
-
-def _rows_to_frame(rows):
-    import pandas as pd
-    return pd.DataFrame(rows, columns=['quantity', 'value', 'unit'])
 
 def serve(port=5006, show=True):
     pn.serve(buildApp, port=port, show=show, threaded=False)
