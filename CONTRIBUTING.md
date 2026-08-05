@@ -21,6 +21,8 @@ Open an issue at https://github.com/alex1075/FLIMKit/issues and include:
 - Your OS, Python version, and FLIMKit version (`python -c "from flimkit._version import __version__; print(__version__)"`).
 - The instrument and file format involved, and the acquisition mode (image or point) if relevant.
 
+Security problems do not go in the issue tracker. See [SECURITY.md](SECURITY.md) for how to report those privately.
+
 FLIM files are often large and sometimes unpublished, so do not attach data you cannot share. A header dump or the file's shape and metadata is usually enough to diagnose a reader problem, and we will ask if we need more.
 
 ## Sharing sample files
