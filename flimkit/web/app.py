@@ -501,8 +501,8 @@ def buildApp():
         'Estimate (parametric)': 'parametric',
         'Estimate (raw)': 'raw',
     }, value='machine_irf')
-    tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01)
-    tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1)
+    tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01, width=142)
+    tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1, width=142)
     channel = pn.widgets.TextInput(name='Channel (blank = auto)', placeholder='auto', width=140)
     threshold = pn.widgets.TextInput(name='Intensity threshold', placeholder='none', width=140)
     pileup = pn.widgets.Checkbox(name='Pile-up correction', value=False)
@@ -550,8 +550,8 @@ def buildApp():
     proj_files = pn.widgets.Tabulator(value=None, show_index=False, height=180,
                                       sizing_mode='stretch_width', selectable=1)
     roi_nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
-    roi_tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01)
-    roi_tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1)
+    roi_tau_min = pn.widgets.FloatInput(name='Tau min (ns)', value=float(cfg['Tau_min']), step=0.01, width=142)
+    roi_tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1, width=142)
     roi_fig, roi_img_src, roi_box_src, roi_mapper = make_roi_figure()
     roi_load = pn.widgets.Button(name='Load image', button_type='default', width=140)
     roi_clear = pn.widgets.Button(name='Clear boxes', button_type='default', width=140)
