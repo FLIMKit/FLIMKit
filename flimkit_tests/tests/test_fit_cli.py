@@ -57,6 +57,20 @@ class TestCliArgParsing:
             # Should not raise
             cli.single_FOV_flim_fit_cli()
 
+    def test_irf_export_alias_is_accepted(self):
+        """--irf-export is a readable alias for the legacy --irf-xlsx option."""
+        cli = _get_parser()
+        with patch('sys.argv', ['fit_cli.py', '--ptu', '/fake.ptu',
+                                '--irf-export', '/fake/irf.csv', '--print-config']):
+            cli.single_FOV_flim_fit_cli()
+
+    def test_analysis_export_alias_is_accepted(self):
+        """--analysis-export is a readable alias for the legacy --xlsx option."""
+        cli = _get_parser()
+        with patch('sys.argv', ['fit_cli.py', '--ptu', '/fake.ptu',
+                                '--analysis-export', '/fake/fov.csv', '--print-config']):
+            cli.single_FOV_flim_fit_cli()
+
 
 class TestIrfStrategyBranching:
     """Test the IRF selection logic using mock PTU/xlsx objects."""
