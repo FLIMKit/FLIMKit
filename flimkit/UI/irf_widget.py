@@ -50,7 +50,8 @@ class IRFWidget:
             _flim = ' '.join('*' + e for e in supported_extensions())
             _browse_file(self.sv_path, 'Select IRF file',
                          [('FLIM / PCK / LAS X export',
-                           _flim + ' *.pck *.xlsx *.csv'), ('All', '*.*')])
+                           _flim + ' *.pck *.xlsx *.csv *.tsv *.txt *.dat *.ascii *.asc'),
+                          ('All', '*.*')])
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
