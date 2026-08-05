@@ -1,8 +1,10 @@
 import pytest
 import tkinter as tk
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from flimkit.UI.gui import _UIBuilder
+from flimkit.UI.irf_widget import IRFWidget
 
 MODES = ['fov', 'stitch', 'phasor', 'batch', 'irf']
 
@@ -131,3 +133,16 @@ def test_stitch_args_stitch_only_pipeline(app):
     assert a.mode == 'both'
     assert a.no_plots == False
     assert a.irf_xlsx_dir is None
+
+
+def test_irf_widget_browse_accepts_csv_exports():
+    widget = IRFWidget.__new__(IRFWidget)
+    widget.sv_method = MagicMock()
+    widget.sv_method.get.return_value = 'irf_xlsx'
+    widget.sv_path = MagicMock()
+
+    with patch('flimkit.UI.irf_widget._browse_file') as browse:
+        widget._browse_irf_path()
+
+    filetypes = browse.call_args.args[2]
+    assert any('*.csv' in pattern for _, pattern in filetypes)

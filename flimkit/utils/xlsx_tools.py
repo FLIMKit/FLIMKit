@@ -1,10 +1,46 @@
+from pathlib import Path
+
 import pandas as pd
 
-def load_xlsx(path: str, debug: bool = False) -> dict:
-    df_raw = pd.read_excel(path, sheet_name=0, header=None)
+
+def _csv_layout(path: str | Path) -> tuple[str, int]:
+    with Path(path).open(encoding='utf-8-sig') as export:
+        for line in export:
+            if 'time [' not in line.lower():
+                continue
+            counts = {delimiter: line.count(delimiter) for delimiter in (',', ';')}
+            delimiter = max(counts, key=lambda item: counts[item])
+            if counts[delimiter]:
+                return delimiter, counts[delimiter] + 1
+    raise ValueError(
+        f'Could not parse {Path(path).name}: no delimited LAS X header '
+        'containing "Time [" was found.'
+    )
+
+
+def _read_export(path: str | Path, header=None) -> pd.DataFrame:
+    suffix = Path(path).suffix.lower()
+    if suffix == '.xlsx':
+        return pd.read_excel(path, sheet_name=0, header=header)
+    if suffix == '.csv':
+        delimiter, n_columns = _csv_layout(path)
+        decimal = ',' if delimiter == ';' else '.'
+        if header is None:
+            return pd.read_csv(path, sep=delimiter, decimal=decimal, header=None,
+                               names=range(n_columns), encoding='utf-8-sig')
+        return pd.read_csv(path, sep=delimiter, decimal=decimal, header=header,
+                           encoding='utf-8-sig')
+    raise ValueError(
+        f'Unsupported LAS X export format: {suffix or "<none>"}. '
+        'Expected .xlsx or .csv.'
+    )
+
+
+def load_irf_export(path: str | Path, debug: bool = False) -> dict:
+    df_raw = _read_export(path, header=None)
 
     if debug:
-        print(f"    Raw xlsx shape: {df_raw.shape}")
+        print(f"    Raw export shape: {df_raw.shape}")
         print(f"    First 5 rows:")
         for i in range(min(5, len(df_raw))):
             vals = [str(v) for v in df_raw.iloc[i].values if pd.notna(v)]
@@ -26,7 +62,7 @@ def load_xlsx(path: str, debug: bool = False) -> dict:
     if debug:
         print(f"    Detected header row: {header_row}")
 
-    df        = pd.read_excel(path, sheet_name=0, header=header_row)
+    df        = _read_export(path, header=header_row)
     df        = df.dropna(axis=1, how='all')
     col_names = list(df.columns)
 
@@ -75,3 +111,8 @@ def load_xlsx(path: str, debug: bool = False) -> dict:
         print(f"    {k:12s}: {status}")
 
     return out
+
+
+def load_xlsx(path: str | Path, debug: bool = False) -> dict:
+    """Backward-compatible wrapper for LAS X Excel exports."""
+    return load_irf_export(path, debug=debug)

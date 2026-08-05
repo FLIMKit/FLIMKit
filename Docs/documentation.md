@@ -379,9 +379,9 @@ python fit_cli.py [OPTIONS]
 |---|---|
 | `--machine-irf PATH` | Pre-built machine IRF `.npy` file (recommended) |
 | `--irf PATH` | Scatter PTU for a directly measured IRF |
-| `--irf-xlsx PATH` | FLIM microscope software Excel export for analytical IRF fitting |
-| `--xlsx PATH` | FLIM microscope software export XLSX for comparison |
-| `--no-xlsx-irf` | Use XLSX for comparison only; don't use its IRF |
+| `--irf-xlsx PATH`, `--irf-export PATH` | LAS X `.xlsx` or `.csv` export for analytical IRF fitting |
+| `--xlsx PATH`, `--analysis-export PATH` | LAS X `.xlsx` or `.csv` export for comparison |
+| `--no-xlsx-irf` | Use the analysis export for comparison only; don't use its IRF |
 | `--estimate-irf {raw,parametric,machine_irf,machine_irf_sigma_full,machine_irf_sigma_half,none}` | Estimate IRF from decay rising edge, or reuse the machine IRF shape (default: `none`) |
 | `--irf-fwhm FLOAT` | IRF FWHM in ns |
 | `--irf-bins INT` | Number of bins for the IRF (default: 21) |

@@ -169,7 +169,7 @@ Imaging files are reconstructed into a per-pixel decay cube `(Y, X, H)` from the
 **IRF sources:**
 
 - Measured / scatter IRF from a `.ptu`
-- Leica IRF from the exported `.xlsx` (interpolated or analytical model)
+- Leica IRF from an exported `.xlsx` or `.csv` file (interpolated or analytical model)
 - PicoQuant SymPhoTime Check file (`.pck`) histogram
 - A built machine IRF, or an analytical Gaussian IRF
 

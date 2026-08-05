@@ -18,7 +18,7 @@ from .FLIM.fit_tools import find_irf_peak_bin
 from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, align_irf_to_bin, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
 from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
                            fit_per_pixel_dist, fit_summed_tail)
-from .utils.xlsx_tools import load_xlsx
+from .utils.xlsx_tools import load_irf_export
 from .utils.misc import print_summary
 from .utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from .utils.enhanced_outputs import (
@@ -152,7 +152,7 @@ def stitch_and_fit_inquire():
     stitch_args = stitch_tiles_inquire()
     print('\nStep 2: FLIM Fitting Setup')
     print('\nIRF estimation options:')
-    print("  1. 'irf_xlsx'                - analytical Gaussian+tail fit from XLSX (recommended)")
+    print("  1. 'irf_xlsx'                - analytical Gaussian+tail fit from LAS X export (recommended)")
     print("  2. 'file'                    - measured IRF image (scatter PTU)")
     print("  3. 'machine_irf'             - prebuilt machine IRF (.npy), peak-aligned to decay")
     print("  4. 'machine_irf_sigma_full'  - machine IRF + full σ broadening (σ≤3.0)")
@@ -168,9 +168,9 @@ def stitch_and_fit_inquire():
     irf_xlsx_path = None
     machine_irf_path = None
     if estimate_irf == 'irf_xlsx':
-        irf_xlsx_path = input('Enter path to IRF XLSX file: ').strip()
+        irf_xlsx_path = input('Enter path to IRF export (.xlsx or .csv): ').strip()
         if not irf_xlsx_path or not Path(irf_xlsx_path).exists():
-            print('  Warning: XLSX file not found, falling back to Gaussian')
+            print('  Warning: IRF export not found, falling back to Gaussian')
             estimate_irf = 'gaussian'
             irf_xlsx_path = None
     elif estimate_irf == 'file':
@@ -455,10 +455,10 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
     elif getattr(args, 'irf_xlsx', None) is not None:
         print(f'  IRF: fitting analytical model to: {args.irf_xlsx}')
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f'IRF XLSX file not found: {args.irf_xlsx}')
-        irf_ref = load_xlsx(args.irf_xlsx, debug=False)
+            raise FileNotFoundError(f'IRF export file not found: {args.irf_xlsx}')
+        irf_ref = load_irf_export(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f'No IRF columns found in XLSX: {args.irf_xlsx}')
+            raise ValueError(f'No IRF columns found in export: {args.irf_xlsx}')
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, n_bins, tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))
@@ -658,10 +658,10 @@ def single_FOV_flim_fit_inquire():
     ptu_path = input('Enter path to PTU file for this FOV: ').strip().strip('\'"').strip()
     if not ptu_path:
         raise ValueError('PTU file path is required.')
-    xlsxq = yes_no_question('Do you have an XLSX file for this FOV? (Recommended for pixel size info)')
+    xlsxq = yes_no_question('Do you have a LAS X export for this FOV? (Recommended for pixel size info)')
     if xlsxq == 'y':
-        xlif_path = input('Enter path to XLSX file: ').strip()
-        irf_xlsxq = yes_no_question('Do you want to use the IRF from this XLSX file? (Recommended if available)')
+        xlif_path = input('Enter path to LAS X export (.xlsx or .csv): ').strip()
+        irf_xlsxq = yes_no_question('Do you want to use the IRF from this export? (Recommended if available)')
         if irf_xlsxq == 'y':
             use_xlsx_irf = True
             estimate_irf = 'none'
@@ -696,7 +696,7 @@ def single_FOV_flim_fit_inquire():
     else:
         xlif_path = None
         use_xlsx_irf = False
-        print('\nNo XLSX file, IRF must be estimated or provided separately.')
+        print('\nNo LAS X export, IRF must be estimated or provided separately.')
         method_q = [inquirer.List('method',
                                   message='Choose IRF estimation method',
                                   choices=['file', 'machine_irf', 'machine_irf_sigma_full', 'machine_irf_sigma_half', 'raw', 'parametric', 'none'])]
@@ -912,14 +912,14 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
               f'{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)')
     xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
-        print(f'\n[3] XLSX: {args.xlsx}')
-        xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
+        print(f'\n[3] LAS X export: {args.xlsx}')
+        xlsx = load_irf_export(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
             print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
         elif xlsx['fit_t'] is not None:
             print(f'    FLIM microscope fit_t present but fit_c absent')
     else:
-        print(f'\n[3] No XLSX provided or file not found')
+        print(f'\n[3] No LAS X export provided or file not found')
     print(f'\n[4] Building IRF')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
@@ -932,10 +932,10 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     elif args.irf_xlsx is not None:
         print(f'  IRF: fitting analytical model to: {args.irf_xlsx}')
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f'--irf-xlsx file not found: {args.irf_xlsx}')
-        irf_ref = load_xlsx(args.irf_xlsx, debug=False)
+            raise FileNotFoundError(f'IRF export file not found: {args.irf_xlsx}')
+        irf_ref = load_irf_export(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f'No IRF columns found in --irf-xlsx: {args.irf_xlsx}')
+            raise ValueError(f'No IRF columns found in export: {args.irf_xlsx}')
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, ptu.n_bins, ptu.tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))
@@ -1157,14 +1157,14 @@ def single_FOV_flim_fit(interactive=False):
         args = single_FOV_flim_fit_inquire()
     else:
         ap = argparse.ArgumentParser(
-            description='FLIM reconvolution fit, PTU + optional XLSX (FLIM microscope)'
+            description='FLIM reconvolution fit, PTU + optional LAS X export'
         )
         ap.add_argument('--ptu',   default=None, required=True)
-        ap.add_argument('--xlsx',  default=None)
+        ap.add_argument('--xlsx', '--analysis-export', dest='xlsx', default=None)
         ap.add_argument('--no-xlsx-irf', action='store_true')
         ap.add_argument('--debug-xlsx', action='store_true')
         ap.add_argument('--irf',   default=None)
-        ap.add_argument('--irf-xlsx', default=None)
+        ap.add_argument('--irf-xlsx', '--irf-export', dest='irf_xlsx', default=None)
         ap.add_argument('--estimate-irf', choices=['raw', 'parametric', 'machine_irf', 'none'],
                         default=Estimate_IRF)
         ap.add_argument('--machine-irf', default=str(MACHINE_IRF_DEFAULT_PATH))

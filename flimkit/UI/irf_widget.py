@@ -6,7 +6,7 @@ from flimkit.UI.utils import _browse_file, _section
 class IRFWidget:
     _AUTO_FILL = object()
     CHOICES = [
-        ('Analytical model (XLSX)',                      'irf_xlsx'),
+        ('Analytical model (LAS X export)',              'irf_xlsx'),
         ('Machine IRF (.npy pre-built)',                 'machine_irf'),
         ('Machine IRF + full σ broadening',               'machine_irf_sigma_full'),
         ('Machine IRF + half σ broadening (σ≤0.5)',       'machine_irf_sigma_half'),
@@ -37,7 +37,7 @@ class IRFWidget:
         self._path_btn.grid(row=r, column=2, padx=4, pady=3)
         self._note = ttk.Label(
             self.frame,
-            text='Uses the XLSX entered in Input Files above',
+            text='Uses the LAS X export entered in Input Files above',
             foreground='grey')
         self._note.grid(row=r + 1, column=0, columnspan=3, sticky='w', padx=8, pady=3)
         self._update()
@@ -49,7 +49,8 @@ class IRFWidget:
             from flimkit.formats import supported_extensions
             _flim = ' '.join('*' + e for e in supported_extensions())
             _browse_file(self.sv_path, 'Select IRF file',
-                         [('FLIM / PCK / XLSX', _flim + ' *.pck *.xlsx'), ('All', '*.*')])
+                         [('FLIM / PCK / LAS X export',
+                           _flim + ' *.pck *.xlsx *.csv'), ('All', '*.*')])
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
