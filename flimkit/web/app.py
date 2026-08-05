@@ -484,6 +484,43 @@ def _rows_to_frame(rows):
     import pandas as pd
     return pd.DataFrame(rows, columns=['quantity', 'value', 'unit'])
 
+def results_html(res):
+    g = (res or {}).get('global_summary') or {}
+    taus = _seq(g, 'taus_ns')
+    tiles = ''
+    for i, tau in enumerate(taus):
+        tiles += (f'<div style="background:{BG};border:1px solid {BORDER2};border-radius:6px;'
+                  f'padding:10px;">'
+                  f'<div style="font-size:10px;font-weight:500;color:{FAINT};margin-bottom:4px;">'
+                  f'&tau;{i+1}</div>'
+                  f'<div style="font-family:\'JetBrains Mono\',monospace;color:{ACCENT_LIGHT};">'
+                  f'{float(tau):.3f} <span style="color:{FAINT};">ns</span></div></div>')
+    grid = (f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+            f'{tiles}</div>') if tiles else ''
+    stat_rows = ''
+    for key, label, unit in (('tau_mean_amp_ns', '&tau; mean (amp)', 'ns'),
+                             ('tau_mean_int_ns', '&tau; mean (int)', 'ns'),
+                             ('reduced_chi2', 'reduced &chi;&sup2;', ''),
+                             ('reduced_chi2_pearson', '&chi;&sup2; Pearson', ''),
+                             ('irf_fwhm_eff_ns', 'IRF FWHM', 'ns')):
+        v = g.get(key)
+        if isinstance(v, (int, float)) and v == v:
+            stat_rows += (f'<div style="display:flex;justify-content:space-between;padding:6px 0;'
+                          f'border-bottom:1px solid {BORDER2};font-family:\'JetBrains Mono\',monospace;">'
+                          f'<span style="color:{DIM};">{label}</span>'
+                          f'<span style="color:{FG};">{v:,.3f} {unit}</span></div>')
+    for key, label, unit, color in (('pileup_pct', 'pile-up', '%', '#fbbf24'),
+                                    ('count_rate_mhz', 'count rate', 'MHz', FG)):
+        v = (res or {}).get(key)
+        if isinstance(v, (int, float)) and v == v:
+            stat_rows += (f'<div style="display:flex;justify-content:space-between;padding:6px 0;'
+                          f'border-bottom:1px solid {BORDER2};font-family:\'JetBrains Mono\',monospace;">'
+                          f'<span style="color:{DIM};">{label}</span>'
+                          f'<span style="color:{color};">{v:.3f} {unit}</span></div>')
+    if not tiles and not stat_rows:
+        return f'<div style="color:{DIM};font-size:12px;padding:8px;">Run a fit to see results.</div>'
+    return f'<div style="font-size:12px;">{grid}{stat_rows}</div>'
+
 def buildApp():
     cfg = _C()
     store = {'res': None, 'doc': None}
@@ -541,6 +578,7 @@ def buildApp():
     map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
+    result_tiles = pn.pane.HTML(results_html(None), sizing_mode='stretch_width')
     nav_buttons = {}
     for label, icon in NAV_FUNCS:
         nav_buttons[label] = pn.widgets.Button(
@@ -767,6 +805,7 @@ def buildApp():
             status.object = f"Done. Output in `{Path(a.out).parent}`."
             try:
                 table.value = _rows_to_frame(summary_rows(res))
+                result_tiles.object = results_html(res)
             except Exception as exc:
                 log.object = f'summary render failed: {exc}'
             update_decay_bokeh(decay_sources, res)
@@ -927,9 +966,13 @@ def buildApp():
         ('Preview', preview),
         ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
-        ('Summary', pn.Column(table, log)),
         stylesheets=[TABS_CSS],
     )
+    results_col = card('Fit results', result_tiles,
+                       pn.Card(table, log, title='Full table', collapsed=True,
+                               sizing_mode='stretch_width'),
+                       sizing_mode='fixed', margin=(0, 0, 0, 16))
+    results_col.width = 260
     advanced = pn.Card(
         pn.Row(channel, threshold),
         cell_mask,
@@ -948,6 +991,7 @@ def buildApp():
     fov_view = pn.Row(
         card('Parameters', fov_params, sizing_mode='fixed', margin=(0, 16, 0, 0)),
         pn.Column(fov_tabs, sizing_mode='stretch_width'),
+        results_col,
         sizing_mode='stretch_width',
     )
     roi_params = pn.Column(roi_nexp, pn.Row(roi_tau_min, roi_tau_max),
