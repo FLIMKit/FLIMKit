@@ -287,6 +287,22 @@ def intensity_figure(ptu_path):
     fig.tight_layout()
     return fig
 
+def _parse_exclude(text):
+    text = (text or '').strip()
+    if not text:
+        return None
+    first = text.split(',')[0]
+    if '-' not in first:
+        return None
+    try:
+        lo, hi = first.split('-', 1)
+        lo, hi = float(lo), float(hi)
+    except ValueError:
+        return None
+    if hi <= lo:
+        return None
+    return (lo, hi)
+
 def make_decay_bokeh():
     from bokeh.plotting import figure
     from bokeh.models import ColumnDataSource, BoxAnnotation, BoxSelectTool
@@ -515,6 +531,10 @@ def buildApp():
     preview = pn.pane.Matplotlib(blank_figure('no file loaded'), dpi=110, tight=True)
     decay_top, decay_bot, src_data, src_model, src_resid, decay_fit_box, decay_excl_box = make_decay_bokeh()
     decay_sources = (src_data, src_model, src_resid)
+    sel_target = pn.widgets.RadioButtonGroup(
+        name='Drag sets', options=['Fit window', 'Exclude range'],
+        value='Fit window', button_type='default')
+    sel_clear = pn.widgets.Button(name='Clear exclude', button_type='default', width=130)
     taumap = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
     disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1)
     disp_max = pn.widgets.FloatInput(name='Display max (ns)', value=5.0, step=0.1)
@@ -773,6 +793,47 @@ def buildApp():
         threading.Thread(target=worker, args=(a,), daemon=True).start()
     run.on_click(do_run)
 
+    def _to_ns(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    def sync_fit_boxes(event=None):
+        lo, hi = _to_ns(fit_start_ns.value), _to_ns(fit_end_ns.value)
+        if lo is not None and hi is not None and hi > lo:
+            decay_fit_box.left, decay_fit_box.right = lo, hi
+            decay_fit_box.visible = True
+        else:
+            decay_fit_box.visible = False
+        rng = _parse_exclude(exclude_ns.value)
+        if rng:
+            decay_excl_box.left, decay_excl_box.right = rng
+            decay_excl_box.visible = True
+        else:
+            decay_excl_box.visible = False
+    for _w in (fit_start_ns, fit_end_ns, exclude_ns):
+        _w.param.watch(sync_fit_boxes, 'value')
+
+    def on_decay_select(event):
+        geo = getattr(event, 'geometry', None) or {}
+        if geo.get('type') != 'rect':
+            return
+        x0, x1 = sorted((float(geo['x0']), float(geo['x1'])))
+        if sel_target.value == 'Fit window':
+            fit_start_ns.value = f'{x0:.3f}'
+            fit_end_ns.value = f'{x1:.3f}'
+        else:
+            exclude_ns.value = f'{x0:.3f}-{x1:.3f}'
+        sync_fit_boxes()
+    from bokeh.events import SelectionGeometry
+    decay_top.on_event(SelectionGeometry, on_decay_select)
+
+    def do_sel_clear(event):
+        exclude_ns.value = ''
+        sync_fit_boxes()
+    sel_clear.on_click(do_sel_clear)
+
     def do_roi_load(event):
         path = ptu.value.strip()
         if not path or not Path(path).is_file():
@@ -854,9 +915,14 @@ def buildApp():
     )
 
     lifetime_tab = pn.Column(pn.Row(map_key, disp_min, disp_max), taumap)
-    decay_tab = pn.Column(pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
-                          pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
-                          sizing_mode='stretch_width')
+    decay_tab = pn.Column(
+        pn.Row(pn.pane.HTML(f'<span style="font-size:11px;color:{MUTED};align-self:center;">'
+                            f'Box-select on the plot &rarr;</span>'),
+               sel_target, sel_clear),
+        pn.Row(fit_start_ns, fit_end_ns, exclude_ns),
+        pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
+        pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
+        sizing_mode='stretch_width')
     fov_tabs = pn.Tabs(
         ('Preview', preview),
         ('Decay', decay_tab),
@@ -874,8 +940,7 @@ def buildApp():
         pn.Row(de_population, de_maxiter),
         pn.layout.Divider(),
         irf_fwhm, align_irf, fit_t0, free_tau,
-        pn.Row(fit_start_ns, fit_end_ns),
-        exclude_ns, tvb_ptu, xlsx,
+        tvb_ptu, xlsx,
         title='Advanced', collapsed=True, sizing_mode='stretch_width',
     )
     fov_params = pn.Column(model, nexp, ncomp, mode, irf_method, pn.Row(tau_min, tau_max),
