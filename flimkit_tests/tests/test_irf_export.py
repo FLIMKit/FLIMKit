@@ -22,6 +22,21 @@ def test_loads_lasx_csv_irf_columns(tmp_path):
     np.testing.assert_allclose(result['irf_c'], [1.0, 8.0, 2.0])
 
 
+def test_ignores_preamble_rows_wider_than_lasx_header(tmp_path):
+    export = tmp_path / 'irf.csv'
+    export.write_text(
+        'metadata,with,more,fields,than,the,table\n'
+        'Time [ns],Decay [counts],Time [ns],IRF [counts]\n'
+        '0.0,20,0.0,1\n'
+        '0.1,15,0.1,8\n'
+    )
+
+    result = load_irf_export(export)
+
+    np.testing.assert_allclose(result['irf_t'], [0.0, 0.1])
+    np.testing.assert_allclose(result['irf_c'], [1.0, 8.0])
+
+
 def test_loads_semicolon_delimited_lasx_csv(tmp_path):
     export = tmp_path / 'irf.csv'
     export.write_text(

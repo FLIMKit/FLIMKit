@@ -5,13 +5,13 @@ import pandas as pd
 
 def _csv_layout(path: str | Path) -> tuple[str, int]:
     with Path(path).open(encoding='utf-8-sig') as export:
-        for line in export:
+        for line_number, line in enumerate(export):
             if 'time [' not in line.lower():
                 continue
             counts = {delimiter: line.count(delimiter) for delimiter in (',', ';')}
             delimiter = max(counts, key=lambda item: counts[item])
             if counts[delimiter]:
-                return delimiter, counts[delimiter] + 1
+                return delimiter, line_number
     raise ValueError(
         f'Could not parse {Path(path).name}: no delimited LAS X header '
         'containing "Time [" was found.'
@@ -23,13 +23,10 @@ def _read_export(path: str | Path, header=None) -> pd.DataFrame:
     if suffix == '.xlsx':
         return pd.read_excel(path, sheet_name=0, header=header)
     if suffix == '.csv':
-        delimiter, n_columns = _csv_layout(path)
+        delimiter, header_line = _csv_layout(path)
         decimal = ',' if delimiter == ';' else '.'
-        if header is None:
-            return pd.read_csv(path, sep=delimiter, decimal=decimal, header=None,
-                               names=range(n_columns), encoding='utf-8-sig')
         return pd.read_csv(path, sep=delimiter, decimal=decimal, header=header,
-                           encoding='utf-8-sig')
+                           skiprows=header_line, encoding='utf-8-sig')
     raise ValueError(
         f'Unsupported LAS X export format: {suffix or "<none>"}. '
         'Expected .xlsx or .csv.'
