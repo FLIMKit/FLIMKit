@@ -245,7 +245,7 @@ Done: single FOV fitting, tile stitching, batch ROI processing, timelapse and z-
 
 Up next: config persistence, stat histograms, auto-region detection, batch n-exp in GUI. Chemical validation and publication pending.
 
-See [ROADMAP.md](ROADMAP.md) for details.
+See [ROADMAP.md](Docs/ROADMAP.md) for details.
 
 ## Notes on FLIM microscope software comparison
 

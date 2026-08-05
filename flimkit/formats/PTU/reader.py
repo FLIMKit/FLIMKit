@@ -81,10 +81,11 @@ class PTUFile:
         self.global_resolution = gr
         self.sync_rate = (1.0 / gr) if gr else 0.0
         self.period_ns = gr * 1e9
+        self.n_bins_stored = int(dims.get('H', 0))
         if self.tcspc_res > 0 and gr > 0:
             self.n_bins = int(math.ceil(gr / self.tcspc_res))
         else:
-            self.n_bins = int(dims.get('H', 0))
+            self.n_bins = self.n_bins_stored
         self.n_x = int(dims.get('X', 0))
         self.n_y = int(dims.get('Y', 0))
         self.is_image = bool(getattr(p, 'is_image', self.n_x > 0 and self.n_y > 0))
@@ -104,6 +105,8 @@ class PTUFile:
             print(f"  PTU      : {Path(self.path).name}")
             print(f"  RecType  : 0x{self.rec_type:08X}")
             print(f"  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps")
+            if self.n_bins_stored > self.n_bins:
+                print(f"             ({self.n_bins_stored} stored, using {self.n_bins} within one laser period)")
             print(f"  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)")
             if self.is_image:
                 print(f"  Image    : {self.n_x} x {self.n_y} px, {self.n_channels} channel(s)")

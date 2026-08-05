@@ -63,7 +63,6 @@ def _load_machine_irf_prompt(machine_irf_path, n_bins, decay_peak_bin):
     return irf_prompt, strategy
 
 def parse_exclude_ns(spec):
-    # "7.2-8.8" or "7.2-8.8,11.0-11.5" -> [(7.2, 8.8), (11.0, 11.5)]
     if not spec:
         return None
     if not isinstance(spec, str):
@@ -982,10 +981,6 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 decay, ptu.tcspc_res, ptu.n_bins,
                 fit_window_width_ns=args.irf_fit_width)
             strategy = 'estimated_parametric'
-        # An IRF-tail term (tail_tau up to ~5 ns) is degenerate with a mono-exp
-        # decay: the fitter dumps the whole decay into the 'IRF tail' and reports
-        # a near-zero lifetime at a deceptively low chi2. Estimated IRFs must not
-        # carry one. Sigma may still float (it only broadens, cannot absorb decay).
         has_tail = False
         fit_sigma = True
         fit_bg = True
@@ -1050,6 +1045,9 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
                 irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+                fit_start_ns=getattr(args, 'fit_start_ns', None),
+                fit_end_ns=getattr(args, 'fit_end_ns', None),
+                exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
         return fit_summed(
