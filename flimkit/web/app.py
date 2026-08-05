@@ -124,6 +124,14 @@ CARD_CSS = f'''
 }}
 '''
 
+TABS_CSS = f'''
+.bk-tab {{ color: {FG} !important; font-size: 12px !important; font-weight: 500 !important;
+  border: none !important; background: transparent !important; }}
+.bk-tab:hover {{ color: #ffffff !important; background: #141418 !important; border-radius: 6px; }}
+.bk-tab.bk-active {{ color: #ffffff !important; background: #16161a !important;
+  border-radius: 6px !important; }}
+'''
+
 def _session_path():
     import json
     d = Path.home() / '.flimkit'
@@ -139,6 +147,32 @@ def load_session():
         return json.loads(_session_path().read_text())
     except Exception:
         return {}
+
+def import_tkinter_settings():
+    try:
+        from flimkit.utils.config_manager import cfg as _cm
+        ex = _cm.get_section('expert') or {}
+        pr = _cm.get_section('preferences') or {}
+    except Exception:
+        return {}
+    out = {}
+    expert_map = {
+        'optimizer': 'optimizer', 'cost_function': 'cost_function',
+        'min_photons': 'min_photons', 'binning_factor': 'binning',
+        'lm_restarts': 'restarts', 'de_population': 'de_population',
+        'de_maxiter': 'de_maxiter', 'n_workers': 'workers',
+        'free_tau_perpixel': 'free_tau',
+    }
+    for src, dst in expert_map.items():
+        if ex.get(src) is not None:
+            out[dst] = ex[src]
+    if ex.get('channels') is not None:
+        out['channel'] = str(ex['channels'])
+    if ex.get('irf_fwhm') is not None:
+        out['irf_fwhm'] = str(ex['irf_fwhm'])
+    if pr.get('default_nexp') is not None:
+        out['nexp'] = pr['default_nexp']
+    return out
 
 def save_session(vals):
     import json
@@ -255,15 +289,23 @@ def intensity_figure(ptu_path):
 
 def make_decay_bokeh():
     from bokeh.plotting import figure
-    from bokeh.models import ColumnDataSource
+    from bokeh.models import ColumnDataSource, BoxAnnotation, BoxSelectTool
     src_data = ColumnDataSource(dict(t=[], y=[]))
     src_model = ColumnDataSource(dict(t=[], y=[]))
     src_resid = ColumnDataSource(dict(t=[], r=[]))
     top = figure(height=320, sizing_mode='stretch_width', y_axis_type='log',
                  background_fill_color=BG, border_fill_color=BG,
                  outline_line_color='#444', title='Summed decay')
+    fit_box = BoxAnnotation(fill_color=ACCENT, fill_alpha=0.10,
+                            line_color=ACCENT, line_alpha=0.45, visible=False)
+    excl_box = BoxAnnotation(fill_color='#ef4444', fill_alpha=0.12,
+                             line_color='#ef4444', line_alpha=0.45, visible=False)
+    top.add_layout(fit_box)
+    top.add_layout(excl_box)
     top.scatter('t', 'y', source=src_data, size=2, color='#aaaaaa', legend_label='data')
     top.line('t', 'y', source=src_model, line_width=2, color='#e63946', legend_label='fit')
+    box_sel = BoxSelectTool(dimensions='width')
+    top.add_tools(box_sel)
     bot = figure(height=140, sizing_mode='stretch_width', x_range=top.x_range,
                  background_fill_color=BG, border_fill_color=BG,
                  outline_line_color='#444', title='weighted residuals')
@@ -281,7 +323,7 @@ def make_decay_bokeh():
     top.legend.background_fill_color = BG
     top.legend.border_line_color = '#444'
     top.yaxis.axis_label = 'counts'
-    return top, bot, src_data, src_model, src_resid
+    return top, bot, src_data, src_model, src_resid, fit_box, excl_box
 
 def update_decay_bokeh(sources, res):
     src_data, src_model, src_resid = sources
@@ -471,7 +513,7 @@ def buildApp():
     status = pn.pane.Markdown('Idle.', sizing_mode='stretch_width')
     bar = pn.indicators.Progress(value=0, max=100, sizing_mode='stretch_width', visible=False)
     preview = pn.pane.Matplotlib(blank_figure('no file loaded'), dpi=110, tight=True)
-    decay_top, decay_bot, src_data, src_model, src_resid = make_decay_bokeh()
+    decay_top, decay_bot, src_data, src_model, src_resid, decay_fit_box, decay_excl_box = make_decay_bokeh()
     decay_sources = (src_data, src_model, src_resid)
     taumap = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
     disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1)
@@ -495,7 +537,7 @@ def buildApp():
     roi_clear = pn.widgets.Button(name='Clear boxes', button_type='default', width=140)
     roi_fit = pn.widgets.Button(name='Fit ROI decay', button_type='primary', width=160)
     roi_status = pn.pane.Markdown('Load an image, then draw boxes.', sizing_mode='stretch_width')
-    roi_top, roi_bot, roi_sd, roi_sm, roi_sr = make_decay_bokeh()
+    roi_top, roi_bot, roi_sd, roi_sm, roi_sr, _roi_fit_box, _roi_excl_box = make_decay_bokeh()
     roi_decay_sources = (roi_sd, roi_sm, roi_sr)
     roi_table = pn.widgets.Tabulator(value=None, show_index=False, height=260, sizing_mode='stretch_width')
     cancel = threading.Event()
@@ -553,9 +595,11 @@ def buildApp():
     def on_path(event):
         path = (event.new or '').strip()
         if path and Path(path).is_file():
+            refresh_project(path)
+            if store.get('restoring'):
+                return
             status.object = 'Building intensity preview...'
             load_preview(path)
-            refresh_project(path)
     ptu.param.watch(on_path, 'value')
 
     def on_proj_pick(event):
@@ -625,9 +669,9 @@ def buildApp():
         save_session({'ptu': ptu.value, 'nav': store.get('nav', 'Single FOV'), **collect()})
 
     def restore_session():
-        sess = load_session()
-        if not sess:
-            return
+        merged = {**import_tkinter_settings(), **load_session()}
+        if not merged:
+            return None
         keymap = {
             'model': model, 'nexp': nexp, 'ncomp': ncomp, 'mode': mode,
             'irf_method': irf_method, 'tau_min': tau_min, 'tau_max': tau_max,
@@ -640,13 +684,29 @@ def buildApp():
             'align_irf': align_irf, 'free_tau': free_tau, 'tvb_ptu': tvb_ptu, 'xlsx': xlsx,
         }
         for key, widget in keymap.items():
-            if key in sess and sess[key] is not None:
-                try:
-                    widget.value = sess[key]
-                except Exception:
-                    pass
-        if sess.get('ptu') and Path(sess['ptu']).is_file():
-            ptu.value = sess['ptu']
+            if key not in merged or merged[key] is None:
+                continue
+            val = merged[key]
+            try:
+                if isinstance(widget, (pn.widgets.IntSlider, pn.widgets.IntInput)):
+                    widget.value = int(val)
+                elif isinstance(widget, pn.widgets.FloatInput):
+                    widget.value = float(val)
+                elif isinstance(widget, pn.widgets.Checkbox):
+                    widget.value = bool(val)
+                elif isinstance(widget, pn.widgets.Select):
+                    if val in list(widget.options.values() if isinstance(widget.options, dict)
+                                   else widget.options):
+                        widget.value = val
+                else:
+                    widget.value = str(val)
+            except Exception:
+                pass
+        p = merged.get('ptu')
+        if p and Path(p).is_file():
+            ptu.value = p
+            return p
+        return None
 
     def persist_guarded(event=None):
         if store.get('restoring'):
@@ -802,6 +862,7 @@ def buildApp():
         ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
         ('Summary', pn.Column(table, log)),
+        stylesheets=[TABS_CSS],
     )
     advanced = pn.Card(
         pn.Row(channel, threshold),
@@ -879,11 +940,17 @@ def buildApp():
 
     store['restoring'] = True
     try:
-        restore_session()
+        restored_path = restore_session()
     finally:
         store['restoring'] = False
     _sess = load_session()
     select_nav(_sess.get('nav', 'Single FOV') if _sess.get('nav') in views else 'Single FOV')
+    if restored_path:
+        status.object = f'Restored session: `{Path(restored_path).name}` (building preview...)'
+
+        def _deferred_preview():
+            load_preview(restored_path)
+        pn.state.onload(_deferred_preview)
 
     header = pn.Row(page_title, pn.layout.HSpacer(), browse,
                     stylesheets=[HEADER_CSS], sizing_mode='stretch_width', height=56)
