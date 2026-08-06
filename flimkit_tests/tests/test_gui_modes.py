@@ -146,3 +146,81 @@ def test_irf_widget_browse_accepts_csv_exports():
 
     filetypes = browse.call_args.args[2]
     assert any('*.csv' in pattern for _, pattern in filetypes)
+
+
+def test_series_fit_pipeline_toggles_series_controls(app):
+    app._switch_form('stitch')
+    app.sv_pipeline.set('series_fit')
+    app._pipeline_changed()
+    assert app._series_frame.winfo_manager()
+    assert app._xlif_optional_note.winfo_manager()
+    assert app._btn_st.cget('text') == '▶  Run Series Fit'
+
+def test_series_controls_hidden_for_other_pipelines(app):
+    app._switch_form('stitch')
+    for mode in ('series_fit', 'stitch_only', 'tile_fit', 'stitch_fit'):
+        app.sv_pipeline.set(mode)
+        app._pipeline_changed()
+    assert not app._series_frame.winfo_manager()
+    assert not app._xlif_optional_note.winfo_manager()
+
+def test_series_fit_args_derive_roi_from_ptu_dir(app, tmp_path):
+    app._switch_form('stitch')
+    app.sv_pipeline.set('series_fit')
+    app.sv_xlif.set('')
+    app.sv_ptu_dir.set(str(tmp_path / 'my series'))
+    app.sv_out_st.set(str(tmp_path / 'out'))
+    a = app._controller.stitch_args()
+    assert a.ptu_basename is None
+    assert Path(a.output_dir).name == 'my_series'
+
+def test_non_series_args_still_derive_roi_from_xlif(app, tmp_path):
+    app._switch_form('stitch')
+    app.sv_pipeline.set('tile_fit')
+    app.sv_xlif.set(str(tmp_path / 'R 2.xlif'))
+    app.sv_ptu_dir.set(str(tmp_path))
+    app.sv_out_st.set(str(tmp_path / 'out'))
+    a = app._controller.stitch_args()
+    assert a.ptu_basename == 'R 2'
+    assert Path(a.output_dir).name == 'R_2'
+
+
+def _series_planes():
+    return [{'t': 1, 'z': 1, 'name': 'R_t1_z1', 'dir': 'R_t1_z1'},
+            {'t': 1, 'z': 2, 'name': 'R_t1_z2', 'dir': 'R_t1_z2'},
+            {'t': 2, 'z': 1, 'name': 'R_t2_z1', 'dir': 'R_t2_z1'}]
+
+def test_display_series_shows_slider_over_all_planes(app, tmp_path):
+    fov = app._fov_preview
+    fov.display_series(_series_planes(), tmp_path)
+    assert fov._zbar.winfo_manager()
+    assert float(fov._z_slider.cget('to')) == 2.0
+    assert fov._z_label.get().startswith('t1 z1')
+    assert '(1/3)' in fov._z_label.get()
+
+def test_series_slider_moves_between_planes(app, tmp_path):
+    fov = app._fov_preview
+    fov.display_series(_series_planes(), tmp_path)
+    fov._on_z_slider('2')
+    assert fov._z_i == 2
+    assert fov._z_label.get().startswith('t2 z1')
+    assert fov._series is not None
+
+def test_series_slider_clamps_out_of_range(app, tmp_path):
+    fov = app._fov_preview
+    fov.display_series(_series_planes(), tmp_path)
+    fov._on_z_slider('99')
+    assert fov._z_i == 2
+
+def test_display_series_with_no_planes_hides_bar(app, tmp_path):
+    fov = app._fov_preview
+    fov.display_series([], tmp_path)
+    assert not fov._zbar.winfo_manager()
+    assert fov._series is None
+
+def test_loading_a_single_fov_clears_the_series_bar(app, tmp_path):
+    fov = app._fov_preview
+    fov.display_series(_series_planes(), tmp_path)
+    fov._hide_zstack()
+    assert fov._series is None
+    assert not fov._zbar.winfo_manager()

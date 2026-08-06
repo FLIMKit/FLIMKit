@@ -64,13 +64,18 @@ class FLIMKitController:
         ptu_dir = self.b.sv_ptu_dir.get().strip()
         out_base = self.b.sv_out_st.get().strip()
         pipeline = self.b.sv_pipeline.get()
-        roi_name = Path(xlif).stem.replace(' ', '_')
+        if pipeline == 'series_fit' and not xlif:
+            roi_name = Path(ptu_dir).name.replace(' ', '_') or 'series'
+            ptu_basename = None
+        else:
+            roi_name = Path(xlif).stem.replace(' ', '_')
+            ptu_basename = Path(xlif).stem
         output_dir = str(Path(out_base) / roi_name)
         a = argparse.Namespace()
         a.xlif = xlif
         a.ptu_dir = ptu_dir
         a.output_dir = output_dir
-        a.ptu_basename = Path(xlif).stem
+        a.ptu_basename = ptu_basename
         a.rotate_tiles = self.b.bv_rotate.get()
         cfg = _C()
         irf = self.b._irf_st.get_args()

@@ -208,6 +208,7 @@ You need the XLIF metadata file and the directory with the PTU tiles. The XLIF i
 - **Stitch only** builds a stitched intensity image and FLIM histogram cube, skips fitting. Exports the FLIM cube as an `.npy` file. Good for a quick visual check or if you want to hand the data off to something else.
 - **Stitch then fit full ROI** stitches everything into a single mosaic and fits it. Not recommended unless you have a capable machine and a small tile count, fitting a full mosaic requires a lot of RAM (tens of GBs) and is slow.
 - **Per-tile fit** the recommended option for most cases. Builds a global decay from all tiles, runs an initial fit to get the lifetime components, then fits each tile separately using those fixed lifetimes. Results are stitched back together at the end. Same quality as fitting the mosaic directly, but far more memory-efficient.
+- **Multidimensional series** per-tile fit repeated over a z and/or time axis, writing one stitched plane per `(t, z)`. Does not need an XLIF: tile positions are recovered from the tile overlap. See [Multidimensional Series](#multidimensional-series-stitched-tiles-over-z-and-time).
 
 Fitting parameters are the same as for single FOV. For tile work, the machine IRF is strongly recommended, per-tile XLSX IRFs from FLIM microscope software can vary across tiles and cause inconsistencies.
 
@@ -468,6 +469,28 @@ Expected filename patterns: `region_tX[_sY][_zZ].ptu` for timelapse, `region_zX.
 `--nexp`, `--tau-min`, `--tau-max`, `--machine-irf`, `--estimate-irf`, `--irf-fwhm`, `--irf-bins`, `--irf-fit-width`, `--optimizer`, `--restarts`, `--de-population`, `--de-maxiter`, `--workers`, `--no-polish`, `--channel`, `--min-photons`, `--cost-function` and `--no-plots` behave as in `fit_cli.py`.
 
 Outputs land under `output-dir` in one folder per group: per-slice amplitude/intensity/lifetime maps, the pooled reference fit as `*_reference_fit.json`, stacked maps, and a series summary as `*_zseries.csv` / `.json` / `.png` (`*_timeseries.csv` for timelapse).
+
+These treat each `_sY` position as an independent field of view. If the positions are overlapping tiles of one larger region, use the multidimensional series fit below instead, which stitches them.
+
+#### Multidimensional Series (stitched tiles over z and time)
+
+For tiled acquisitions with a z and/or time axis, where the tiles overlap and should be stitched into one canvas per plane rather than fitted as separate fields of view.
+
+Stitch tab → pipeline "Multidimensional series". The XLIF field is not required: tile positions are recovered from the tile overlap itself, by maximising the correlation between neighbouring tiles over candidate shifts. FFT phase correlation is not used, because on real mosaics with ~10% overlap it returns no distinguishable peak.
+
+One pooled decay is fitted across the whole series, and every plane is then fitted per-pixel with those τ values locked, so amplitudes stay comparable between timepoints. "Pool decay every N timepoints" subsamples that pooling step, which only needs photon statistics rather than every file.
+
+Filenames follow the same `region_tX[_sY][_zZ].ptu` convention as the timelapse fit, and at least two positions are required.
+
+```python
+from flimkit.formats.PTU.stitch import fit_flim_series
+
+manifest = fit_flim_series(ptu_dir, output_dir, args, pool_stride=10)
+```
+
+Outputs are one directory per `(t, z)` plane, each holding the usual fitted maps, plus a `*_series_index.json` manifest recording the recovered tile positions, the consensus τ values and every plane written. Tile positions can be supplied directly as `tile_positions=` to skip recovery.
+
+Registration quality is reported as a correlation per tile pair. A low value means the overlap was not found, usually because the tiles genuinely do not overlap or the region is too sparse to register; supply positions from a `.lif` or `.xlif` in that case.
 
 #### Fit window and exclusion bands
 
