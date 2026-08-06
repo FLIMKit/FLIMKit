@@ -132,6 +132,28 @@ TABS_CSS = f'''
   border-radius: 6px !important; }}
 '''
 
+BROWSE_CSS = f'''
+.bk-btn, .bk-btn-default {{ background: transparent !important; border: 1px solid #27272d !important;
+  color: {FG} !important; font-size: 12px !important; font-weight: 500 !important;
+  border-radius: 6px !important; padding: 6px 14px !important; }}
+.bk-btn:hover, .bk-btn-default:hover {{ background: #16161a !important; }}
+'''
+
+SEG_CSS = f'''
+.bk-btn-group {{ background: {BG} !important; border: 1px solid {BORDER} !important;
+  border-radius: 6px !important; padding: 2px !important; gap: 2px !important; }}
+.bk-btn {{ background: transparent !important; border: none !important; color: {DIM} !important;
+  font-size: 12px !important; font-weight: 500 !important; border-radius: 4px !important;
+  padding: 5px 8px !important; }}
+.bk-btn.bk-active {{ background: {ACCENT} !important; color: #052e22 !important; }}
+'''
+
+SWITCH_CSS = f'''
+:host {{ --accent-fill-rest: {ACCENT} !important; --accent-fill-hover: {ACCENT} !important;
+  --accent-fill-active: {ACCENT} !important; }}
+.body:checked, input:checked ~ * {{ background-color: {ACCENT} !important; }}
+'''
+
 def _session_path():
     import json
     d = Path.home() / '.flimkit'
@@ -525,11 +547,14 @@ def buildApp():
     cfg = _C()
     store = {'res': None, 'doc': None}
     ptu = pn.widgets.TextInput(name='PTU / SDT file', placeholder='/path/to/file.ptu', sizing_mode='stretch_width')
-    browse = pn.widgets.Button(name='Browse for file...', button_type='default', sizing_mode='stretch_width')
+    browse = pn.widgets.Button(name='Browse', icon='folder', width=120, stylesheets=[BROWSE_CSS])
+    header_pill = pn.pane.HTML('', margin=0)
     model = pn.widgets.Select(name='Model', options=['discrete', 'tail', 'gaussian', 'lognormal'], value='discrete')
     nexp = pn.widgets.IntSlider(name='Exponentials', start=1, end=3, value=int(cfg['n_exp']))
     ncomp = pn.widgets.IntSlider(name='Distribution components', start=1, end=3, value=1, visible=False)
-    mode = pn.widgets.Select(name='Mode', options=['summed', 'perPixel', 'both'], value=cfg['D_mode'])
+    mode = pn.widgets.RadioButtonGroup(options=['summed', 'perPixel', 'both'],
+                                       value=cfg['D_mode'], stylesheets=[SEG_CSS],
+                                       sizing_mode='stretch_width')
     irf_method = pn.widgets.Select(name='IRF method', options={
         'Machine IRF': 'machine_irf',
         'Machine IRF (σ half)': 'machine_irf_sigma_half',
@@ -542,7 +567,7 @@ def buildApp():
     tau_max = pn.widgets.FloatInput(name='Tau max (ns)', value=float(cfg['Tau_max']), step=0.1, width=142)
     channel = pn.widgets.TextInput(name='Channel (blank = auto)', placeholder='auto', width=140)
     threshold = pn.widgets.TextInput(name='Intensity threshold', placeholder='none', width=140)
-    pileup = pn.widgets.Checkbox(name='Pile-up correction', value=False)
+    pileup = pn.widgets.Switch(name='Pile-up correction', value=False, stylesheets=[SWITCH_CSS])
     cell_mask = pn.widgets.Checkbox(name='Cell mask (cellpose)', value=False)
     out = pn.widgets.TextInput(name='Output name', value=cfg['OUT_NAME'])
     optimizer = pn.widgets.Select(name='Optimizer', options=['de', 'lm'], value=cfg['Optimizer'])
@@ -610,6 +635,14 @@ def buildApp():
     def set_pane(pane, fig):
         pane.object = fig
         pane.param.trigger('object')
+
+    def set_pill(text, color, bg):
+        header_pill.object = (f'<span style="font-size:11px;padding:2px 9px;border-radius:9999px;'
+                              f'font-weight:500;background:{bg};color:{color};display:inline-flex;'
+                              f'align-items:center;gap:5px;margin-left:10px;">'
+                              f'<span style="width:6px;height:6px;border-radius:50%;'
+                              f'background:{color};"></span>{text}</span>')
+    set_pill('Idle', '#4ade80', '#10231a')
 
     def toggle_ncomp(event):
         ncomp.visible = event.new in ('gaussian', 'lognormal')
@@ -750,7 +783,7 @@ def buildApp():
                     widget.value = int(val)
                 elif isinstance(widget, pn.widgets.FloatInput):
                     widget.value = float(val)
-                elif isinstance(widget, pn.widgets.Checkbox):
+                elif isinstance(widget, (pn.widgets.Checkbox, pn.widgets.Switch)):
                     widget.value = bool(val)
                 elif isinstance(widget, pn.widgets.Select):
                     if val in list(widget.options.values() if isinstance(widget.options, dict)
@@ -793,6 +826,7 @@ def buildApp():
             def fail():
                 bar.visible = False
                 run.disabled = False
+                set_pill('Failed', '#f87171', '#2a1010')
                 status.object = '**Fit failed.**'
                 log.object = f'```\n{tb}\n```'
             push(fail)
@@ -802,6 +836,7 @@ def buildApp():
             store['irf'] = res.get('irf_prompt')
             bar.visible = False
             run.disabled = False
+            set_pill('Done', '#4ade80', '#10231a')
             status.object = f"Done. Output in `{Path(a.out).parent}`."
             try:
                 table.value = _rows_to_frame(summary_rows(res))
@@ -826,6 +861,7 @@ def buildApp():
         run.disabled = True
         bar.value = 0
         bar.visible = True
+        set_pill('Running', '#fbbf24', '#231d0a')
         status.object = 'Fitting...'
         log.object = ''
         a = build_fov_args(collect())
@@ -953,17 +989,19 @@ def buildApp():
         stylesheets=[SIDEBAR_CSS], width=256, sizing_mode='stretch_height',
     )
 
-    lifetime_tab = pn.Column(pn.Row(map_key, disp_min, disp_max), taumap)
+    lifetime_tab = pn.Column(
+        pn.Row(map_key, disp_min, disp_max),
+        card('Lifetime map', taumap))
     decay_tab = pn.Column(
         pn.Row(pn.pane.HTML(f'<span style="font-size:11px;color:{MUTED};align-self:center;">'
                             f'Box-select on the plot &rarr;</span>'),
                sel_target, sel_clear),
         pn.Row(fit_start_ns, fit_end_ns, exclude_ns),
-        pn.pane.Bokeh(decay_top, sizing_mode='stretch_width'),
-        pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width'),
+        card('Summed decay', pn.pane.Bokeh(decay_top, sizing_mode='stretch_width')),
+        card('Weighted residuals', pn.pane.Bokeh(decay_bot, sizing_mode='stretch_width')),
         sizing_mode='stretch_width')
     fov_tabs = pn.Tabs(
-        ('Preview', preview),
+        ('Preview', card('Intensity preview', preview)),
         ('Decay', decay_tab),
         ('Lifetime map', lifetime_tab),
         stylesheets=[TABS_CSS],
@@ -986,7 +1024,10 @@ def buildApp():
         tvb_ptu, xlsx,
         title='Advanced', collapsed=True, sizing_mode='stretch_width',
     )
-    fov_params = pn.Column(model, nexp, ncomp, mode, irf_method, pn.Row(tau_min, tau_max),
+    _mode_label = pn.pane.HTML(f'<label style="font-size:11px;font-weight:500;color:{MUTED};">Mode</label>',
+                               margin=(6, 0, 0, 0))
+    fov_params = pn.Column(model, nexp, ncomp, _mode_label, mode, irf_method,
+                           pn.Row(tau_min, tau_max),
                            pileup, out, advanced, run, bar, status, width=300)
     fov_view = pn.Row(
         card('Parameters', fov_params, sizing_mode='fixed', margin=(0, 16, 0, 0)),
@@ -1061,7 +1102,7 @@ def buildApp():
             load_preview(restored_path)
         pn.state.onload(_deferred_preview)
 
-    header = pn.Row(page_title, pn.layout.HSpacer(), browse,
+    header = pn.Row(page_title, header_pill, pn.layout.HSpacer(), browse,
                     stylesheets=[HEADER_CSS], sizing_mode='stretch_width', height=56)
     main = pn.Column(header, main_area, sizing_mode='stretch_both',
                      styles={'background': BG})
