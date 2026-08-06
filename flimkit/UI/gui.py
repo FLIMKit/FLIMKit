@@ -2206,12 +2206,27 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._btn_st.configure(text='▶  Run Stitch + Fit')
             self._btn_expert_st.pack(side='left', padx=4, before=self._btn_st)
             self._update_expert_banners()
+        elif mode == 'series_fit':
+            self._fit_frame.grid()
+            self._tile_extras_frame.grid_remove()
+            if hasattr(self, '_series_frame'):
+                self._series_frame.grid()
+            self._btn_st.configure(text='▶  Run Series Fit')
+            self._btn_expert_st.pack(side='left', padx=4, before=self._btn_st)
+            self._update_expert_banners()
         else:
             self._fit_frame.grid()
             self._tile_extras_frame.grid()
             self._btn_st.configure(text='▶  Run Per-Tile Fit')
             self._btn_expert_st.pack(side='left', padx=4, before=self._btn_st)
             self._update_expert_banners()
+        if mode != 'series_fit' and hasattr(self, '_series_frame'):
+            self._series_frame.grid_remove()
+        if hasattr(self, '_xlif_optional_note'):
+            if mode == 'series_fit':
+                self._xlif_optional_note.grid()
+            else:
+                self._xlif_optional_note.grid_remove()
         self._update_form_scrollbar('stitch')
         self.root.after_idle(self._fit_window_to_screen)
 
@@ -3092,13 +3107,22 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         xlif = self.sv_xlif.get().strip()
         ptu_dir = self.sv_ptu_dir.get().strip()
         out_base = self.sv_out_st.get().strip()
-        for val, name in [(xlif, 'XLIF file'),
-                          (ptu_dir, 'PTU directory'),
-                          (out_base, 'Output directory')]:
+        pipeline = self.sv_pipeline.get()
+        required = [(ptu_dir, 'PTU directory'), (out_base, 'Output directory')]
+        if pipeline != 'series_fit':
+            required.insert(0, (xlif, 'XLIF file'))
+        for val, name in required:
             if not val:
                 messagebox.showerror('Missing input', f'Please specify the {name}.')
                 return
-        pipeline = self.sv_pipeline.get()
+        pool_stride = 10
+        if pipeline == 'series_fit':
+            try:
+                pool_stride = max(1, int(self.sv_pool_stride.get() or 10))
+            except ValueError:
+                messagebox.showerror('Invalid input',
+                                     'Pool decay every N timepoints must be a whole number.')
+                return
         from flimkit.formats.PTU.stitch import stitch_flim_tiles
         a = self._controller.stitch_args()
 
@@ -3151,6 +3175,20 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         self._stitch_roi_panel._refresh_region_list()
                 except Exception:
                     pass
+            elif pipeline == 'series_fit' and isinstance(result, dict):
+                planes = result.get('planes', [])
+                taus = result.get('consensus_taus_ns', [])
+                print(f"\n  {len(planes)} plane(s) written under {a.output_dir}")
+                print(f"  Manifest: {result.get('base', '')}_series_index.json")
+                if taus:
+                    print(f"  Consensus τ = {[f'{t:.3f}' for t in taus]} ns")
+                if planes:
+                    self._res.set_status(
+                        f'✓  {len(planes)} planes fitted - drag the slider to browse them')
+                    try:
+                        self._fov_preview.display_series(planes, a.output_dir)
+                    except Exception as e:
+                        print(f'Warning: Could not load series planes: {e}')
             else:
                 try:
                     self._fov_preview.load_stitched_roi(a.output_dir)
@@ -3177,13 +3215,25 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 from flimkit.interactive import _run_stitch_and_fit
                 return _run_stitch_and_fit(a, progress_callback=progress_callback,
                                            cancel_event=cancel_event)
+            elif pipeline == 'series_fit':
+                from flimkit.formats.PTU.stitch import fit_flim_series
+                return fit_flim_series(
+                    ptu_dir=a.ptu_dir,
+                    output_dir=a.output_dir,
+                    args=a,
+                    rotate_tiles=a.rotate_tiles,
+                    pool_stride=pool_stride,
+                    verbose=True,
+                    progress_callback=progress_callback,
+                    cancel_event=cancel_event,
+                )
             else:
                 from flimkit.interactive import _run_tile_fit
                 return _run_tile_fit(a, progress_callback=progress_callback,
                                      cancel_event=cancel_event)
         self._set_buttons('disabled')
         task_name = {'stitch_only': 'Stitching', 'stitch_fit': 'Stitch + Fit',
-                     'tile_fit': 'Per-Tile Fit'}[pipeline]
+                     'tile_fit': 'Per-Tile Fit', 'series_fit': 'Series Fit'}[pipeline]
         self.run_with_progress(task, task_name=task_name, on_done=on_done, output_dir=a.output_dir)
 
     def _run_phasor(self):

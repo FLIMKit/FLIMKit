@@ -609,6 +609,231 @@ def _register_tile_columns(tile_results, max_shift_px=120, verbose=True,):
         print(f'  Registration complete. Canvas: {canvas_h}×{canvas_w}px')
     return tile_results
 
+def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
+                      verbose=True, cancel_event=None):
+    from .reader import PTUFile
+    from ...FLIM.fitters import fit_summed
+    from ...FLIM.bg_tools import tvb_from_decay
+    from ...configs import (
+        MACHINE_IRF_DEFAULT_PATH,
+        MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
+        MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF,
+        Tau_min, Tau_max, n_exp as _cfg_nexp,
+        Cost_function, Optimizer, lm_restarts, n_workers,
+    )
+    ptu_dir = Path(ptu_dir)
+    n_exp_ = getattr(args, 'nexp', _cfg_nexp)
+    fit_sigma = MACHINE_IRF_FIT_SIGMA
+    sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
+    estimate_irf = getattr(args, 'estimate_irf', 'machine_irf')
+    if estimate_irf == 'machine_irf_sigma_full':
+        fit_sigma = True
+    elif estimate_irf == 'machine_irf_sigma_half':
+        fit_sigma = True
+        sigma_max = MACHINE_IRF_SIGMA_MAX_HALF
+    mach_path = getattr(args, 'machine_irf', str(MACHINE_IRF_DEFAULT_PATH))
+    machine_irf, pi_machine = _load_machine_irf(mach_path)
+    timepoints = index['timepoints'][::max(1, stride)]
+    planes = [k for k in sorted(index['planes']) if k[0] in set(timepoints)]
+    if verbose:
+        print(f'Pooling decay over {len(planes)} of {len(index["planes"])} planes '
+              f'(every {stride} timepoint(s))...')
+    pooled_decay = None
+    n_bins_ref = None
+    tcspc_ref = None
+    n_files = 0
+    for key in planes:
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        for entry in index['planes'][key]:
+            path = ptu_dir / entry['file']
+            if not path.exists():
+                continue
+            ptu = PTUFile(str(path), verbose=False)
+            decay = ptu.summed_decay()
+            n_files += 1
+            if pooled_decay is None:
+                pooled_decay = decay.astype(np.float64).copy()
+                n_bins_ref = ptu.n_bins
+                tcspc_ref = ptu.tcspc_res
+                continue
+            if ptu.n_bins > n_bins_ref:
+                pooled_decay = np.pad(pooled_decay, (0, ptu.n_bins - n_bins_ref))
+                n_bins_ref = ptu.n_bins
+            if len(decay) < len(pooled_decay):
+                decay = np.pad(decay, (0, len(pooled_decay) - len(decay)))
+            pooled_decay[:len(decay)] += decay[:len(pooled_decay)]
+    if pooled_decay is None:
+        raise RuntimeError(f'No readable PTU files under {ptu_dir}')
+    pooled_peak = int(np.argmax(pooled_decay))
+    pooled_irf = _get_tile_irf(machine_irf, pi_machine, pooled_peak, n_bins_ref)
+    if verbose:
+        print(f'  Pooled {n_files} files, {pooled_decay.sum():,.0f} photons, '
+              f'peak bin {pooled_peak}')
+        print('  Running consensus fit_summed on pooled decay...')
+    _tvb_ptu_path = getattr(args, 'tvb_ptu', None)
+    _tvb_pooled = None
+    _fit_tvb = False
+    if _tvb_ptu_path:
+        _tvb_ref = PTUFile(str(_tvb_ptu_path), verbose=False)
+        _tvb_pooled = tvb_from_decay(
+            _tvb_ref.summed_decay(channel=getattr(args, 'tvb_channel', None)),
+            n_bins_ref, src_tcspc_res=_tvb_ref.tcspc_res, dst_tcspc_res=tcspc_ref)
+        _fit_tvb = True
+    global_popt, global_summary = fit_summed(
+        pooled_decay, tcspc_ref, n_bins_ref, pooled_irf,
+        has_tail = MACHINE_IRF_FIT_TAIL,
+        fit_bg = MACHINE_IRF_FIT_BG,
+        fit_sigma = fit_sigma,
+        n_exp = n_exp_,
+        tau_min_ns = getattr(args, 'tau_min', Tau_min),
+        tau_max_ns = getattr(args, 'tau_max', Tau_max),
+        optimizer = getattr(args, 'optimizer', Optimizer),
+        cost_function = getattr(args, 'cost_function', Cost_function),
+        n_restarts = getattr(args, 'restarts', lm_restarts),
+        workers = getattr(args, 'workers', n_workers),
+        sigma_max = sigma_max,
+        tvb_profile = _tvb_pooled,
+        fit_tvb = _fit_tvb,
+    )
+    if verbose:
+        taus = global_summary['taus_ns']
+        print(f"  Consensus τ = {[f'{t:.3f}' for t in taus]} ns")
+        print(f"  χ²_r (tail) = {global_summary['reduced_chi2_tail']:.4f}")
+    return {
+        'pooled_decay': pooled_decay,
+        'pooled_irf': pooled_irf,
+        'pooled_peak': pooled_peak,
+        'n_bins': n_bins_ref,
+        'tcspc': tcspc_ref,
+        'global_popt': global_popt,
+        'global_summary': global_summary,
+        'n_files_pooled': n_files,
+        'stride': stride,
+    }
+
+def fit_flim_series(
+    ptu_dir,
+    output_dir,
+    args,
+    ptu_basename=None,
+    rotate_tiles=True,
+    tile_positions=None,
+    pool_stride=10,
+    pooled=None,
+    verbose=True,
+    progress_callback=None,
+    cancel_event=None,
+):
+    from .series import index_ptu_series, describe_series, recover_series_positions, plane_tile_positions
+    from ...FLIM.assemble import assemble_tile_maps, save_assembled_maps
+    ptu_dir = Path(ptu_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    index = index_ptu_series(ptu_dir, ptu_basename=ptu_basename)
+    if verbose:
+        print(f"\n{'='*60}")
+        print('  MULTIDIMENSIONAL SERIES FIT')
+        print(f"{'='*60}")
+        print(f'  {describe_series(index)}')
+    if index['is_ragged']:
+        raise RuntimeError(
+            'Series has a different tile count on different planes; '
+            'the missing files must be restored before stitching')
+    if tile_positions is None:
+        tile_positions, _ = recover_series_positions(
+            ptu_dir, index, rotate_tiles=rotate_tiles,
+            binning=getattr(args, 'binning', 1), verbose=verbose)
+    if pooled is None:
+        pooled = pool_series_decay(
+            ptu_dir, index, args, stride=pool_stride,
+            rotate_tiles=rotate_tiles, verbose=verbose, cancel_event=cancel_event)
+    n_exp_ = getattr(args, 'nexp', 2)
+    roi_base = index['base'].replace(' ', '_')
+    planes = sorted(index['planes'])
+    written = []
+    for i, key in enumerate(planes):
+        if cancel_event is not None and cancel_event.is_set():
+            if verbose:
+                print('\nSeries fit cancelled by user.')
+            break
+        if progress_callback is not None:
+            progress_callback(i, len(planes))
+        t_index, z_index = key
+        plane_positions = plane_tile_positions(tile_positions, index['planes'][key])
+        plane_name = f'{roi_base}_t{t_index}_z{z_index}'
+        if verbose:
+            print(f"\n[{i+1}/{len(planes)}] t={t_index} z={z_index}")
+        (tile_results, canvas_h, canvas_w, corrected_positions,
+         _, _, _, _, plane_summary) = fit_flim_tiles(
+            xlif_path = None,
+            ptu_dir = ptu_dir,
+            output_dir = output_dir,
+            args = args,
+            ptu_basename = index['base'],
+            rotate_tiles = rotate_tiles,
+            verbose = False,
+            cancel_event = cancel_event,
+            tile_positions = plane_positions,
+            pooled = pooled,
+        )
+        if not tile_results:
+            if verbose:
+                print(f'  no tiles fitted for t={t_index} z={z_index}, skipped')
+            continue
+        canvas = assemble_tile_maps(
+            tile_results = tile_results,
+            canvas_height = canvas_h,
+            canvas_width = canvas_w,
+            n_exp = n_exp_,
+        )
+        plane_dir = output_dir / plane_name
+        save_assembled_maps(
+            canvas = canvas,
+            global_summary = plane_summary,
+            output_dir = plane_dir,
+            roi_name = plane_name,
+            n_exp = n_exp_,
+            tau_display_min = getattr(args, 'tau_display_min', None),
+            tau_display_max = getattr(args, 'tau_display_max', None),
+        )
+        written.append({
+            't': t_index,
+            'z': z_index,
+            'name': plane_name,
+            'dir': str(plane_dir.relative_to(output_dir)),
+            'canvas_height': int(canvas_h),
+            'canvas_width': int(canvas_w),
+            'n_tiles': len(tile_results),
+        })
+        if verbose:
+            print(f'  wrote {plane_name} ({canvas_h}x{canvas_w}, '
+                  f'{len(tile_results)} tiles)')
+    manifest = {
+        'base': index['base'],
+        'timepoints': index['timepoints'],
+        'z_planes': index['z_planes'],
+        'tiles': index['tiles'],
+        'n_planes_written': len(written),
+        'pool_stride': pooled.get('stride'),
+        'n_files_pooled': pooled.get('n_files_pooled'),
+        'consensus_taus_ns': [float(x) for x in pooled['global_summary']['taus_ns']],
+        'pooled_peak_bin': int(pooled['pooled_peak']),
+        'tile_positions': [
+            {'s': p['s'], 'pixel_y': p['pixel_y'], 'pixel_x': p['pixel_x']}
+            for p in tile_positions],
+        'planes': written,
+    }
+    manifest_path = output_dir / f'{roi_base}_series_index.json'
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2)
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f'  {len(written)}/{len(planes)} planes written to {output_dir}')
+        print(f'  Manifest: {manifest_path}')
+        print(f"{'='*60}")
+    return manifest
+
 def fit_flim_tiles(
     xlif_path,
     ptu_dir,
@@ -621,6 +846,8 @@ def fit_flim_tiles(
     verbose=True,
     progress_callback=None,
     cancel_event=None,
+    tile_positions=None,
+    pooled=None,
 ):
     from .reader import PTUFile
     from ...FLIM.fitters import fit_summed, fit_per_pixel
@@ -634,7 +861,9 @@ def fit_flim_tiles(
         Cost_function, Optimizer, lm_restarts, n_workers,
         binning_factor,
     )
-    xlif_path = Path(xlif_path)
+    if xlif_path is None and tile_positions is None:
+        raise ValueError('fit_flim_tiles needs either xlif_path or tile_positions')
+    xlif_path = Path(xlif_path) if xlif_path is not None else None
     ptu_dir = Path(ptu_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -676,12 +905,18 @@ def fit_flim_tiles(
         if verbose:
             print(f"  TVB background from: {_tvb_ptu_path} ({float(_tvb_bg_raw.sum()):,.0f} photons)")
     _fit_tvb = _tvb_bg_raw is not None
-    tile_positions = parse_tile_positions(xlif_path, ptu_basename)
-    pixel_size_m, _ = get_pixel_size(xlif_path, ptu_basename)
-    effective_pixel_size_m = pixel_size_m * binning
-    tile_positions, canvas_w, canvas_h = compute_tile_pixel_positions(
-        tile_positions, effective_pixel_size_m,
-        _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) // binning)
+    if tile_positions is None:
+        tile_positions = parse_tile_positions(xlif_path, ptu_basename)
+    if 'pixel_x' in tile_positions[0] and 'pixel_y' in tile_positions[0]:
+        tile_w = _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) // binning
+        canvas_w = max(t['pixel_x'] for t in tile_positions) + tile_w
+        canvas_h = max(t['pixel_y'] for t in tile_positions) + tile_w
+    else:
+        pixel_size_m, _ = get_pixel_size(xlif_path, ptu_basename)
+        effective_pixel_size_m = pixel_size_m * binning
+        tile_positions, canvas_w, canvas_h = compute_tile_pixel_positions(
+            tile_positions, effective_pixel_size_m,
+            _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) // binning)
     if verbose:
         print(f"\n{'='*60}")
         print(f"  PER-TILE FLIM FITTING - POOLED MACHINE IRF")
@@ -692,76 +927,102 @@ def fit_flim_tiles(
         print(f"  Canvas:      {canvas_h} × {canvas_w} px")
         print(f"  Machine IRF: {mach_path}  (peak bin {pi_machine})\n")
     total_steps = 2 * len(tile_positions)
-    if verbose:
-        print('Pass 1: accumulating pooled decay (summed_decay only)...')
-    tile_meta = []
-    pooled_decay = None
-    n_bins_ref = None
-    tcspc_ref = None
-    for i, t in enumerate(tqdm(tile_positions,
-                                desc='  Pass 1', disable=True)):
-        if cancel_event is not None and cancel_event.is_set():
-            break
-        if progress_callback is not None:
-            progress_callback(i, total_steps)
-        ptu_path = ptu_dir / t['file']
-        if not ptu_path.exists():
-            continue
-        ptu = PTUFile(str(ptu_path), verbose=False)
-        decay = ptu.summed_decay()
-        n_bins = ptu.n_bins
-        tcspc = ptu.tcspc_res
-        if intensity_thr is not None:
-            stack_p1 = ptu.raw_pixel_stack(channel=ptu.photon_channel)
-            px_int = stack_p1.sum(axis=-1)
-            mask_p1 = px_int >= intensity_thr
-            stack_p1[~mask_p1] = 0
-            decay = stack_p1.sum(axis=(0, 1))
-            del stack_p1, px_int, mask_p1
-        if pooled_decay is None:
-            pooled_decay = decay.copy()
-            n_bins_ref = n_bins
-            tcspc_ref = tcspc
-        else:
-            if n_bins > n_bins_ref:
-                pooled_decay = np.pad(pooled_decay, (0, n_bins - n_bins_ref))
+    if pooled is not None:
+        pooled_decay = pooled['pooled_decay']
+        pooled_irf = pooled['pooled_irf']
+        pooled_peak = pooled['pooled_peak']
+        n_bins_ref = pooled['n_bins']
+        tcspc_ref = pooled['tcspc']
+        global_popt = pooled['global_popt']
+        global_summary = pooled['global_summary']
+        tile_meta = []
+        for t in tile_positions:
+            ptu_path = ptu_dir / t['file']
+            if not ptu_path.exists():
+                continue
+            ptu = PTUFile(str(ptu_path), verbose=False)
+            tile_meta.append({
+                't': t,
+                'n_bins': ptu.n_bins,
+                'tcspc': ptu.tcspc_res,
+                'peak_bin': pooled_peak,
+            })
+        if not tile_meta:
+            raise RuntimeError('No tiles found - check PTU_DIR and PTU_BASENAME.')
+        if verbose:
+            print(f'Pass 1 skipped: reusing pooled fit '
+                  f'({len(tile_meta)} tiles, peak bin {pooled_peak})')
+    else:
+        if verbose:
+            print('Pass 1: accumulating pooled decay (summed_decay only)...')
+        tile_meta = []
+        pooled_decay = None
+        n_bins_ref = None
+        tcspc_ref = None
+        for i, t in enumerate(tqdm(tile_positions,
+                                    desc='  Pass 1', disable=True)):
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            if progress_callback is not None:
+                progress_callback(i, total_steps)
+            ptu_path = ptu_dir / t['file']
+            if not ptu_path.exists():
+                continue
+            ptu = PTUFile(str(ptu_path), verbose=False)
+            decay = ptu.summed_decay()
+            n_bins = ptu.n_bins
+            tcspc = ptu.tcspc_res
+            if intensity_thr is not None:
+                stack_p1 = ptu.raw_pixel_stack(channel=ptu.photon_channel)
+                px_int = stack_p1.sum(axis=-1)
+                mask_p1 = px_int >= intensity_thr
+                stack_p1[~mask_p1] = 0
+                decay = stack_p1.sum(axis=(0, 1))
+                del stack_p1, px_int, mask_p1
+            if pooled_decay is None:
+                pooled_decay = decay.copy()
                 n_bins_ref = n_bins
-            if len(decay) < len(pooled_decay):
-                decay = np.pad(decay, (0, len(pooled_decay) - len(decay)))
-            pooled_decay[:len(decay)] += decay[:len(pooled_decay)]
-        tile_meta.append({
-            't':        t,
-            'n_bins':   n_bins,
-            'tcspc':    tcspc,
-            'peak_bin': int(np.argmax(decay)),
-        })
-    if pooled_decay is None:
-        raise RuntimeError('No tiles found - check PTU_DIR and PTU_BASENAME.')
-    pooled_peak = int(np.argmax(pooled_decay))
-    pooled_irf = _get_tile_irf(machine_irf, pi_machine, pooled_peak, n_bins_ref)
-    if verbose:
-        print(f"\n  Pooled: {len(tile_meta)} tiles  "
-              f"{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}")
-        print('\n  Running consensus fit_summed on pooled decay...')
-    _tvb_pooled = (tvb_from_decay(_tvb_bg_raw, n_bins_ref,
-                                  src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc_ref)
-                   if _fit_tvb else None)
-    global_popt, global_summary = fit_summed(
-        pooled_decay, tcspc_ref, n_bins_ref, pooled_irf,
-        has_tail = has_tail,
-        fit_bg = fit_bg,
-        fit_sigma = fit_sigma,
-        n_exp = n_exp_,
-        tau_min_ns = tau_min_ns,
-        tau_max_ns = tau_max_ns,
-        optimizer = optimizer,
-        cost_function = cost_fn,
-        n_restarts = restarts,
-        workers = workers,
-        sigma_max = sigma_max,
-        tvb_profile = _tvb_pooled,
-        fit_tvb = _fit_tvb,
-    )
+                tcspc_ref = tcspc
+            else:
+                if n_bins > n_bins_ref:
+                    pooled_decay = np.pad(pooled_decay, (0, n_bins - n_bins_ref))
+                    n_bins_ref = n_bins
+                if len(decay) < len(pooled_decay):
+                    decay = np.pad(decay, (0, len(pooled_decay) - len(decay)))
+                pooled_decay[:len(decay)] += decay[:len(pooled_decay)]
+            tile_meta.append({
+                't':        t,
+                'n_bins':   n_bins,
+                'tcspc':    tcspc,
+                'peak_bin': int(np.argmax(decay)),
+            })
+        if pooled_decay is None:
+            raise RuntimeError('No tiles found - check PTU_DIR and PTU_BASENAME.')
+        pooled_peak = int(np.argmax(pooled_decay))
+        pooled_irf = _get_tile_irf(machine_irf, pi_machine, pooled_peak, n_bins_ref)
+        if verbose:
+            print(f"\n  Pooled: {len(tile_meta)} tiles  "
+                  f"{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}")
+            print('\n  Running consensus fit_summed on pooled decay...')
+        _tvb_pooled = (tvb_from_decay(_tvb_bg_raw, n_bins_ref,
+                                      src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc_ref)
+                       if _fit_tvb else None)
+        global_popt, global_summary = fit_summed(
+            pooled_decay, tcspc_ref, n_bins_ref, pooled_irf,
+            has_tail = has_tail,
+            fit_bg = fit_bg,
+            fit_sigma = fit_sigma,
+            n_exp = n_exp_,
+            tau_min_ns = tau_min_ns,
+            tau_max_ns = tau_max_ns,
+            optimizer = optimizer,
+            cost_function = cost_fn,
+            n_restarts = restarts,
+            workers = workers,
+            sigma_max = sigma_max,
+            tvb_profile = _tvb_pooled,
+            fit_tvb = _fit_tvb,
+        )
     consensus_taus_ns = global_summary['taus_ns']
     if verbose:
         print(f"\n  Consensus τ = {[f'{t:.3f}' for t in consensus_taus_ns]} ns")
