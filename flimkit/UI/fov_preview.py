@@ -66,6 +66,7 @@ class FOVPreviewPanel:
         self._zbar = zbar
         zbar.grid_remove()
         self._zstack = None
+        self._series = None
         self._z_i = 0
         ttk.Label(ctrl_frame, text='τ range (ns):').grid(row=0, column=0, sticky='w')
         ttk.Label(ctrl_frame, text='Min:').grid(row=0, column=1, sticky='w', padx=(10, 2))
@@ -402,10 +403,41 @@ class FOVPreviewPanel:
 
     def _hide_zstack(self):
         self._zstack = None
+        self._series = None
         try:
             self._zbar.grid_remove()
         except Exception:
             pass
+
+    def display_series(self, planes, output_dir):
+        self._zstack = None
+        self._series = [dict(p, _root=str(output_dir)) for p in planes] if planes else None
+        if not self._series:
+            self._hide_zstack()
+            return
+        self._z_slider.configure(to=max(len(self._series) - 1, 0))
+        self._zbar.grid()
+        self._z_i = 0
+        self._sync_z_slider()
+        self._show_series_plane(0)
+
+    def _series_plane_label(self, desc, i):
+        parts = []
+        if desc.get('t') is not None:
+            parts.append(f"t{desc['t']}")
+        if desc.get('z') is not None:
+            parts.append(f"z{desc['z']}")
+        head = ' '.join(parts) or desc.get('name', '')
+        return f"{head}  ({i + 1}/{len(self._series)})"
+
+    def _show_series_plane(self, i):
+        desc = self._series[i]
+        self._z_label.set(self._series_plane_label(desc, i))
+        plane_dir = Path(desc['_root']) / desc.get('dir', desc.get('name', ''))
+        keep = self._series
+        self.load_stitched_roi(str(plane_dir))
+        self._series = keep
+        self._zbar.grid()
 
     def _sync_z_slider(self):
         self._z_slider_updating = True
@@ -415,11 +447,18 @@ class FOVPreviewPanel:
             self._z_slider_updating = False
 
     def _on_z_slider(self, value):
-        if self._z_slider_updating or not self._zstack:
+        if self._z_slider_updating:
             return
-        i = max(0, min(int(round(float(value))), len(self._zstack) - 1))
-        if i != self._z_i:
-            self._z_i = i
+        stack = self._series or self._zstack
+        if not stack:
+            return
+        i = max(0, min(int(round(float(value))), len(stack) - 1))
+        if i == self._z_i:
+            return
+        self._z_i = i
+        if self._series:
+            self._show_series_plane(i)
+        else:
             self._show_zstack_slice(i)
 
     def _show_zstack_slice(self, i):
@@ -829,14 +868,6 @@ class FOVPreviewPanel:
         self._decay_visible = show
         self._rebuild_layout()
     def _rebuild_layout(self):
-        """Rebuild the GridSpec layout based on decay visibility.
-        Decay visible (default):
-            Row 0: [Intensity] [FLIM] [cbar]     height_ratio 1
-            Row 1: [       Decay          ]       height_ratio 0.6
-        Decay hidden:
-            Row 0: [    FLIM   ] [cbar]           height_ratio 1
-            Row 1: [ Intensity ]                  height_ratio 0.5
-        """
         from matplotlib.gridspec import GridSpec
         flim_title = self._ax_flim.get_title() if self._ax_flim.get_visible() else 'FLIM Lifetime (ns)'
         img_title = self._ax_img.get_title() if self._ax_img.get_visible() else 'Intensity'

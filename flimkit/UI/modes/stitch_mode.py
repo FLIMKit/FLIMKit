@@ -14,14 +14,20 @@ class StitchMode(BaseMode):
         ff = _section(tab, 'Input Files')
         ff.grid(row=0, column=0, sticky='ew', pady=(0, 6))
         ff.columnconfigure(1, weight=1)
-        self.b.state.sv_xlif    = tk.StringVar()
+        self.b.state.sv_xlif = tk.StringVar()
         self.b.sv_xlif.trace_add('write', self.b._on_xlif_changed)
         self.b.state.sv_ptu_dir = tk.StringVar()
-        self.b.state.sv_out_st  = tk.StringVar()
+        self.b.state.sv_out_st = tk.StringVar()
 
         _row(ff, 'XLIF metadata *',      self.b.sv_xlif,    0,
              lambda: _browse_file(self.b.sv_xlif, 'XLIF file',
                                   [('XLIF', '*.xlif'), ('All', '*.*')]))
+        self.b._xlif_optional_note = ttk.Label(
+            ff, text='Not needed for a multidimensional series: tile positions '
+                     'are recovered from the tile overlap',
+            foreground='grey')
+        self.b._xlif_optional_note.grid(row=0, column=3, sticky='w', padx=4)
+        self.b._xlif_optional_note.grid_remove()
         _row(ff, 'PTU tile directory *', self.b.sv_ptu_dir, 1,
              lambda: _browse_dir(self.b.sv_ptu_dir, 'PTU tile directory'))
         _row(ff, 'Base output dir *',    self.b.sv_out_st,  2,
@@ -40,8 +46,9 @@ class StitchMode(BaseMode):
         self.b.state.sv_pipeline = tk.StringVar(value='stitch_only')
         for r, (val, lbl) in enumerate([
             ('stitch_only', 'Stitch tiles only'),
-            ('stitch_fit',  'Stitch then fit full ROI'),
-            ('tile_fit',    'Per-tile fit  [recommended - fits each tile independently]'),
+            ('stitch_fit', 'Stitch then fit full ROI'),
+            ('tile_fit', 'Per-tile fit  [recommended - fits each tile independently]'),
+            ('series_fit', 'Multidimensional series  [z-stack and/or timelapse tiles]'),
         ]):
             ttk.Radiobutton(fp, text=lbl, variable=self.b.sv_pipeline,
                             value=val, command=self.b._pipeline_changed).grid(
@@ -215,6 +222,28 @@ class StitchMode(BaseMode):
             row=1, column=1, sticky='w', padx=4)
         ttk.Label(freg, text='(increase if drift > 120px)',
                   foreground='grey').grid(row=1, column=2, sticky='w')
+
+        self.b._series_frame = ttk.Frame(parent)
+        self.b._series_frame.columnconfigure(0, weight=1)
+        self.b._series_frame.grid(row=5, column=0, sticky='ew', pady=(0, 4))
+        fsr = _section(self.b._series_frame, 'Multidimensional Series')
+        fsr.grid(row=0, column=0, sticky='ew')
+        ttk.Label(fsr, text='Pool decay every N timepoints:').grid(
+            row=0, column=0, sticky='w', **PAD)
+        self.b.state.sv_pool_stride = tk.StringVar(value='10')
+        ttk.Entry(fsr, textvariable=self.b.sv_pool_stride, width=6).grid(
+            row=0, column=1, sticky='w', padx=4)
+        ttk.Label(fsr, text='(1 = every timepoint; higher is faster, same consensus)',
+                  foreground='grey').grid(row=0, column=2, sticky='w')
+        ttk.Label(fsr, text='One consensus lifetime is fitted across the whole series, '
+                            'so amplitudes stay comparable between timepoints.',
+                  foreground='grey', wraplength=520, justify='left').grid(
+            row=1, column=0, columnspan=3, sticky='w', padx=8, pady=(2, 0))
+        ttk.Label(fsr, text='Tile positions are recovered from the tile overlap; '
+                            'the reported correlation shows whether that worked.',
+                  foreground='grey', wraplength=520, justify='left').grid(
+            row=2, column=0, columnspan=3, sticky='w', padx=8)
+        self.b._series_frame.grid_remove()
 
         self.b._tile_extras_frame = ttk.Frame(parent)
         self.b._tile_extras_frame.columnconfigure(0, weight=1)

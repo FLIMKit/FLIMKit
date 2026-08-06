@@ -9,7 +9,7 @@ from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu,
 from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_tail, MIN_PHOTONS_PERPIX
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from flimkit.utils.misc import print_summary
-from flimkit.utils.xlsx_tools import load_xlsx
+from flimkit.utils.xlsx_tools import load_irf_export
 from flimkit.FLIM.fit_tools import find_irf_peak_bin, coates_pileup_correction
 from flimkit.image.tools import make_intensity_image, apply_intensity_threshold, pick_intensity_threshold
 from flimkit.utils.enhanced_outputs import save_weighted_tau_images, save_individual_tau_maps
@@ -20,15 +20,15 @@ from flimkit._version import fitter_version
 warnings.filterwarnings('ignore')
 
 def single_FOV_flim_fit_cli():
-    ap = argparse.ArgumentParser(description='FLIM reconvolution fit - PTU + optional XLSX (FLIM microscope)')
+    ap = argparse.ArgumentParser(description='FLIM reconvolution fit - PTU + optional LAS X export')
     ap.add_argument('--ptu',   default=None, required=True, help='Path to PTU file')
-    ap.add_argument('--xlsx',  default=None,
-                    help='FLIM microscope export xlsx (overlay comparison and/or IRF source)')
+    ap.add_argument('--xlsx', '--analysis-export', dest='xlsx', default=None,
+                    help='LAS X analysis export (.xlsx or .csv; overlay comparison and/or IRF source)')
     ap.add_argument('--no-xlsx-irf', action='store_true',
-                    help='Load xlsx for comparison/overlay but do NOT use its IRF '
+                    help='Load the analysis export for comparison/overlay but do NOT use its IRF '
                          'for fitting. Falls through to Gaussian/estimated IRF instead.')
     ap.add_argument('--debug-xlsx', action='store_true',
-                    help='Print raw xlsx row contents and detected columns to diagnose '
+                    help='Print raw export rows and detected columns to diagnose '
                          'parsing failures.')
     ap.add_argument('--irf',   default=None,
                     help='Measured IRF file, scatter PTU or PicoQuant .pck (highest priority)')
@@ -37,8 +37,8 @@ def single_FOV_flim_fit_cli():
                          'Needed when the IRF came from a separate acquisition with a '
                          'different sync delay. Off by default, since a scatter IRF measured '
                          'in the same session carries a real timing offset worth keeping.')
-    ap.add_argument('--irf-xlsx', default=None,
-                    help='Path to a reference xlsx exported from FLIM microscope software, used ONLY '
+    ap.add_argument('--irf-xlsx', '--irf-export', dest='irf_xlsx', default=None,
+                    help='Path to a reference LAS X export (.xlsx or .csv), used ONLY '
                          'to extract the IRF shape for fitting. The IRF is '
                          'system-specific (not FOV-specific) so export once per '
                          'session and reuse across all PTU files. Independent of '
@@ -184,12 +184,12 @@ def single_FOV_flim_fit_cli():
                   f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
     xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
-        print(f"\n[3] XLSX: {args.xlsx}")
-        xlsx = load_xlsx(args.xlsx, debug=args.debug_xlsx)
+        print(f"\n[3] LAS X export: {args.xlsx}")
+        xlsx = load_irf_export(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
             print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
     else:
-        print(f"\n[3] No XLSX provided or file not found")
+        print(f"\n[3] No LAS X export provided or file not found")
     print(f"\n[4] Building IRF")
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
@@ -201,10 +201,10 @@ def single_FOV_flim_fit_cli():
     elif args.irf_xlsx is not None:
         print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f"--irf-xlsx file not found: {args.irf_xlsx}")
-        irf_ref = load_xlsx(args.irf_xlsx, debug=False)
+            raise FileNotFoundError(f"IRF export file not found: {args.irf_xlsx}")
+        irf_ref = load_irf_export(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f"No IRF columns found in --irf-xlsx: {args.irf_xlsx}")
+            raise ValueError(f"No IRF columns found in export: {args.irf_xlsx}")
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, ptu.n_bins, ptu.tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))

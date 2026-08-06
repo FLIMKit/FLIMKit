@@ -44,9 +44,10 @@ class FovMode(BaseMode):
         xlsx_fr = ttk.Frame(ff)
         xlsx_fr.grid(row=2, column=0, sticky='ew')
         xlsx_fr.columnconfigure(1, weight=1)
-        _row(xlsx_fr, 'XLSX file (optional)', self.b.sv_xlsx, 0,
-             lambda: _browse_file(self.b.sv_xlsx, 'XLSX file',
-                                  [('Excel', '*.xlsx'), ('All', '*.*')]))
+        _row(xlsx_fr, 'LAS X export (optional)', self.b.sv_xlsx, 0,
+             lambda: _browse_file(self.b.sv_xlsx, 'LAS X export',
+                                  [('LAS X export', '*.xlsx *.csv *.tsv *.txt *.dat *.ascii *.asc'),
+                                   ('All', '*.*')]))
         self.b._irf_fov = IRFWidget(tab, default='irf_xlsx', xlsx_var=self.b.sv_xlsx,
                                    machine_irf_default=str(_C()['MACHINE_IRF_DEFAULT_PATH']))
         self.b._irf_fov.grid(row=1, column=0, sticky='ew', pady=(0, 6))
