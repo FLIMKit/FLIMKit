@@ -140,6 +140,21 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             r[m < n] *= -1                   
             return r
     if optimizer == 'lm_multistart':
+        n_log = n_exp
+        lo_scaled = np.asarray(lo, dtype=float).copy()
+        hi_scaled = np.asarray(hi, dtype=float).copy()
+        lo_scaled[:n_log] = np.log10(lo_scaled[:n_log])
+        hi_scaled[:n_log] = np.log10(hi_scaled[:n_log])
+        def to_scaled(params):
+            scaled = np.asarray(params, dtype=float).copy()
+            scaled[:n_log] = np.log10(scaled[:n_log])
+            return scaled
+        def from_scaled(params):
+            linear = np.asarray(params, dtype=float).copy()
+            linear[:n_log] = 10.0 ** linear[:n_log]
+            return linear
+        def residuals_scaled(params):
+            return residuals(from_scaled(params))
         rng = np.random.default_rng(42)
         best_res = None
         best_cost = np.inf
@@ -151,7 +166,8 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                           has_tail, fit_bg, fit_sigma, bg_init,
                           tau_override=tau_ov, fit_tvb=fit_tvb, tvb_init=tvb_init)
             try:
-                res = least_squares(residuals, p0, bounds=(lo, hi), method='trf',
+                res = least_squares(residuals_scaled, to_scaled(p0),
+                                    bounds=(lo_scaled, hi_scaled), method='trf',
                                     max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
             except Exception as exc:
@@ -166,7 +182,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                 print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}")
         if best_res is None:
             raise RuntimeError('All restarts failed.')
-        popt_work = best_res.x
+        popt_work = from_scaled(best_res.x)
         message = best_res.message
     elif optimizer == 'de':
         print(f"  Differential evolution: popsize={de_popsize}, "
