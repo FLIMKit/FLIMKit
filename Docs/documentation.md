@@ -208,7 +208,7 @@ You need the XLIF metadata file and the directory with the PTU tiles. The XLIF i
 - **Stitch only** builds a stitched intensity image and FLIM histogram cube, skips fitting. Exports the FLIM cube as an `.npy` file. Good for a quick visual check or if you want to hand the data off to something else.
 - **Stitch then fit full ROI** stitches everything into a single mosaic and fits it. Not recommended unless you have a capable machine and a small tile count, fitting a full mosaic requires a lot of RAM (tens of GBs) and is slow.
 - **Per-tile fit** the recommended option for most cases. Builds a global decay from all tiles, runs an initial fit to get the lifetime components, then fits each tile separately using those fixed lifetimes. Results are stitched back together at the end. Same quality as fitting the mosaic directly, but far more memory-efficient.
-- **Multidimensional series** per-tile fit repeated over a z and/or time axis, writing one stitched plane per `(t, z)`. Does not need an XLIF: tile positions are recovered from the tile overlap. See [Multidimensional Series](#multidimensional-series-stitched-tiles-over-z-and-time).
+- **Multidimensional series** per-tile fit repeated over a z and/or time axis, writing one stitched plane per `(t, z)`. Works with or without an XLIF. See [Multidimensional Series](#multidimensional-series-stitched-tiles-over-z-and-time).
 
 Fitting parameters are the same as for single FOV. For tile work, the machine IRF is strongly recommended, per-tile XLSX IRFs from FLIM microscope software can vary across tiles and cause inconsistencies.
 
@@ -476,7 +476,11 @@ These treat each `_sY` position as an independent field of view. If the position
 
 For tiled acquisitions with a z and/or time axis, where the tiles overlap and should be stitched into one canvas per plane rather than fitted as separate fields of view.
 
-Stitch tab → pipeline "Multidimensional series". The XLIF field is not required: tile positions are recovered from the tile overlap itself, by maximising the correlation between neighbouring tiles over candidate shifts. FFT phase correlation is not used, because on real mosaics with ~10% overlap it returns no distinguishable peak.
+Stitch tab → pipeline "Multidimensional series".
+
+Tile positions are found by maximising the correlation between neighbouring tiles over candidate shifts. FFT phase correlation is not used, because on real mosaics with ~10% overlap it returns no distinguishable peak.
+
+Give it an XLIF or LIF if you have one and it is used as the starting layout, then refined against the overlap. The refinement is not optional: on the test set the metadata put both tiles at the same y while the images show a 23 px offset, which is the difference between an overlap correlation of 0.77 and 0.04. Metadata still helps for more than two tiles, where chaining pairwise shifts can drift. With no metadata the positions come from the overlap alone, which needs structure in the overlap to match on and is unreliable on sparse or thin samples.
 
 One pooled decay is fitted across the whole series, and every plane is then fitted per-pixel with those τ values locked, so amplitudes stay comparable between timepoints. "Pool decay every N timepoints" subsamples that pooling step, which only needs photon statistics rather than every file.
 

@@ -713,8 +713,10 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
     }
 
 def _series_positions_from_metadata(xlif_path, ptu_dir, index, rotate_tiles,
-                                    binning, verbose=True):
+                                    binning, verbose=True, refine=True,
+                                    refine_radius=60):
     from .reader import PTUFile
+    from .series import refine_tile_positions, _tile_intensity
     xlif_path = Path(xlif_path)
     basename = index['base']
     positions = parse_tile_positions(xlif_path, basename)
@@ -734,6 +736,22 @@ def _series_positions_from_metadata(xlif_path, ptu_dir, index, rotate_tiles,
         print(f'Tile positions from {xlif_path.name}:')
         for p in positions:
             print(f"  s{p['s']}: pixel_y={p['pixel_y']} pixel_x={p['pixel_x']}")
+    if not refine:
+        return positions
+    plane = sorted(index['planes'])[len(index['planes']) // 2]
+    entries = sorted(index['planes'][plane], key=lambda e: e['s'])
+    images = [_tile_intensity(Path(ptu_dir) / e['file'], rotate_tiles, binning)
+              for e in entries]
+    positions, refinements = refine_tile_positions(
+        images, positions, radius=refine_radius)
+    if verbose:
+        print(f'Refined against the images at t={plane[0]} z={plane[1]}:')
+        for p, ref in zip(positions[1:], refinements):
+            if ref is None:
+                print(f"  s{p['s']}: no overlap large enough to refine")
+                continue
+            print(f"  s{p['s']}: moved {ref['shift_y']:+d},{ref['shift_x']:+d} px  "
+                  f"r {ref['correlation_before']:.3f} -> {ref['correlation']:.3f}")
     return positions
 
 def fit_flim_series(

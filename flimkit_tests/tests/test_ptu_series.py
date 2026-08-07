@@ -170,3 +170,57 @@ def test_fit_flim_series_rejects_ragged_series(tmp_path):
     with pytest.raises(RuntimeError, match='different tile count'):
         fit_flim_series(tmp_path, tmp_path / 'out', SimpleNamespace(nexp=2),
                         verbose=False)
+
+def test_refine_corrects_a_wrong_metadata_seed():
+    from flimkit.formats.PTU.series import refine_tile_positions
+    scene = _mosaic(shape=(260, 140), seed=13)
+    tiles = [scene[0:100, 0:120], scene[70:170, 0:120]]
+    seed = [{'s': 1, 'pixel_y': 0, 'pixel_x': 0},
+            {'s': 2, 'pixel_y': 0, 'pixel_x': 0}]
+    out, refs = refine_tile_positions(tiles, seed, radius=80)
+    assert [p['pixel_y'] for p in out] == [0, 70]
+    assert refs[0]['shift_y'] == 70
+    assert refs[0]['correlation'] > 0.9
+
+def test_refine_leaves_a_correct_seed_alone():
+    from flimkit.formats.PTU.series import refine_tile_positions
+    scene = _mosaic(shape=(260, 140), seed=17)
+    tiles = [scene[0:100, 0:120], scene[70:170, 0:120]]
+    seed = [{'s': 1, 'pixel_y': 0, 'pixel_x': 0},
+            {'s': 2, 'pixel_y': 70, 'pixel_x': 0}]
+    out, refs = refine_tile_positions(tiles, seed, radius=20)
+    assert [p['pixel_y'] for p in out] == [0, 70]
+    assert (refs[0]['shift_y'], refs[0]['shift_x']) == (0, 0)
+
+def test_refine_reports_the_correlation_it_started_from():
+    from flimkit.formats.PTU.series import refine_tile_positions
+    scene = _mosaic(shape=(260, 140), seed=19)
+    tiles = [scene[0:100, 0:120], scene[70:170, 0:120]]
+    seed = [{'s': 1, 'pixel_y': 0, 'pixel_x': 0},
+            {'s': 2, 'pixel_y': 30, 'pixel_x': 0}]
+    _out, refs = refine_tile_positions(tiles, seed, radius=60)
+    assert refs[0]['correlation'] > refs[0]['correlation_before']
+
+def test_refine_normalises_to_origin():
+    from flimkit.formats.PTU.series import refine_tile_positions
+    scene = _mosaic(shape=(260, 140), seed=23)
+    tiles = [scene[140:240, 0:120], scene[70:170, 0:120]]
+    seed = [{'s': 1, 'pixel_y': 70, 'pixel_x': 0},
+            {'s': 2, 'pixel_y': 0, 'pixel_x': 0}]
+    out, _refs = refine_tile_positions(tiles, seed, radius=40)
+    assert min(p['pixel_y'] for p in out) == 0
+
+def test_refine_passes_single_tile_through():
+    from flimkit.formats.PTU.series import refine_tile_positions
+    import numpy as np
+    seed = [{'s': 1, 'pixel_y': 5, 'pixel_x': 7}]
+    out, refs = refine_tile_positions([np.zeros((10, 10))], seed)
+    assert out == seed and refs == []
+
+def test_overlap_score_rejects_shifts_beyond_the_tile():
+    from flimkit.formats.PTU.series import _overlap_score
+    a = np.ones((50, 50))
+    b = np.ones((50, 50))
+    assert _overlap_score(a, b, 60, 0, 1) is None
+    assert _overlap_score(a, b, 0, -60, 1) is None
+    assert _overlap_score(a, b, 50, 0, 1) is None

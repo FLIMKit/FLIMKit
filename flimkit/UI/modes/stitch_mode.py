@@ -233,9 +233,9 @@ class StitchMode(BaseMode):
                             'so amplitudes stay comparable between timepoints.',
                   foreground='grey', wraplength=520, justify='left').grid(
             row=1, column=0, columnspan=3, sticky='w', padx=8, pady=(2, 0))
-        ttk.Label(fsr, text='Tile positions come from the XLIF or LIF when one is given. '
-                            'Without it they are recovered from the tile overlap, which is '
-                            'less reliable on sparse samples.',
+        ttk.Label(fsr, text='An XLIF or LIF is used as the starting layout and then refined '
+                            'against the tile overlap. Without one the positions come from '
+                            'the overlap alone, which is less reliable on sparse samples.',
                   foreground='grey', wraplength=520, justify='left').grid(
             row=2, column=0, columnspan=3, sticky='w', padx=8)
         self.b._series_frame.grid_remove()

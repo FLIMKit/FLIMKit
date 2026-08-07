@@ -1,4 +1,4 @@
-__version__ = '0.9.18'
+__version__ = '0.9.19'
 fitter_version = '18'
 
 roadmap = '''Flim program roadmap:
@@ -33,5 +33,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.9.16 -> fixed pile-up correction: Coates was being fed the photon/record count instead of the excitation-pulse count (N_sync), which destroyed the decay tail and mis-reported pile-up (0.07% read as 97%). N_sync is now taken from the true sync count per format, and Coates refuses any count that cannot be one.
 0.9.17 -> user-settable fit window + exclusion bands (--fit-start-ns/--fit-end-ns/--exclude-ns), so reflection peaks mid-decay can be dropped from the fit; the per-pixel path now honours the window at all (it previously projected over every bin, IRF rise and artefacts included). Pile-up can now go in the forward model (n_sync=) instead of correcting the data, which keeps the fit Poisson.
 0.9.18 -> added the n-exponential tail fit: bare exponentials fitted past the decay peak with no IRF and no reconvolution, y(t) = sum A[i] exp(-(t-t0)/tau[i]) + Bkgr. Reports the Leica quantities (per-component intensities I[k] = A[k]tau[k], I_sum, A_sum, t0) alongside the usual amplitude- and intensity-weighted mean lifetimes. t0 is pinned to the decay peak by default because it is strongly correlated with the amplitudes; free it from expert settings or --fit-t0. Available in FOV, batch and stitch modes, and as --fit-model tail on the CLI.
+0.9.19 -> multidimensional (z-stack and/or timelapse) tile stitching: a fourth Stitch pipeline that walks every (timepoint, z) plane, stitches the overlapping tiles for that plane and fits it, so overlapping positions are no longer treated as separate fields of view. One decay is pooled across the series and the lifetimes held fixed for every plane, so amplitudes stay comparable between timepoints. Tile positions come from the XLIF/LIF when one is given and are then refined against the tile overlap, which matters because the nominal stage coordinates can be out by tens of pixels; without metadata they are recovered from the overlap alone. Results browse with a plane slider in the FOV preview.
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

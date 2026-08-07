@@ -82,6 +82,8 @@ def describe_series(index):
 
 def _overlap_score(a, b, dy, dx, min_px):
     h, w = a.shape
+    if abs(dy) >= h or abs(dx) >= w:
+        return None
     pa = a[max(0, dy):min(h, h + dy), max(0, dx):min(w, w + dx)]
     pb = b[max(0, -dy):min(h, h - dy), max(0, -dx):min(w, w - dx)]
     if pa.size < min_px:
@@ -153,6 +155,50 @@ def recover_tile_positions(tile_images, min_correlation=0.3):
     positions = [{'pixel_y': ys[i] - min_y, 'pixel_x': xs[i] - min_x}
                  for i in range(len(tile_images))]
     return positions, pairs
+
+def refine_tile_positions(tile_images, positions, radius=60,
+                          min_overlap_frac=0.05):
+    if len(tile_images) < 2:
+        return [dict(p) for p in positions], []
+    imgs = [np.log1p(np.asarray(im, dtype=float)) for im in tile_images]
+    min_px = max(1, int(min_overlap_frac * imgs[0].size))
+    out = [dict(positions[0])]
+    refinements = []
+    for i in range(1, len(imgs)):
+        prev, cur = positions[i - 1], positions[i]
+        dy0 = cur['pixel_y'] - prev['pixel_y']
+        dx0 = cur['pixel_x'] - prev['pixel_x']
+        best = None
+        for dy in range(dy0 - radius, dy0 + radius + 1):
+            for dx in range(dx0 - radius, dx0 + radius + 1):
+                scored = _overlap_score(imgs[i - 1], imgs[i], dy, dx, min_px)
+                if scored is None:
+                    continue
+                r, n = scored
+                if best is None or r > best[0]:
+                    best = (r, dy, dx, n)
+        if best is None:
+            out.append(dict(cur))
+            refinements.append(None)
+            continue
+        r, dy, dx, n = best
+        start = _overlap_score(imgs[i - 1], imgs[i], dy0, dx0, min_px)
+        out.append({**cur,
+                    'pixel_y': out[i - 1]['pixel_y'] + dy,
+                    'pixel_x': out[i - 1]['pixel_x'] + dx})
+        refinements.append({
+            'shift_y': dy - dy0,
+            'shift_x': dx - dx0,
+            'correlation': float(r),
+            'correlation_before': float(start[0]) if start else float('nan'),
+            'overlap_px': int(n),
+        })
+    min_y = min(p['pixel_y'] for p in out)
+    min_x = min(p['pixel_x'] for p in out)
+    for p in out:
+        p['pixel_y'] -= min_y
+        p['pixel_x'] -= min_x
+    return out, refinements
 
 def _tile_intensity(ptu_path, rotate_cw, binning):
     from .reader import PTUFile
