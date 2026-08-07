@@ -2222,11 +2222,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             self._update_expert_banners()
         if mode != 'series_fit' and hasattr(self, '_series_frame'):
             self._series_frame.grid_remove()
-        if hasattr(self, '_xlif_optional_note'):
-            if mode == 'series_fit':
-                self._xlif_optional_note.grid()
-            else:
-                self._xlif_optional_note.grid_remove()
         self._update_form_scrollbar('stitch')
         self.root.after_idle(self._fit_window_to_screen)
 
@@ -3222,6 +3217,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     output_dir=a.output_dir,
                     args=a,
                     rotate_tiles=a.rotate_tiles,
+                    xlif_path=a.xlif or None,
                     pool_stride=pool_stride,
                     verbose=True,
                     progress_callback=progress_callback,

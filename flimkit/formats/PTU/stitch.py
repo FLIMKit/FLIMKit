@@ -712,6 +712,30 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
         'stride': stride,
     }
 
+def _series_positions_from_metadata(xlif_path, ptu_dir, index, rotate_tiles,
+                                    binning, verbose=True):
+    from .reader import PTUFile
+    xlif_path = Path(xlif_path)
+    basename = index['base']
+    positions = parse_tile_positions(xlif_path, basename)
+    if len(positions) != len(index['tiles']):
+        raise RuntimeError(
+            f'{xlif_path.name} describes {len(positions)} tiles but the series '
+            f"has {len(index['tiles'])}; check it is the matching metadata file")
+    pixel_size_m, _ = get_pixel_size(xlif_path, basename)
+    first = index['planes'][sorted(index['planes'])[0]][0]
+    ptu = PTUFile(str(Path(ptu_dir) / first['file']), verbose=False)
+    tile_w = (ptu.n_y if rotate_tiles else ptu.n_x) // binning
+    positions, _, _ = compute_tile_pixel_positions(
+        positions, pixel_size_m * binning, tile_w)
+    for p, s in zip(positions, index['tiles']):
+        p['s'] = s
+    if verbose:
+        print(f'Tile positions from {xlif_path.name}:')
+        for p in positions:
+            print(f"  s{p['s']}: pixel_y={p['pixel_y']} pixel_x={p['pixel_x']}")
+    return positions
+
 def fit_flim_series(
     ptu_dir,
     output_dir,
@@ -719,6 +743,7 @@ def fit_flim_series(
     ptu_basename=None,
     rotate_tiles=True,
     tile_positions=None,
+    xlif_path=None,
     pool_stride=10,
     pooled=None,
     verbose=True,
@@ -740,6 +765,10 @@ def fit_flim_series(
         raise RuntimeError(
             'Series has a different tile count on different planes; '
             'the missing files must be restored before stitching')
+    if tile_positions is None and xlif_path:
+        tile_positions = _series_positions_from_metadata(
+            xlif_path, ptu_dir, index, rotate_tiles,
+            getattr(args, 'binning', 1), verbose)
     if tile_positions is None:
         tile_positions, _ = recover_series_positions(
             ptu_dir, index, rotate_tiles=rotate_tiles,

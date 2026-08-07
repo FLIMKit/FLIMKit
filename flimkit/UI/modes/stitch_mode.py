@@ -22,12 +22,6 @@ class StitchMode(BaseMode):
         _row(ff, 'XLIF metadata *',      self.b.sv_xlif,    0,
              lambda: _browse_file(self.b.sv_xlif, 'XLIF file',
                                   [('XLIF', '*.xlif'), ('All', '*.*')]))
-        self.b._xlif_optional_note = ttk.Label(
-            ff, text='Not needed for a multidimensional series: tile positions '
-                     'are recovered from the tile overlap',
-            foreground='grey')
-        self.b._xlif_optional_note.grid(row=0, column=3, sticky='w', padx=4)
-        self.b._xlif_optional_note.grid_remove()
         _row(ff, 'PTU tile directory *', self.b.sv_ptu_dir, 1,
              lambda: _browse_dir(self.b.sv_ptu_dir, 'PTU tile directory'))
         _row(ff, 'Base output dir *',    self.b.sv_out_st,  2,
@@ -239,8 +233,9 @@ class StitchMode(BaseMode):
                             'so amplitudes stay comparable between timepoints.',
                   foreground='grey', wraplength=520, justify='left').grid(
             row=1, column=0, columnspan=3, sticky='w', padx=8, pady=(2, 0))
-        ttk.Label(fsr, text='Tile positions are recovered from the tile overlap; '
-                            'the reported correlation shows whether that worked.',
+        ttk.Label(fsr, text='Tile positions come from the XLIF or LIF when one is given. '
+                            'Without it they are recovered from the tile overlap, which is '
+                            'less reliable on sparse samples.',
                   foreground='grey', wraplength=520, justify='left').grid(
             row=2, column=0, columnspan=3, sticky='w', padx=8)
         self.b._series_frame.grid_remove()

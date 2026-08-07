@@ -153,7 +153,6 @@ def test_series_fit_pipeline_toggles_series_controls(app):
     app.sv_pipeline.set('series_fit')
     app._pipeline_changed()
     assert app._series_frame.winfo_manager()
-    assert app._xlif_optional_note.winfo_manager()
     assert app._btn_st.cget('text') == '▶  Run Series Fit'
 
 def test_series_controls_hidden_for_other_pipelines(app):
@@ -162,7 +161,6 @@ def test_series_controls_hidden_for_other_pipelines(app):
         app.sv_pipeline.set(mode)
         app._pipeline_changed()
     assert not app._series_frame.winfo_manager()
-    assert not app._xlif_optional_note.winfo_manager()
 
 def test_series_fit_args_derive_roi_from_ptu_dir(app, tmp_path):
     app._switch_form('stitch')
