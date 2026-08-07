@@ -331,6 +331,7 @@ def make_decay_bokeh():
     src_data = ColumnDataSource(dict(t=[], y=[]))
     src_model = ColumnDataSource(dict(t=[], y=[]))
     src_resid = ColumnDataSource(dict(t=[], r=[]))
+    src_irf = ColumnDataSource(dict(t=[], y=[]))
     top = figure(height=320, sizing_mode='stretch_width', y_axis_type='log',
                  background_fill_color=BG, border_fill_color=BG,
                  outline_line_color='#444', title='Summed decay')
@@ -341,6 +342,8 @@ def make_decay_bokeh():
     top.add_layout(fit_box)
     top.add_layout(excl_box)
     top.scatter('t', 'y', source=src_data, size=2, color='#aaaaaa', legend_label='data')
+    top.line('t', 'y', source=src_irf, line_width=1.5, color='#f4a261',
+             line_dash='dashed', legend_label='IRF')
     top.line('t', 'y', source=src_model, line_width=2, color='#e63946', legend_label='fit')
     box_sel = BoxSelectTool(dimensions='width')
     top.add_tools(box_sel)
@@ -360,18 +363,18 @@ def make_decay_bokeh():
     top.legend.label_text_color = FG
     top.legend.background_fill_color = BG
     top.legend.border_line_color = '#444'
+    top.legend.click_policy = 'hide'
     top.yaxis.axis_label = 'counts'
-    return top, bot, src_data, src_model, src_resid, fit_box, excl_box
+    return top, bot, src_data, src_model, src_resid, src_irf, fit_box, excl_box
 
 def update_decay_bokeh(sources, res):
-    src_data, src_model, src_resid = sources
+    src_data, src_model, src_resid, src_irf = sources
     t = res.get('time_ns')
     d = res.get('decay')
     g = res.get('global_summary') or {}
     if t is None or d is None:
-        src_data.data = dict(t=[], y=[])
-        src_model.data = dict(t=[], y=[])
-        src_resid.data = dict(t=[], r=[])
+        for s in (src_data, src_model, src_resid, src_irf):
+            s.data = {k: [] for k in s.data}
         return
     t = np.asarray(t, dtype=float)
     d = np.clip(np.asarray(d, dtype=float), 1.0, None)
@@ -381,6 +384,15 @@ def update_decay_bokeh(sources, res):
         src_model.data = dict(t=t, y=np.clip(np.asarray(model, dtype=float), 1.0, None))
     else:
         src_model.data = dict(t=[], y=[])
+    irf = res.get('irf_prompt')
+    if irf is not None:
+        irf = np.asarray(irf, dtype=float)
+        if irf.max() > 0:
+            irf = irf * (d.max() * 0.1 / irf.max())
+        mask = irf > irf.max() * 1e-3 if irf.max() > 0 else np.zeros_like(irf, bool)
+        src_irf.data = dict(t=t[:len(irf)][mask[:len(t)]], y=irf[mask])
+    else:
+        src_irf.data = dict(t=[], y=[])
     resid = g.get('residuals')
     fw = g.get('fit_window_bins')
     if resid is not None and fw is not None:
@@ -417,17 +429,25 @@ def make_roi_figure():
     fig.yaxis.major_label_text_color = FG
     return fig, img_src, box_src, mapper
 
-def load_roi_image(img_src, mapper, fig, ptu_path, channel=None):
+def set_roi_array(img_src, mapper, fig, arr, palette=None):
     from bokeh.models import Range1d
-    from flimkit.web.roi import intensity_map
-    img = np.asarray(intensity_map(ptu_path, channel=channel), dtype=float)
-    ny, nx = img.shape
-    img_src.data = dict(image=[img], x=[0], y=[0], dw=[nx], dh=[ny])
-    mapper.high = float(np.percentile(img, 99)) or 1.0
+    arr = np.asarray(arr, dtype=float)
+    ny, nx = arr.shape
+    img_src.data = dict(image=[arr], x=[0], y=[0], dw=[nx], dh=[ny])
+    finite = arr[np.isfinite(arr)]
+    hi = float(np.nanpercentile(finite, 99)) if finite.size else 1.0
     mapper.low = 0.0
+    mapper.high = hi or 1.0
+    if palette is not None:
+        mapper.palette = palette
     fig.x_range.start, fig.x_range.end = 0, nx
     fig.y_range = Range1d(ny, 0)
-    return img.shape
+    return arr.shape
+
+def load_roi_image(img_src, mapper, fig, ptu_path, channel=None):
+    from flimkit.web.roi import intensity_map
+    img = np.asarray(intensity_map(ptu_path, channel=channel), dtype=float)
+    return set_roi_array(img_src, mapper, fig, img, palette='Inferno256')
 
 def boxes_from_source(box_src):
     d = box_src.data
@@ -471,6 +491,45 @@ def lifetime_figure(res, vmin=None, vmax=None, key=None):
     style_cbar(fig.colorbar(im, ax=ax, fraction=0.046, label='ns'))
     fig.tight_layout()
     return fig
+
+def lifetime_array_figure(arr, vmin=None, vmax=None, title='lifetime map'):
+    arr = np.asarray(arr, dtype=float)
+    finite = arr[np.isfinite(arr)]
+    if vmin is None and finite.size:
+        vmin = float(np.nanpercentile(finite, 2))
+    if vmax is None and finite.size:
+        vmax = float(np.nanpercentile(finite, 98))
+    fig = Figure(figsize=(4.5, 4))
+    ax = fig.add_subplot(111)
+    im = ax.imshow(arr, cmap='viridis', vmin=vmin, vmax=vmax)
+    ax.set_title(title, fontsize=9)
+    ax.set_axis_off()
+    style_dark(fig, ax)
+    style_cbar(fig.colorbar(im, ax=ax, fraction=0.046, label='ns'))
+    fig.tight_layout()
+    return fig
+
+def results_html_from_rows(rows):
+    if not rows:
+        return f'<div style="color:{DIM};font-size:12px;padding:8px;">No saved results.</div>'
+    tiles = ''
+    stats = ''
+    for r in rows:
+        q, v, u = r.get('quantity', ''), r.get('value', ''), r.get('unit', '')
+        ql = q.lower()
+        if (ql.startswith('τ') or ql.startswith('tau')) and any(c.isdigit() for c in q) and 'mean' not in ql:
+            tiles += (f'<div style="background:{BG};border:1px solid {BORDER2};border-radius:6px;'
+                      f'padding:10px;"><div style="font-size:10px;color:{FAINT};margin-bottom:4px;">'
+                      f'{q}</div><div style="font-family:\'JetBrains Mono\',monospace;color:{ACCENT_LIGHT};">'
+                      f'{v} <span style="color:{FAINT};">{u}</span></div></div>')
+        else:
+            stats += (f'<div style="display:flex;justify-content:space-between;padding:6px 0;'
+                      f'border-bottom:1px solid {BORDER2};font-family:\'JetBrains Mono\',monospace;">'
+                      f'<span style="color:{DIM};">{q}</span>'
+                      f'<span style="color:{FG};">{v} {u}</span></div>')
+    grid = (f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+            f'{tiles}</div>') if tiles else ''
+    return f'<div style="font-size:12px;">{grid}{stats}</div>'
 
 def _seq(g, key):
     val = g.get(key)
@@ -591,16 +650,16 @@ def buildApp():
     status = pn.pane.Markdown('Idle.', sizing_mode='stretch_width')
     bar = pn.indicators.Progress(value=0, max=100, sizing_mode='stretch_width', visible=False)
     preview = pn.pane.Matplotlib(blank_figure('no file loaded'), dpi=110, tight=True)
-    decay_top, decay_bot, src_data, src_model, src_resid, decay_fit_box, decay_excl_box = make_decay_bokeh()
-    decay_sources = (src_data, src_model, src_resid)
+    decay_top, decay_bot, src_data, src_model, src_resid, src_irf, decay_fit_box, decay_excl_box = make_decay_bokeh()
+    decay_sources = (src_data, src_model, src_resid, src_irf)
     sel_target = pn.widgets.RadioButtonGroup(
         name='Drag sets', options=['Fit window', 'Exclude range'],
         value='Fit window', button_type='default')
     sel_clear = pn.widgets.Button(name='Clear exclude', button_type='default', width=130)
     taumap = pn.pane.Matplotlib(blank_figure('no fit yet'), dpi=110, tight=True)
-    disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1)
-    disp_max = pn.widgets.FloatInput(name='Display max (ns)', value=5.0, step=0.1)
-    map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int')
+    disp_min = pn.widgets.FloatInput(name='Display min (ns)', value=0.0, step=0.1, width=140)
+    disp_max = pn.widgets.FloatInput(name='Display max (ns)', value=5.0, step=0.1, width=140)
+    map_key = pn.widgets.Select(name='Map', options=['tau_mean_int', 'tau_mean_amp'], value='tau_mean_int', width=180)
     table = pn.widgets.Tabulator(value=None, show_index=False, height=300, sizing_mode='stretch_width')
     log = pn.pane.Markdown('', sizing_mode='stretch_width', styles={'font-family': 'monospace', 'font-size': '11px'})
     result_tiles = pn.pane.HTML(results_html(None), sizing_mode='stretch_width')
@@ -620,8 +679,8 @@ def buildApp():
     roi_clear = pn.widgets.Button(name='Clear boxes', button_type='default', width=140)
     roi_fit = pn.widgets.Button(name='Fit ROI decay', button_type='primary', width=160)
     roi_status = pn.pane.Markdown('Load an image, then draw boxes.', sizing_mode='stretch_width')
-    roi_top, roi_bot, roi_sd, roi_sm, roi_sr, _roi_fit_box, _roi_excl_box = make_decay_bokeh()
-    roi_decay_sources = (roi_sd, roi_sm, roi_sr)
+    roi_top, roi_bot, roi_sd, roi_sm, roi_sr, roi_si, _roi_fit_box, _roi_excl_box = make_decay_bokeh()
+    roi_decay_sources = (roi_sd, roi_sm, roi_sr, roi_si)
     roi_table = pn.widgets.Tabulator(value=None, show_index=False, height=260, sizing_mode='stretch_width')
     cancel = threading.Event()
 
@@ -683,6 +742,47 @@ def buildApp():
                 rows.append({'file': f.name, 'kind': f.suffix.lstrip('.')})
         proj_files.value = pd.DataFrame(rows, columns=['file', 'kind'])
 
+    def try_load_npz(path):
+        from flimkit.web.roi import load_npz_session, load_web_fit, summed_decay
+        sess = load_npz_session(path)
+        wf = load_web_fit(path)
+        if not sess and wf is None:
+            return False
+        if sess and sess.get('rows'):
+            try:
+                table.value = _rows_to_frame(sess['rows'])
+                result_tiles.object = results_html_from_rows(sess['rows'])
+            except Exception:
+                pass
+        if sess and sess.get('lifetime_map') is not None:
+            try:
+                set_pane(taumap, lifetime_array_figure(sess['lifetime_map']))
+            except Exception:
+                pass
+        if sess and sess.get('intensity_map') is not None:
+            try:
+                set_roi_array(roi_img_src, roi_mapper, roi_fig, sess['intensity_map'], palette='Inferno256')
+                roi_status.object = 'Loaded saved image. Draw boxes with the Box Edit tool.'
+            except Exception:
+                pass
+        full = (sess.get('res') if sess else None) or wf
+        if full is not None:
+            try:
+                update_decay_bokeh(decay_sources, full)
+                set_pill('Restored', '#4ade80', '#10231a')
+                status.object = f"Restored full fit for `{Path(path).name}` (model + IRF + residuals)."
+                return True
+            except Exception:
+                pass
+        try:
+            t, d = summed_decay(path)
+            update_decay_bokeh(decay_sources, {'time_ns': t, 'decay': d, 'global_summary': {}})
+        except Exception:
+            pass
+        set_pill('Restored', '#4ade80', '#10231a')
+        status.object = f"Loaded saved fit for `{Path(path).name}` (decay data; re-run for model + IRF)"
+        return True
+
     def on_path(event):
         path = (event.new or '').strip()
         if path and Path(path).is_file():
@@ -691,6 +791,7 @@ def buildApp():
                 return
             status.object = 'Building intensity preview...'
             load_preview(path)
+            try_load_npz(path)
     ptu.param.watch(on_path, 'value')
 
     def on_proj_pick(event):
@@ -844,6 +945,11 @@ def buildApp():
             except Exception as exc:
                 log.object = f'summary render failed: {exc}'
             update_decay_bokeh(decay_sources, res)
+            try:
+                from flimkit.web.roi import save_web_fit
+                save_web_fit(a.ptu, res)
+            except Exception:
+                pass
             lo, hi = autoscale(res, map_key.value)
             if lo is not None:
                 disp_min.value = round(float(lo), 3)
@@ -990,8 +1096,9 @@ def buildApp():
     )
 
     lifetime_tab = pn.Column(
-        pn.Row(map_key, disp_min, disp_max),
-        card('Lifetime map', taumap))
+        pn.Row(map_key, disp_min, disp_max, sizing_mode='stretch_width'),
+        card('Lifetime map', taumap),
+        sizing_mode='stretch_width')
     decay_tab = pn.Column(
         pn.Row(pn.pane.HTML(f'<span style="font-size:11px;color:{MUTED};align-self:center;">'
                             f'Box-select on the plot &rarr;</span>'),
@@ -1099,6 +1206,7 @@ def buildApp():
         status.object = f'Restored session: `{Path(restored_path).name}` (building preview...)'
 
         def _deferred_preview():
+            try_load_npz(restored_path)
             load_preview(restored_path)
         pn.state.onload(_deferred_preview)
 
