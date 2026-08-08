@@ -4,7 +4,6 @@ from scipy.optimize import curve_fit
 
 
 def calibrated_chi2(data, model, axis=None):
-    """Return the expected-contribution-normalized model chi-square."""
     data_arr, model_arr = np.broadcast_arrays(
         np.asarray(data, dtype=float), np.asarray(model, dtype=float))
     valid = np.all(
