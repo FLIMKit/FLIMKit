@@ -18,6 +18,8 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
     nexp = ref.get('nexp', len(taus_ns))
     ref_decay = ref_time = ref_model = ref_irf = None
     ref_chi2 = None
+    ref_calibrated = ref.get('calibrated_chi2_pearson')
+    ref_calibrated_tail = ref.get('calibrated_chi2_tail_pearson')
     npz_path = group_dir / 'reference_decay.npz'
     if npz_path.exists():
         try:
@@ -27,6 +29,10 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
                 ref_model = zf['model'] if zf['model'].size > 0 else None
                 ref_irf = zf['irf_prompt'] if zf['irf_prompt'].size > 0 else None
                 ref_chi2 = float(zf['reduced_chi2_tail'][0]) if zf['reduced_chi2_tail'].size > 0 else None
+                if ref_calibrated is None and 'calibrated_chi2_pearson' in zf:
+                    ref_calibrated = float(zf['calibrated_chi2_pearson'][0])
+                if ref_calibrated_tail is None and 'calibrated_chi2_tail_pearson' in zf:
+                    ref_calibrated_tail = float(zf['calibrated_chi2_tail_pearson'][0])
         except Exception:
             pass
     z_to_ptu = {}
@@ -48,7 +54,8 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
             p = slice_dir / f'{name}.npy'
             return np.load(str(p)) if p.exists() else None
         pixel_maps = {}
-        for k in ('tau_mean_int', 'tau_mean_amp', 'alpha_1', 'alpha_2', 'alpha_3', 'chi2_r'):
+        for k in ('tau_mean_int', 'tau_mean_amp', 'alpha_1', 'alpha_2', 'alpha_3',
+                  'chi2_r', 'calibrated_chi2'):
             m = _load(k)
             if m is not None:
                 pixel_maps[k] = m
@@ -57,6 +64,10 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
             global_summary['model'] = ref_model
         if ref_chi2 is not None and ref_chi2 == ref_chi2:
             global_summary['reduced_chi2_tail'] = ref_chi2
+        if ref_calibrated is not None and ref_calibrated == ref_calibrated:
+            global_summary['calibrated_chi2_pearson'] = ref_calibrated
+        if ref_calibrated_tail is not None and ref_calibrated_tail == ref_calibrated_tail:
+            global_summary['calibrated_chi2_tail_pearson'] = ref_calibrated_tail
         fit_result = {
             'pixel_maps': pixel_maps,
             'intensity': _load('intensity'),

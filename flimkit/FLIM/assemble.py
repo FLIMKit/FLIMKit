@@ -12,7 +12,7 @@ def assemble_tile_maps(
 ) -> Dict[str, np.ndarray]:
     H, W = canvas_height, canvas_width
 
-    keys_scalar = ['tau_mean_amp', 'tau_mean_int', 'chi2']
+    keys_scalar = ['tau_mean_amp', 'tau_mean_int', 'chi2', 'calibrated_chi2']
     keys_tau    = [f'tau{k}' for k in range(1, n_exp + 1)]
     keys_amp    = [f'a{k}'   for k in range(1, n_exp + 1)]
     keys_all    = keys_scalar + keys_tau + keys_amp

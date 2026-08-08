@@ -746,6 +746,23 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 | `poisson` | Poisson deviance (C-statistic). Recommended |
 | `chi2` | Neyman chi-squared (legacy)  |
 
+### Goodness-of-fit outputs
+
+The existing `reduced_chi2_pearson`, `reduced_chi2_tail_pearson`, and per-pixel
+`chi2_r` fields are retained for compatibility with historical Leica LAS X
+comparisons. Their one-count model floor means they are not generally expected
+to equal one for sparse decays.
+
+`calibrated_chi2_pearson`, `calibrated_chi2_tail_pearson`, and the per-pixel
+`calibrated_chi2` map divide the same residual sum by its expected contribution
+under a fixed Poisson model:
+
+$$Q_{\mathrm{cal}} = \frac{\sum_i (Y_i-m_i)^2/\max(m_i,1)}{\sum_i \min(m_i,1)}.$$
+
+The fixed-model expectation is one. Parameter fitting and data-selected windows
+can introduce a smaller additional shift, so this diagnostic is not a classical
+chi-square p-value.
+
 ---
 
 ## Module Reference
