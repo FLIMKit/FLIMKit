@@ -1419,7 +1419,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     _consensus_summary = global_summary
     global_summary = derive_global_tau(canvas, n_exp=args.nexp)
     for _key in ('model', 'reduced_chi2', 'reduced_chi2_tail',
-                 'reduced_chi2_tail_pearson', 'reduced_chi2_pearson'):
+                 'reduced_chi2_tail_pearson', 'reduced_chi2_pearson',
+                 'calibrated_chi2_pearson', 'calibrated_chi2_tail_pearson'):
         if _key in _consensus_summary:
             global_summary[_key] = _consensus_summary[_key]
     n_px = global_summary.get('n_pixels_fitted', 0)

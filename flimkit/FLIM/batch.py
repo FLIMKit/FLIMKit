@@ -142,6 +142,10 @@ def fit_timelapse(ptu_dir, output_dir, args,
             'positions': all_s,
             'estimate_irf': getattr(args, 'estimate_irf', 'gaussian'),
             'user_supplied_tau': use_supplied,
+            'calibrated_chi2_pearson': global_summary.get(
+                'calibrated_chi2_pearson'),
+            'calibrated_chi2_tail_pearson': global_summary.get(
+                'calibrated_chi2_tail_pearson'),
         })
         print(f'\n[3] Per-frame per-position fitting  (α free, τ locked)…')
         per_pos_series = {s: {} for s in all_s}
@@ -188,7 +192,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
                 np.save(str(pos_dir / 'intensity.npy'), intensity.astype(np.float32))
                 for map_name in ('alpha_1', 'alpha_2', 'alpha_3', 'tau_mean_amp',
-                                 'tau_mean_int', 'chi2_r'):
+                                 'tau_mean_int', 'chi2_r', 'calibrated_chi2_r'):
                     if pixel_maps.get(map_name) is not None:
                         np.save(str(pos_dir / f'{map_name}.npy'),
                                 pixel_maps[map_name].astype(np.float32))
@@ -446,6 +450,10 @@ def fit_zstack(ptu_dir, output_dir, args,
             'z_slices': sorted(zslices),
             'estimate_irf': getattr(args, 'estimate_irf', 'gaussian'),
             'user_supplied_tau': use_supplied,
+            'calibrated_chi2_pearson': global_summary.get(
+                'calibrated_chi2_pearson'),
+            'calibrated_chi2_tail_pearson': global_summary.get(
+                'calibrated_chi2_tail_pearson'),
         })
         n_ref = min(len(pooled_decay), n_bins)
         ref_time_ns = (np.arange(n_ref) + 0.5) * tcspc_res * 1e9
@@ -461,6 +469,12 @@ def fit_zstack(ptu_dir, output_dir, args,
             taus_ns=np.asarray(list(taus_ns), dtype=np.float64),
             reduced_chi2_tail=np.asarray(
                 [global_summary.get('reduced_chi2_tail', float('nan'))], dtype=np.float64),
+            calibrated_chi2_pearson=np.asarray(
+                [global_summary.get('calibrated_chi2_pearson', float('nan'))],
+                dtype=np.float64),
+            calibrated_chi2_tail_pearson=np.asarray(
+                [global_summary.get('calibrated_chi2_tail_pearson', float('nan'))],
+                dtype=np.float64),
         )
         print(f'\n[3] Per-slice per-pixel fitting  (α free, τ locked)…')
         z_series = {}
@@ -502,7 +516,7 @@ def fit_zstack(ptu_dir, output_dir, args,
             intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
             np.save(str(slice_dir / 'intensity.npy'), intensity.astype(np.float32))
             for map_name in ('alpha_1', 'alpha_2', 'alpha_3', 'tau_mean_amp',
-                             'tau_mean_int', 'chi2_r'):
+                             'tau_mean_int', 'chi2_r', 'calibrated_chi2_r'):
                 if pixel_maps.get(map_name) is not None:
                     np.save(str(slice_dir / f'{map_name}.npy'),
                             pixel_maps[map_name].astype(np.float32))

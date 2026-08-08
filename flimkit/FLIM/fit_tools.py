@@ -2,6 +2,26 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 
+
+def calibrated_chi2(data, model, axis=None):
+    data_arr, model_arr = np.broadcast_arrays(
+        np.asarray(data, dtype=float), np.asarray(model, dtype=float))
+    valid = np.all(
+        np.isfinite(data_arr) & (data_arr >= 0.0)
+        & np.isfinite(model_arr) & (model_arr >= 0.0),
+        axis=axis)
+    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
+        numerator = np.sum(
+            (data_arr - model_arr) ** 2 / np.maximum(model_arr, 1.0), axis=axis)
+        expected = np.sum(np.minimum(model_arr, 1.0), axis=axis)
+    if np.ndim(expected) == 0:
+        return float(numerator / expected) if valid and expected > 0 else np.nan
+    result = np.full(np.shape(expected), np.nan, dtype=float)
+    return np.divide(
+        numerator, expected, out=result,
+        where=valid & (expected > 0) & np.isfinite(numerator))
+
+
 def coates_pileup_correction(decay: np.ndarray, n_sync: int):
     m = np.asarray(decay, dtype=float)
     n_s = float(n_sync or 0.0)
