@@ -235,6 +235,8 @@ class _UIBuilder:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Tools', menu=tools_menu)
         tools_menu.add_command(label='Machine IRF Builder', command=self._menu_irf_builder)
+        tools_menu.add_command(label='Time-Resolved Anisotropy...',
+                               command=self._menu_anisotropy)
         tools_menu.add_command(label='Generate Synthetic PTU...', command=self._menu_synth_generator)
         batch_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label='Batch Processing', menu=batch_menu)
@@ -474,6 +476,11 @@ class _UIBuilder:
         print('[Menu] Machine IRF Builder')
         if hasattr(self, '_switch_form'):
             self._switch_form('irf')
+
+    def _menu_anisotropy(self):
+        print('[Menu] Time-Resolved Anisotropy')
+        from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+        show_anisotropy_tool(self.root)
 
     def _menu_synth_generator(self):
         print('[Menu] Generate Synthetic PTU')

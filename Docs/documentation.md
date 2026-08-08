@@ -14,6 +14,7 @@
 4. [Quick Start](#quick-start)
 5. [Workflows](#workflows)
    - [Desktop GUI](#desktop-gui)
+   - [Time-Resolved Anisotropy](#time-resolved-anisotropy)
    - [Guided Terminal UI](#guided-terminal-ui-mainpy)
    - [Machine IRF Setup](#machine-irf-setup-required)
    - [FLIM Reconvolution Fitting (CLI)](#flim-reconvolution-fitting-cli)
@@ -294,6 +295,29 @@ A filter row sits above the cursor controls. Select a method, set parameters, an
 | `wavelet` | none | Wavelet soft-thresholding (Daubechies db4, MAD noise estimator) |
 
 Filtering is applied in phasor space (G and S coordinates) after calibration. The phasor plot and cursor stats update immediately after applying.
+
+#### Time-Resolved Anisotropy
+
+Open **Tools → Time-Resolved Anisotropy** for a matched pair of sequential polarization PTUs.
+
+1. Select the parallel and perpendicular PTUs explicitly. File names do not determine their roles.
+2. Select the photon channel for each PTU.
+3. Enter a measured G factor and relative acquisition exposures when available. G=1 and equal exposures are assumptions, not calibrations.
+4. Choose separate pre-peak background bins, a post-peak analysis interval, spatial window, stride, and observed-photon thresholds.
+5. Keep automatic registration enabled for sequential images unless registration was performed separately.
+
+The calculation is
+
+$$
+r(t)=\frac{I_{\parallel}(t)-G I_{\perp}(t)}
+{I_{\parallel}(t)+2G I_{\perp}(t)}.
+$$
+
+Relative exposures are applied before this ratio. Backgrounds are estimated separately for the two decays. Low-count masks use observed photons rather than possibly negative background-corrected values. Spatial maps pool complete windows before calculating the ratio; with stride 1, neighboring windows overlap and are not independent pixel measurements.
+
+CSV export contains the summed corrected decays, absolute and post-peak time, anisotropy, validity flag, and repeated provenance columns for spreadsheet use. NPZ export also contains maps, masks, observed counts, window origins, registration shift, G factor, exposures, backgrounds, channels, thresholds, and file names without private absolute paths.
+
+This tool does not infer a G factor and does not fit rotational correlation times. A physical rotational fit requires independent polarization calibration and a justified analysis of the polarization-specific instrument responses. Treat a G=1 result as an uncalibrated sensitivity case unless the acquisition was calibrated independently.
 
 ---
 
