@@ -249,13 +249,15 @@ class TestPerPixelGridScan:
         assert 150.0 < np.nanmedian(on['tvb_scale']) < 480.0
         assert np.nanmedian(on['chi2_r']) < np.nanmedian(off['chi2_r'])
 
-    def test_cpu_gpu_parity(self, gpu_backend):
+    def test_cpu_gpu_parity(self, gpu_backend, monkeypatch):
         if gpu_backend is None:
             pytest.skip('no GPU backend available')
         irf = _irf()
         B = _bg_profile()
         stack = _noisy_stack([2.0e-9], [1000.0], 300.0, 1, ny=10, nx=10, seed=7)
         gp = np.array([2.0e-9, 1000.0, 0.0])
+        import flimkit.FLIM.fitters as F
+        monkeypatch.setattr(F, '_gpu_backend_cache', None)
         cpu = fit_per_pixel(stack, RES, N, irf, False, False, False, gp, 1,
                             use_gpu=False, tvb_profile=B, fit_tvb=True)
         gpu = fit_per_pixel(stack, RES, N, irf, False, False, False, gp, 1,
