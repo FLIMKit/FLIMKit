@@ -192,7 +192,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
                 np.save(str(pos_dir / 'intensity.npy'), intensity.astype(np.float32))
                 for map_name in ('alpha_1', 'alpha_2', 'alpha_3', 'tau_mean_amp',
-                                 'tau_mean_int', 'chi2_r', 'calibrated_chi2'):
+                                 'tau_mean_int', 'chi2_r', 'calibrated_chi2_r'):
                     if pixel_maps.get(map_name) is not None:
                         np.save(str(pos_dir / f'{map_name}.npy'),
                                 pixel_maps[map_name].astype(np.float32))
@@ -516,7 +516,7 @@ def fit_zstack(ptu_dir, output_dir, args,
             intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
             np.save(str(slice_dir / 'intensity.npy'), intensity.astype(np.float32))
             for map_name in ('alpha_1', 'alpha_2', 'alpha_3', 'tau_mean_amp',
-                             'tau_mean_int', 'chi2_r', 'calibrated_chi2'):
+                             'tau_mean_int', 'chi2_r', 'calibrated_chi2_r'):
                 if pixel_maps.get(map_name) is not None:
                     np.save(str(slice_dir / f'{map_name}.npy'),
                             pixel_maps[map_name].astype(np.float32))

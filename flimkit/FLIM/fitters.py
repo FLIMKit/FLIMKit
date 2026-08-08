@@ -694,7 +694,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         tau_mean_int = np.full((ny, nx), np.nan),
         tau_mean_amp = np.full((ny, nx), np.nan),
         chi2_r = np.full((ny, nx), np.nan),
-        calibrated_chi2 = np.full((ny, nx), np.nan),
+        calibrated_chi2_r = np.full((ny, nx), np.nan),
     )
     for i in range(n_exp):
         maps[f"alpha_{i+1}"] = np.full((ny, nx), np.nan)
@@ -765,7 +765,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     resid = dvf_f[k] - model_px
                     chi2_px = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
                     maps['chi2_r'][yi, xi] = chi2_px / max(len(fit_idx) - 2, 1)
-                    maps['calibrated_chi2'][yi, xi] = calibrated_chi2(dvf_f[k], model_px)
+                    maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(dvf_f[k], model_px)
                     fitted += 1
                 continue
             dv = decay_row[valid_xi] 
@@ -802,7 +802,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 resid = dv[k][fit_idx] - model_px
                 chi2_px = float(np.sum(resid ** 2 / np.maximum(model_px, 1.0)))
                 maps['chi2_r'][yi, xi] = chi2_px / max(len(fit_idx) - 2, 1)
-                maps['calibrated_chi2'][yi, xi] = calibrated_chi2(dv[k][fit_idx], model_px)
+                maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(dv[k][fit_idx], model_px)
                 fitted += 1
     elif not free_tau:
         for yi in tqdm(range(ny), desc='  Per-pixel rows', disable=True):
@@ -845,7 +845,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 maps['tau_mean_int'][yi, xi] = tau_int
                 maps['tau_mean_amp'][yi, xi] = tau_amp
                 maps['chi2_r'][yi, xi] = chi2_px / dof_px
-                maps['calibrated_chi2'][yi, xi] = calibrated_chi2(
+                maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
                     decay_px[fit_idx], model_px)
                 for i in range(n_exp):
                     maps[f"alpha_{i+1}"][yi, xi] = amps_px[i]
@@ -950,7 +950,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 maps['tau_mean_int'][yi, xi] = tau_int
                 maps['tau_mean_amp'][yi, xi] = tau_amp
                 maps['chi2_r'][yi, xi] = chi2_px / dof_px
-                maps['calibrated_chi2'][yi, xi] = calibrated_chi2(
+                maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
                     decay_px[fit_idx], model_sol[fit_idx])
                 for i in range(n_exp):
                     maps[f"tau_{i+1}"][yi, xi] = taus_ns[i]
@@ -1266,7 +1266,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         tau_mean_amp = np.full((ny, nx), np.nan),
         tau_mean_int = np.full((ny, nx), np.nan),
         chi2_r = np.full((ny, nx), np.nan),
-        calibrated_chi2 = np.full((ny, nx), np.nan),
+        calibrated_chi2_r = np.full((ny, nx), np.nan),
     )
     for i in range(n_components):
         maps[f"tau_center_{i+1}"] = np.full((ny, nx), np.nan)
@@ -1326,7 +1326,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 maps['tau_mean_amp'][yy, xx] = tau_v[k] * 1e9
                 maps['tau_mean_int'][yy, xx] = (tau_v[k] + w_v[k] ** 2 / max(tau_v[k], 1e-15)) * 1e9
                 maps['chi2_r'][yy, xx] = chi2_v[k]
-                maps['calibrated_chi2'][yy, xx] = chi2_cal_v[k]
+                maps['calibrated_chi2_r'][yy, xx] = chi2_cal_v[k]
                 maps['tvb_scale'][yy, xx] = tvb_v[k]
             return maps
         t0 = time.time()
@@ -1360,7 +1360,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 maps['tau_mean_amp'][row_i, xi] = tau_amp_ns
                 maps['tau_mean_int'][row_i, xi] = tau_int_ns
                 maps['chi2_r'][row_i, xi] = chi2_px / max(n_bins - 3, 1)
-                maps['calibrated_chi2'][row_i, xi] = calibrated_chi2(d, model_px)
+                maps['calibrated_chi2_r'][row_i, xi] = calibrated_chi2(d, model_px)
     else:
         from ..FLIM.fit_tools import estimate_bg as _ebg
         from concurrent.futures import ThreadPoolExecutor
@@ -1432,7 +1432,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             model_px = dist_reconvolution_model(
                 full_p, tcspc_res, n_bins, irf_prompt,
                 n_components, dist_type, bg, False, False)
-            maps['calibrated_chi2'][yi, xi] = calibrated_chi2(d, model_px)
+            maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(d, model_px)
             for i in range(n_components):
                 maps[f"tau_center_{i+1}"][yi, xi] = tau_cs[i] * 1e9
                 maps[f"width_{i+1}"][yi, xi] = ws[i] * 1e9

@@ -55,7 +55,7 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
             return np.load(str(p)) if p.exists() else None
         pixel_maps = {}
         for k in ('tau_mean_int', 'tau_mean_amp', 'alpha_1', 'alpha_2', 'alpha_3',
-                  'chi2_r', 'calibrated_chi2'):
+                  'chi2_r', 'calibrated_chi2_r'):
             m = _load(k)
             if m is not None:
                 pixel_maps[k] = m

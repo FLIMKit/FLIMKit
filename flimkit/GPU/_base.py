@@ -72,7 +72,7 @@ class _BackendMixin:
             tau_mean_int = np.full((ny, nx), np.nan),
             tau_mean_amp = np.full((ny, nx), np.nan),
             chi2_r       = np.full((ny, nx), np.nan),
-            calibrated_chi2 = np.full((ny, nx), np.nan),
+            calibrated_chi2_r = np.full((ny, nx), np.nan),
         )
         for i in range(n_exp):
             maps[f"alpha_{i+1}"] = np.full((ny, nx), np.nan)
@@ -122,7 +122,7 @@ class _BackendMixin:
         maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp[good]
         maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int[good]
         maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good] / dof
-        maps['calibrated_chi2'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
             decay_valid[good], model[good], axis=1)
         for i in range(n_exp):
             maps[f"alpha_{i+1}"][yi_arr[good], xi_arr[good]] = amps[good, i]
@@ -172,7 +172,7 @@ class _BackendMixin:
         maps['alpha_1'][yi_arr[good], xi_arr[good]]      = amp_v[good]
         maps['frac_1'][yi_arr[good], xi_arr[good]]       = 1.0
         maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good]
-        maps['calibrated_chi2'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
             decay_valid[good], model[good], axis=1)
         if tvb is not None:
             maps.setdefault('tvb_scale', np.full((ny, nx), np.nan))
@@ -209,7 +209,7 @@ class _BackendMixin:
         maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp[good]
         maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int[good]
         maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2_r[good]
-        maps['calibrated_chi2'][yi_arr[good], xi_arr[good]] = calibrated_values[good]
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated_values[good]
         for i in range(n_exp):
             maps[f"tau_{i+1}"][yi_arr[good], xi_arr[good]]   = taus_ns[good, i]
             maps[f"alpha_{i+1}"][yi_arr[good], xi_arr[good]] = amps[good, i]

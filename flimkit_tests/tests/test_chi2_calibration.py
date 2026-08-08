@@ -163,7 +163,7 @@ def test_per_pixel_cpu_adds_calibrated_map():
         tcspc_res, n_bins, False, irf_fft=np.fft.fft(irf))[0]
     fitted_model = amp * basis + bg
 
-    assert maps['calibrated_chi2'][0, 0] == pytest.approx(
+    assert maps['calibrated_chi2_r'][0, 0] == pytest.approx(
         calibrated_chi2(decay, fitted_model))
 
 
@@ -190,8 +190,8 @@ def test_available_gpu_backend_matches_cpu_calibrated_map():
         stack, tcspc_res, n_bins, irf, False, False, False,
         global_popt, 1, min_photons=1, use_gpu='auto', gpu_backend=backend)
 
-    assert gpu['calibrated_chi2'][0, 0] == pytest.approx(
-        cpu['calibrated_chi2'][0, 0], rel=1e-5)
+    assert gpu['calibrated_chi2_r'][0, 0] == pytest.approx(
+        cpu['calibrated_chi2_r'][0, 0], rel=1e-5)
 
 
 def test_backend_scatter_adds_calibrated_map():
@@ -209,7 +209,7 @@ def test_backend_scatter_adds_calibrated_map():
         maps, np.array([0]), np.array([2e-9]), amp, bg,
         data, basis, 1, 1, data.shape[1])
 
-    assert maps['calibrated_chi2'][0, 0] == pytest.approx(
+    assert maps['calibrated_chi2_r'][0, 0] == pytest.approx(
         calibrated_chi2(data[0], model[0]))
 
 
@@ -223,7 +223,7 @@ def test_backend_free_tau_scatter_keeps_calibrated_values():
         np.array([0.5]), np.array([1.25]), 1, 1, 1)
 
     assert maps['chi2_r'][0, 0] == pytest.approx(0.5)
-    assert maps['calibrated_chi2'][0, 0] == pytest.approx(1.25)
+    assert maps['calibrated_chi2_r'][0, 0] == pytest.approx(1.25)
 
 
 def test_per_pixel_distribution_adds_calibrated_map():
@@ -254,7 +254,7 @@ def test_per_pixel_distribution_adds_calibrated_map():
         np.array([tau, width, amp, 0.0]), tcspc_res, n_bins,
         irf, 1, 'gaussian', bg, False, False)
 
-    assert maps['calibrated_chi2'][0, 0] == pytest.approx(
+    assert maps['calibrated_chi2_r'][0, 0] == pytest.approx(
         calibrated_chi2(decay, fitted_model))
 
 
@@ -289,14 +289,14 @@ def test_per_pixel_multicomponent_distribution_adds_calibrated_map():
         fitted_popt, tcspc_res, n_bins, irf, 2, 'gaussian',
         bg, False, False)
 
-    assert maps['calibrated_chi2'][0, 0] == pytest.approx(
+    assert maps['calibrated_chi2_r'][0, 0] == pytest.approx(
         calibrated_chi2(decay, fitted_model))
 
 
 def test_batch_exports_include_calibrated_map():
     from flimkit.utils.batch_fit import _STACK_MAPS
 
-    assert 'calibrated_chi2' in _STACK_MAPS
+    assert 'calibrated_chi2_r' in _STACK_MAPS
 
 
 def test_stitch_adapter_keeps_calibrated_map():
@@ -306,12 +306,12 @@ def test_stitch_adapter_keeps_calibrated_map():
         'intensity': np.ones((1, 1)),
         'tau_mean_amp': np.ones((1, 1)),
         'chi2_r': np.ones((1, 1)),
-        'calibrated_chi2': np.full((1, 1), 1.25),
+        'calibrated_chi2_r': np.full((1, 1), 1.25),
     }
 
     adapted = _adapt_pixel_maps(pixel_maps, 1, np.array([2.0]))
 
-    assert adapted['calibrated_chi2'][0, 0] == pytest.approx(1.25)
+    assert adapted['calibrated_chi2_r'][0, 0] == pytest.approx(1.25)
 
 
 def test_assembled_canvas_keeps_calibrated_map():
@@ -320,7 +320,7 @@ def test_assembled_canvas_keeps_calibrated_map():
     pixel_maps = {
         'intensity': np.ones((1, 1)),
         'tau_mean_amp': np.ones((1, 1)),
-        'calibrated_chi2': np.full((1, 1), 1.25),
+        'calibrated_chi2_r': np.full((1, 1), 1.25),
         'tau1': np.full((1, 1), 2.0),
         'a1': np.ones((1, 1)),
     }
@@ -334,7 +334,7 @@ def test_assembled_canvas_keeps_calibrated_map():
 
     canvas = assemble_tile_maps(tile_results, 1, 1, 1)
 
-    assert canvas['calibrated_chi2'][0, 0] == pytest.approx(1.25)
+    assert canvas['calibrated_chi2_r'][0, 0] == pytest.approx(1.25)
 
 
 def test_zstack_display_restores_calibrated_summed_values(tmp_path):

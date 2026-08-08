@@ -260,7 +260,7 @@ class TorchBackend(_BackendMixin):
             tau_mean_amp = np.full((ny, nx), np.nan),
             tau_mean_int = np.full((ny, nx), np.nan),
             chi2_r = np.full((ny, nx), np.nan),
-            calibrated_chi2 = np.full((ny, nx), np.nan),
+            calibrated_chi2_r = np.full((ny, nx), np.nan),
             tau_center_1 = np.full((ny, nx), np.nan),
             width_1 = np.full((ny, nx), np.nan),
             alpha_1 = np.full((ny, nx), np.nan),
@@ -305,7 +305,7 @@ class TorchBackend(_BackendMixin):
             maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
             maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
             maps['chi2_r'][yi_arr[good], xi_arr[good]] = chi2_v[good]
-            maps['calibrated_chi2'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
+            maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
             maps['tvb_scale'][yi_arr[good], xi_arr[good]] = tvb_v[good]
             return maps
         bg_flat = self._estimate_bg_batch(flat, valid_mask)
@@ -339,5 +339,5 @@ class TorchBackend(_BackendMixin):
         maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
         maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
         maps['chi2_r'][yi_arr[good], xi_arr[good]] = chi2_v[good]
-        maps['calibrated_chi2'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
         return maps
