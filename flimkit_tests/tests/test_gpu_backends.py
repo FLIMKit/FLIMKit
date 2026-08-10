@@ -106,7 +106,97 @@ class TestBackendDetection:
             result = gpu_mod.get_backend(prefer="mps")
         assert result is mps_sentinel
 
-# 2.  TestApproxNNLSVsTrueNNLS
+# 2.  TestTorchPrecision
+class TestTorchPrecision:
+    def test_cuda_matmul_uses_highest_precision_and_restores_setting(self):
+        torch = pytest.importorskip('torch')
+        from flimkit.GPU.torch_backend import TorchBackend
+
+        observed = []
+
+        class Probe:
+            def __matmul__(self, other):
+                observed.append(torch.get_float32_matmul_precision())
+                return 'result'
+
+        previous = torch.get_float32_matmul_precision()
+        try:
+            torch.set_float32_matmul_precision('high')
+            backend = TorchBackend(device='cuda')
+            result = backend._matmul_full_precision(Probe(), object())
+            assert result == 'result'
+            assert observed == ['highest']
+            assert torch.get_float32_matmul_precision() == 'high'
+        finally:
+            torch.set_float32_matmul_precision(previous)
+
+    def test_cuda_matmul_restores_precision_after_exception(self):
+        torch = pytest.importorskip('torch')
+        from flimkit.GPU.torch_backend import TorchBackend
+
+        class FailingProbe:
+            def __matmul__(self, other):
+                raise RuntimeError('matmul failed')
+
+        previous = torch.get_float32_matmul_precision()
+        try:
+            torch.set_float32_matmul_precision('high')
+            backend = TorchBackend(device='cuda')
+            with pytest.raises(RuntimeError, match='matmul failed'):
+                backend._matmul_full_precision(FailingProbe(), object())
+            assert torch.get_float32_matmul_precision() == 'high'
+        finally:
+            torch.set_float32_matmul_precision(previous)
+
+    def test_concurrent_cuda_matmuls_restore_original_precision(self):
+        import threading
+
+        torch = pytest.importorskip('torch')
+        from flimkit.GPU.torch_backend import TorchBackend
+
+        first_entered = threading.Event()
+        second_entered = threading.Event()
+        first_finished = threading.Event()
+
+        class FirstProbe:
+            def __matmul__(self, other):
+                first_entered.set()
+                second_entered.wait(timeout=0.2)
+                return 'first'
+
+        class SecondProbe:
+            def __matmul__(self, other):
+                second_entered.set()
+                first_finished.wait(timeout=0.2)
+                return 'second'
+
+        backend = TorchBackend(device='cuda')
+        previous = torch.get_float32_matmul_precision()
+        try:
+            torch.set_float32_matmul_precision('high')
+
+            def run_first():
+                backend._matmul_full_precision(FirstProbe(), object())
+                first_finished.set()
+
+            first = threading.Thread(target=run_first)
+            second = threading.Thread(
+                target=backend._matmul_full_precision,
+                args=(SecondProbe(), object()),
+            )
+            first.start()
+            assert first_entered.wait(timeout=1.0)
+            second.start()
+            first.join(timeout=1.0)
+            second.join(timeout=1.0)
+            assert not first.is_alive()
+            assert not second.is_alive()
+            assert torch.get_float32_matmul_precision() == 'high'
+        finally:
+            torch.set_float32_matmul_precision(previous)
+
+
+# 3.  TestApproxNNLSVsTrueNNLS
 class TestApproxNNLSVsTrueNNLS:
     """
     Validates that clamp(pinv(A) @ d, 0) ≈ scipy.nnls(A, d) for
@@ -147,7 +237,7 @@ class TestApproxNNLSVsTrueNNLS:
             amps = np.maximum(A_pinv @ d, 0.0)
             assert np.all(amps >= 0.0)
 
-# 3.  TestBatchFixedTauCPUParity
+# 4.  TestBatchFixedTauCPUParity
 class TestBatchFixedTauCPUParity:
     """
     Compare GPU batch_fixed_tau output to the CPU pixel loop for a small
@@ -227,7 +317,7 @@ class TestBatchFixedTauCPUParity:
         )
 
 
-# 4.  TestBatchGrid1ExpCPUParity
+# 5.  TestBatchGrid1ExpCPUParity
 class TestBatchGrid1ExpCPUParity:
     """Compare GPU batch_grid_scan_1exp to the vectorised CPU row loop."""
 
@@ -287,7 +377,7 @@ class TestBatchGrid1ExpCPUParity:
             progress_callback=None)
         np.testing.assert_array_equal(maps["intensity"], stack.sum(axis=2))
 
-# 5.  TestGPUFitPerPixelIntegration
+# 6.  TestGPUFitPerPixelIntegration
 class TestGPUFitPerPixelIntegration:
     """
     Smoke-test the use_gpu=True path inside fit_per_pixel().

@@ -1,6 +1,10 @@
+import threading
+
 import numpy as np
 from flimkit.GPU._base import _BackendMixin
 from flimkit.FLIM.fit_tools import calibrated_chi2, estimate_bg, coates_pileup_correction
+
+_MATMUL_PRECISION_LOCK = threading.Lock()
 
 class TorchBackend(_BackendMixin):
 
@@ -8,6 +12,17 @@ class TorchBackend(_BackendMixin):
         import torch
         self._torch = torch
         self.device = torch.device(device)
+
+    def _matmul_full_precision(self, left, right):
+        if self.device.type != 'cuda':
+            return left @ right
+        with _MATMUL_PRECISION_LOCK:
+            previous = self._torch.get_float32_matmul_precision()
+            self._torch.set_float32_matmul_precision('highest')
+            try:
+                return left @ right
+            finally:
+                self._torch.set_float32_matmul_precision(previous)
 
     def __repr__(self):
         return f"TorchBackend(device='{self.device}')"
@@ -120,7 +135,7 @@ class TorchBackend(_BackendMixin):
             basis_t = torch.as_tensor(basis_perp, dtype=torch.float32, device=self.device)
             bbp_t = torch.as_tensor(bb_perp, dtype=torch.float32, device=self.device)
             dperp_t = torch.as_tensor(d_perp, dtype=torch.float32, device=self.device)
-            bd = dperp_t @ basis_t.T
+            bd = self._matmul_full_precision(dperp_t, basis_t.T)
             dsq = (dperp_t ** 2).sum(dim=1)
             costs = dsq[:, None] - torch.clamp(bd, min=0.0) ** 2 / bbp_t[None, :]
             best_g = costs.argmin(dim=1).cpu().numpy()
@@ -276,7 +291,7 @@ class TorchBackend(_BackendMixin):
             basis_pt = torch.as_tensor(basis_perp, dtype=torch.float32, device=self.device)
             bbp_t = torch.as_tensor(bb_perp, dtype=torch.float32, device=self.device)
             dperp_t = torch.as_tensor(d_perp, dtype=torch.float32, device=self.device)
-            bd_t = dperp_t @ basis_pt.T
+            bd_t = self._matmul_full_precision(dperp_t, basis_pt.T)
             dsq_t = (dperp_t ** 2).sum(dim=1)
             costs_t = dsq_t[:, None] - torch.clamp(bd_t, min=0.0) ** 2 / bbp_t[None, :]
             best_g = costs_t.argmin(dim=1).cpu().numpy()
