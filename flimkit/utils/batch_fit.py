@@ -18,7 +18,7 @@ from ..configs import (
 )
 
 _STACK_MAPS = ['intensity', 'tau_mean_amp', 'alpha_1', 'alpha_2',
-               'bound_fraction', 'chi2_r']
+               'bound_fraction', 'chi2_r', 'calibrated_chi2_r']
 
 _TL_FILENAME_RE = re.compile(
     r'^(?P<region>.+?)_t(?P<t>\d+)(?:_s(?P<s>\d+))?(?:_z(?P<z>\d+))?\.ptu$',

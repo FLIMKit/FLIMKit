@@ -1,6 +1,10 @@
+import threading
+
 import numpy as np
 from flimkit.GPU._base import _BackendMixin
-from flimkit.FLIM.fit_tools import estimate_bg, coates_pileup_correction
+from flimkit.FLIM.fit_tools import calibrated_chi2, estimate_bg, coates_pileup_correction
+
+_MATMUL_PRECISION_LOCK = threading.Lock()
 
 class TorchBackend(_BackendMixin):
 
@@ -8,6 +12,17 @@ class TorchBackend(_BackendMixin):
         import torch
         self._torch = torch
         self.device = torch.device(device)
+
+    def _matmul_full_precision(self, left, right):
+        if self.device.type != 'cuda':
+            return left @ right
+        with _MATMUL_PRECISION_LOCK:
+            previous = self._torch.get_float32_matmul_precision()
+            self._torch.set_float32_matmul_precision('highest')
+            try:
+                return left @ right
+            finally:
+                self._torch.set_float32_matmul_precision(previous)
 
     def __repr__(self):
         return f"TorchBackend(device='{self.device}')"
@@ -120,7 +135,7 @@ class TorchBackend(_BackendMixin):
             basis_t = torch.as_tensor(basis_perp, dtype=torch.float32, device=self.device)
             bbp_t = torch.as_tensor(bb_perp, dtype=torch.float32, device=self.device)
             dperp_t = torch.as_tensor(d_perp, dtype=torch.float32, device=self.device)
-            bd = dperp_t @ basis_t.T
+            bd = self._matmul_full_precision(dperp_t, basis_t.T)
             dsq = (dperp_t ** 2).sum(dim=1)
             costs = dsq[:, None] - torch.clamp(bd, min=0.0) ** 2 / bbp_t[None, :]
             best_g = costs.argmin(dim=1).cpu().numpy()
@@ -220,7 +235,7 @@ class TorchBackend(_BackendMixin):
         raw_valid = flat[valid_idx].astype(np.float32)
         bg_valid  = bg_flat[valid_idx].astype(np.float32)
         B = len(valid_idx)
-        taus_out, amps_out, chi2r_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
+        taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
             raw_valid, bg_valid, irf_array, tcspc_res,
             taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
@@ -228,7 +243,7 @@ class TorchBackend(_BackendMixin):
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],
             taus_s=taus_out[valid_b], amps=amps_out[valid_b],
-            chi2_r=chi2r_out[valid_b],
+            chi2_r=chi2r_out[valid_b], calibrated_values=chi2c_out[valid_b],
             ny=ny, nx=nx, n_exp=n_exp,
             tvb=tvb_out[valid_b] if fit_tvb else None,
         )
@@ -260,6 +275,7 @@ class TorchBackend(_BackendMixin):
             tau_mean_amp = np.full((ny, nx), np.nan),
             tau_mean_int = np.full((ny, nx), np.nan),
             chi2_r = np.full((ny, nx), np.nan),
+            calibrated_chi2_r = np.full((ny, nx), np.nan),
             tau_center_1 = np.full((ny, nx), np.nan),
             width_1 = np.full((ny, nx), np.nan),
             alpha_1 = np.full((ny, nx), np.nan),
@@ -275,7 +291,7 @@ class TorchBackend(_BackendMixin):
             basis_pt = torch.as_tensor(basis_perp, dtype=torch.float32, device=self.device)
             bbp_t = torch.as_tensor(bb_perp, dtype=torch.float32, device=self.device)
             dperp_t = torch.as_tensor(d_perp, dtype=torch.float32, device=self.device)
-            bd_t = dperp_t @ basis_pt.T
+            bd_t = self._matmul_full_precision(dperp_t, basis_pt.T)
             dsq_t = (dperp_t ** 2).sum(dim=1)
             costs_t = dsq_t[:, None] - torch.clamp(bd_t, min=0.0) ** 2 / bbp_t[None, :]
             best_g = costs_t.argmin(dim=1).cpu().numpy()
@@ -295,6 +311,7 @@ class TorchBackend(_BackendMixin):
             model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * B_arr[None, :] + bg_z[:, None]
             resid_v = d_valid.astype(np.float64) - model_v
             chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+            chi2_cal_v = calibrated_chi2(d_valid, model_v, axis=1)
             yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
             maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
             maps['width_1'][yi_arr[good], xi_arr[good]] = w_v[good] * 1e9
@@ -303,6 +320,7 @@ class TorchBackend(_BackendMixin):
             maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
             maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
             maps['chi2_r'][yi_arr[good], xi_arr[good]] = chi2_v[good]
+            maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
             maps['tvb_scale'][yi_arr[good], xi_arr[good]] = tvb_v[good]
             return maps
         bg_flat = self._estimate_bg_batch(flat, valid_mask)
@@ -327,6 +345,7 @@ class TorchBackend(_BackendMixin):
         model_v = amp_v[:, None] * basis_best + bg_flat[valid_idx, None]
         resid_v = dc_valid.astype(np.float64) - model_v
         chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+        chi2_cal_v = calibrated_chi2(flat[valid_idx], model_v, axis=1)
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
         maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
         maps['width_1'][yi_arr[good], xi_arr[good]] = w_v[good] * 1e9
@@ -335,4 +354,5 @@ class TorchBackend(_BackendMixin):
         maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
         maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int_ns[good]
         maps['chi2_r'][yi_arr[good], xi_arr[good]] = chi2_v[good]
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = chi2_cal_v[good]
         return maps
