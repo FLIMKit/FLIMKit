@@ -50,12 +50,24 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          # 3.13 ships Tk 8.6; 3.14 ships Tk 9.0, which breaks the GUI.
+          # See the "Verify Tk version" step below.
+          python-version: "3.13"
 
       - name: Verify Python version
         run: |
           python -c "import sys; print('Python:', sys.version)"
           python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 'Python >= 3.12 required for phasorpy==0.9')"
+
+      - name: Verify Tk version
+        # The GUI is Tk 8.6 only. TKinterModernThemes' sun-valley.tcl declares
+        # `package require Tk 8.6` and fails on Tk 9 with `invalid command name
+        # "set_theme"`, and tkinterdnd2's bundled tkdnd cannot load either.
+        # Nothing else in CI launches Tk, so without this check a Tk 9 runner
+        # produces a build that passes every test and then crashes on startup.
+        if: runner.os != 'Linux'
+        run: |
+          python -c "import tkinter, sys; v = tkinter.TkVersion; print('Tk:', v); sys.exit(0 if abs(v - 8.6) < 0.01 else f'Tk {v} will not run the GUI; Tk 8.6 required')"
 
       - name: Install dependencies
         run: |
@@ -68,9 +80,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get install -y python3-tk libgl1
 
-      - name: Install tkinter (macOS)
-        if: runner.os == 'macOS'
-        run: brew install python-tk@3.14
+      # No tkinter step for macOS: setup-python's build already provides it.
+      # `brew install python-tk@3.14` only adds tkinter to Homebrew's own
+      # python@3.14 (a different interpreter) while pulling in Tcl/Tk 9, which
+      # PyInstaller may then bundle in place of the working 8.6.
 
       - name: Build and sign
         run: python build_and_sign.py
