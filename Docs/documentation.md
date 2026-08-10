@@ -298,26 +298,60 @@ Filtering is applied in phasor space (G and S coordinates) after calibration. Th
 
 #### Time-Resolved Anisotropy
 
-Open **Tools → Time-Resolved Anisotropy** for a matched pair of sequential polarization PTUs.
+Open **Tools → Time-Resolved Anisotropy** for a matched pair of sequential polarization PTUs. Assign the file roles explicitly; names do not determine them.
 
-1. Select the parallel and perpendicular PTUs explicitly. File names do not determine their roles.
-2. Select the photon channel for each PTU.
-3. Enter a measured G factor and relative acquisition exposures when available. G=1 and equal exposures are assumptions, not calibrations.
-4. Choose separate pre-peak background bins, a post-peak analysis interval, spatial window, stride, and observed-photon thresholds.
-5. Keep automatic registration enabled for sequential images unless registration was performed separately.
+The tool has two methods.
 
-The calculation is
+**Direct r(t) diagnostic** calculates
 
 $$
 r(t)=\frac{I_{\parallel}(t)-G I_{\perp}(t)}
 {I_{\parallel}(t)+2G I_{\perp}(t)}.
 $$
 
-Relative exposures are applied before this ratio. Backgrounds are estimated separately for the two decays. Low-count masks use observed photons rather than possibly negative background-corrected values. Spatial maps pool complete windows before calculating the ratio; with stride 1, neighboring windows overlap and are not independent pixel measurements.
+Relative exposures are applied before this ratio. Backgrounds are estimated separately. This method provides a descriptive decay and registered neighborhood-pooled maps. It is not the preferred way to estimate rotational correlation times because division and polarization-specific IRF convolution do not commute.
 
-CSV export contains the summed corrected decays, absolute and post-peak time, anisotropy, validity flag, and repeated provenance columns for spreadsheet use. NPZ export also contains maps, masks, observed counts, window origins, registration shift, G factor, exposures, backgrounds, channels, thresholds, and file names without private absolute paths.
+**Preferred global fit** follows Lakowicz, *Principles of Fluorescence Spectroscopy*, Chapter 11, Section 11.2.2. It jointly fits the raw summed parallel and perpendicular photon counts. The first model fixes a known fluorescence lifetime $\tau$ and uses
 
-This tool does not infer a G factor and does not fit rotational correlation times. A physical rotational fit requires independent polarization calibration and a justified analysis of the polarization-specific instrument responses. Treat a G=1 result as an uncalibrated sensitivity case unless the acquisition was calibrated independently.
+$$
+I(t)=A e^{-t/\tau},
+\qquad
+r(t)=r(0)e^{-t/\theta},
+$$
+
+$$
+I_{\parallel}(t)=\frac{I(t)}{3}[1+2r(t)],
+\qquad
+I_{\perp}^{*}(t)=\frac{I(t)}{3}[1-r(t)].
+$$
+
+Each ideal decay includes fluorescence from previous laser pulses. It is then circularly convolved with its own normalized IRF. Raw expected counts use the supplied relative exposures and the convention that $G$ multiplies the measured perpendicular rate:
+
+$$
+\mu_{\parallel}=E_{\parallel}
+(L_{\parallel}*I_{\parallel})+B_{\parallel},
+$$
+
+$$
+\mu_{\perp}=\frac{E_{\perp}}{G}
+(L_{\perp}*I_{\perp}^{*})+B_{\perp}.
+$$
+
+The two raw count histograms are fitted together using Poisson deviance. Free parameters are the shared amplitude, resolved $r(0)$, one rotational correlation time $\theta$, one common IRF shift, and two nonnegative backgrounds. The fluorescence lifetime, G factor, relative exposures, separate IRF shapes, and their relative timing are fixed inputs.
+
+For the preferred fit:
+
+1. Select the parallel and perpendicular PTUs.
+2. Select a separately measured IRF export for each polarization.
+3. Enter a known fluorescence lifetime from an independent or justified lifetime analysis.
+4. Enter the measured G factor and relative excitation doses. Acquisition time alone is not enough if excitation power changed.
+5. Inspect both fitted curves, residuals, and any parameter-bound warning.
+
+G=1 and equal exposures are assumptions, not calibrations. A fitted $r(0)$ is the resolved time-zero anisotropy, not automatically the fundamental anisotropy. Fast motion can remain hidden by the IRF. A rotational time near the IRF width or much longer than the observable fluorescence window is weakly identified.
+
+The first global model is for summed decays only. It does not fit G, independent channel amplitudes, multiple lifetimes, multiple rotational components, or per-pixel rotational maps. It does not yet provide calibrated confidence intervals. Treat bound-hit results as constrained or model-incompatible rather than as normal physical estimates.
+
+CSV export contains the measured and fitted decays, residuals, parameters, absolute and post-peak time, direct anisotropy, validity flags, and provenance. NPZ export also contains maps, masks, observed counts, window origins, registration shift, fit models, residuals, bounds, G, exposures, backgrounds, channels, thresholds, and file names without private absolute paths.
 
 ---
 

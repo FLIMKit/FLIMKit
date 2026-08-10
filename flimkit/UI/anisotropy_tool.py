@@ -30,6 +30,10 @@ class AnisotropyTool(tk.Toplevel):
 
         self.parallel_path = tk.StringVar()
         self.perpendicular_path = tk.StringVar()
+        self.parallel_irf_path = tk.StringVar()
+        self.perpendicular_irf_path = tk.StringVar()
+        self.analysis_mode = tk.StringVar(value='direct')
+        self.fixed_lifetime_ns = tk.DoubleVar(value=3.0)
         self.g_factor = tk.DoubleVar(value=1.0)
         self.parallel_exposure = tk.DoubleVar(value=1.0)
         self.perpendicular_exposure = tk.DoubleVar(value=1.0)
@@ -48,10 +52,25 @@ class AnisotropyTool(tk.Toplevel):
 
         self._file_row(controls, 0, 'Parallel PTU', self.parallel_path)
         self._file_row(controls, 1, 'Perpendicular PTU', self.perpendicular_path)
+        self._file_row(controls, 2, 'Parallel IRF export', self.parallel_irf_path)
+        self._file_row(
+            controls, 3, 'Perpendicular IRF export', self.perpendicular_irf_path)
+
+        modes = ttk.LabelFrame(controls, text='Analysis method', padding=8)
+        modes.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(8, 0))
+        ttk.Radiobutton(
+            modes, text='Direct r(t) diagnostic (no IRF)',
+            variable=self.analysis_mode, value='direct').pack(side='left')
+        ttk.Radiobutton(
+            modes, text='Preferred global fit (Lakowicz Section 11.2.2)',
+            variable=self.analysis_mode, value='global').pack(side='left', padx=12)
+        ttk.Button(modes, text='Method info...',
+                   command=self._show_method_info).pack(side='left')
 
         settings = ttk.LabelFrame(controls, text='Analysis settings', padding=8)
-        settings.grid(row=2, column=0, columnspan=3, sticky='ew', pady=(8, 0))
+        settings.grid(row=5, column=0, columnspan=3, sticky='ew', pady=(8, 0))
         fields = [
+            ('Known lifetime (ns, global fit)', self.fixed_lifetime_ns),
             ('G factor', self.g_factor),
             ('Parallel exposure (relative)', self.parallel_exposure),
             ('Perpendicular exposure (relative)', self.perpendicular_exposure),
@@ -81,10 +100,10 @@ class AnisotropyTool(tk.Toplevel):
         note = ('File roles are explicit; FLIMKit does not infer them from names. '
                 'G=1 is an assumption unless calibrated independently.')
         ttk.Label(controls, text=note, foreground='#555555').grid(
-            row=3, column=0, columnspan=3, sticky='w', pady=(6, 0))
+            row=6, column=0, columnspan=3, sticky='w', pady=(6, 0))
 
         actions = ttk.Frame(controls)
-        actions.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(8, 0))
+        actions.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(8, 0))
         self.calculate_button = ttk.Button(
             actions, text='Calculate', command=self._start_analysis)
         self.calculate_button.pack(side='left')
@@ -134,6 +153,28 @@ class AnisotropyTool(tk.Toplevel):
         if path:
             variable.set(path)
 
+    def _show_method_info(self):
+        messagebox.showinfo(
+            'Time-resolved anisotropy methods',
+            'Direct r(t) diagnostic:\n'
+            'r(t) = [I_parallel(t) - G I_perpendicular(t)] / '
+            '[I_parallel(t) + 2 G I_perpendicular(t)]\n\n'
+            'This ratio is useful for inspection and maps, but convolution and '
+            'division do not commute. It should not be used to fit rotational '
+            'correlation times near the IRF response.\n\n'
+            'Preferred global fit:\n'
+            'Fits the raw parallel and perpendicular photon counts together. '
+            'It uses separate IRFs, a known fluorescence lifetime, fixed G and '
+            'relative exposures, one rotational correlation time, one common '
+            'IRF timing shift, and separate fitted backgrounds. Previous laser '
+            'pulses are included.\n\n'
+            'The reported r(0) is the resolved time-zero anisotropy. It is not '
+            'automatically the fundamental anisotropy because very fast motion '
+            'may be hidden by the IRF.\n\n'
+            'Reference: Lakowicz, Principles of Fluorescence Spectroscopy, '
+            'Chapter 11, Section 11.2.2, Preferred Analysis of TD Anisotropy Data.',
+            parent=self)
+
     def _settings(self):
         parallel = Path(self.parallel_path.get()).expanduser()
         perpendicular = Path(self.perpendicular_path.get()).expanduser()
@@ -141,6 +182,23 @@ class AnisotropyTool(tk.Toplevel):
             raise ValueError('Choose two existing PTU files')
         if parallel.resolve() == perpendicular.resolve():
             raise ValueError('Parallel and perpendicular files must be different')
+        analysis_mode = self.analysis_mode.get()
+        if analysis_mode not in {'direct', 'global'}:
+            raise ValueError('Choose a valid analysis method')
+        parallel_irf = Path(self.parallel_irf_path.get()).expanduser()
+        perpendicular_irf = Path(self.perpendicular_irf_path.get()).expanduser()
+        if analysis_mode == 'global':
+            if not parallel_irf.is_file() or not perpendicular_irf.is_file():
+                raise ValueError(
+                    'Preferred global fitting requires parallel and perpendicular IRF files')
+            if parallel_irf.resolve() == perpendicular_irf.resolve():
+                raise ValueError('Choose a separate IRF file for each polarization')
+        fixed_lifetime_ns = self.fixed_lifetime_ns.get()
+        if (analysis_mode == 'global'
+                and (not np.isfinite(fixed_lifetime_ns)
+                     or fixed_lifetime_ns <= 0)):
+            raise ValueError(
+                'Known fluorescence lifetime must be positive and finite')
         parallel_channel = self.parallel_channel.get()
         perpendicular_channel = self.perpendicular_channel.get()
         if parallel_channel < 0 or perpendicular_channel < 0:
@@ -180,6 +238,11 @@ class AnisotropyTool(tk.Toplevel):
         return {
             'parallel_path': parallel,
             'perpendicular_path': perpendicular,
+            'analysis_mode': analysis_mode,
+            'parallel_irf_path': parallel_irf if analysis_mode == 'global' else None,
+            'perpendicular_irf_path': (
+                perpendicular_irf if analysis_mode == 'global' else None),
+            'fixed_lifetime_ns': fixed_lifetime_ns,
             'g_factor': g_factor,
             'parallel_exposure': parallel_exposure,
             'perpendicular_exposure': perpendicular_exposure,
@@ -262,6 +325,10 @@ class AnisotropyTool(tk.Toplevel):
             self._colorbar = None
         for axis in self.axes.flat:
             axis.clear()
+        if getattr(self.result, 'polarized_fit', None) is not None:
+            self._draw_global_fit()
+            self.canvas.draw_idle()
+            return
         self.axes[0, 0].imshow(self.result.parallel_intensity, cmap='gray')
         self.axes[0, 0].set_title('Parallel intensity')
         self.axes[0, 1].imshow(self.result.perpendicular_intensity, cmap='gray')
@@ -300,6 +367,67 @@ class AnisotropyTool(tk.Toplevel):
             image, ax=self.axes[1, 1], fraction=0.04, pad=0.03,
             extend='both', location='left')
         self.canvas.draw_idle()
+
+    def _draw_global_fit(self):
+        fit = self.result.polarized_fit
+        fit_bins = len(fit.parallel_model)
+        time_relative = (
+            self.result.time_ns[:fit_bins] - self.result.time_ns[self.peak_bin])
+        parallel_observed = (
+            self.result.parallel_decay[:fit_bins] + self.result.parallel_background)
+        perpendicular_observed = (
+            self.result.perpendicular_decay[:fit_bins]
+            + self.result.perpendicular_background)
+        channels = (
+            (self.axes[0, 0], parallel_observed, fit.parallel_model,
+             'Parallel global fit'),
+            (self.axes[0, 1], perpendicular_observed, fit.perpendicular_model,
+             'Perpendicular global fit'),
+        )
+        for axis, observed, model, title in channels:
+            axis.semilogy(time_relative, np.maximum(observed, 1e-3),
+                          color='#777777', linewidth=1, label='Measured')
+            axis.semilogy(time_relative, np.maximum(model, 1e-3),
+                          color='#2468a2', linewidth=1.5, label='Global model')
+            axis.set_title(title)
+            axis.set_xlabel('Time after peak (ns)')
+            axis.set_ylabel('Photon counts')
+            axis.legend(fontsize=8)
+
+        self.axes[1, 0].plot(
+            time_relative, fit.parallel_residual,
+            color='#2468a2', linewidth=1, label='Parallel')
+        self.axes[1, 0].plot(
+            time_relative, fit.perpendicular_residual,
+            color='#a34a28', linewidth=1, label='Perpendicular')
+        self.axes[1, 0].axhline(0.0, color='#777777', linewidth=0.8)
+        self.axes[1, 0].set_title('Residuals')
+        self.axes[1, 0].set_xlabel('Time after peak (ns)')
+        self.axes[1, 0].set_ylabel('Observed - model')
+        self.axes[1, 0].legend(fontsize=8)
+
+        summary = (
+            'Preferred global polarized-decay fit\n\n'
+            f'Fixed fluorescence lifetime: {fit.intensity_lifetime_ns:.4g} ns\n'
+            f'Rotational correlation: {fit.rotational_correlation_ns:.4g} ns\n'
+            f'Resolved r(0): {fit.initial_anisotropy:.4g}\n'
+            f'Common IRF shift: {fit.common_irf_shift_bins:.4g} bins\n'
+            f'Fitted backgrounds: {fit.parallel_background:.4g}, '
+            f'{fit.perpendicular_background:.4g}\n'
+            f'Poisson deviance: {fit.poisson_deviance:.4g}\n\n'
+            'Lakowicz, Section 11.2.2\n'
+            'Separate IRFs fitted simultaneously')
+        if not getattr(fit, 'success', True):
+            summary += ('\n\nWARNING: optimizer did not converge:\n'
+                        + str(getattr(fit, 'message', 'unknown reason')))
+        parameters_at_bounds = getattr(fit, 'parameters_at_bounds', ())
+        if parameters_at_bounds:
+            summary += ('\n\nWARNING: fit reached parameter bounds:\n'
+                        + ', '.join(parameters_at_bounds))
+        self.axes[1, 1].text(
+            0.05, 0.95, summary, ha='left', va='top',
+            transform=self.axes[1, 1].transAxes)
+        self.axes[1, 1].set_axis_off()
 
     def _save_npz(self):
         if self.result is None:
@@ -347,16 +475,48 @@ class AnisotropyTool(tk.Toplevel):
         }
         fieldnames = [
             'time_ns', 'time_after_peak_ns', 'parallel', 'perpendicular',
-            'anisotropy', 'valid', *provenance,
+            'anisotropy', 'valid',
         ]
+        fit = getattr(self.result, 'polarized_fit', None)
+        fit_fields = []
+        if fit is not None:
+            fit_fields = [
+                'parallel_observed', 'perpendicular_observed',
+                'parallel_model', 'perpendicular_model',
+                'parallel_residual', 'perpendicular_residual',
+            ]
+            provenance.update({
+                'intensity_lifetime_ns': fit.intensity_lifetime_ns,
+                'rotational_correlation_ns': fit.rotational_correlation_ns,
+                'initial_anisotropy': fit.initial_anisotropy,
+                'common_irf_shift_bins': fit.common_irf_shift_bins,
+                'parallel_fit_background': fit.parallel_background,
+                'perpendicular_fit_background': fit.perpendicular_background,
+                'poisson_deviance': fit.poisson_deviance,
+            })
+        fieldnames.extend([*fit_fields, *provenance])
         peak_time = self.result.time_ns[self.peak_bin]
         with open(path, 'w', newline='') as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
-            for time_ns, parallel, perpendicular, anisotropy in zip(
+            for index, (time_ns, parallel, perpendicular, anisotropy) in enumerate(zip(
                     self.result.time_ns, self.result.parallel_decay,
                     self.result.perpendicular_decay,
-                    self.result.anisotropy_decay):
+                    self.result.anisotropy_decay)):
+                fit_values = {}
+                if fit is not None and index < len(fit.parallel_model):
+                    fit_values = {
+                        'parallel_observed': (
+                            self.result.parallel_decay[index]
+                            + self.result.parallel_background),
+                        'perpendicular_observed': (
+                            self.result.perpendicular_decay[index]
+                            + self.result.perpendicular_background),
+                        'parallel_model': fit.parallel_model[index],
+                        'perpendicular_model': fit.perpendicular_model[index],
+                        'parallel_residual': fit.parallel_residual[index],
+                        'perpendicular_residual': fit.perpendicular_residual[index],
+                    }
                 writer.writerow({
                     'time_ns': time_ns,
                     'time_after_peak_ns': time_ns - peak_time,
@@ -364,27 +524,61 @@ class AnisotropyTool(tk.Toplevel):
                     'perpendicular': perpendicular,
                     'anisotropy': anisotropy,
                     'valid': np.isfinite(anisotropy),
+                    **fit_values,
                     **provenance,
                 })
         self.status.set(f'Saved {Path(path).name}')
 
 
+def load_irf_curve(path, n_bins, tcspc_res):
+    from flimkit.FLIM.irf_tools import irf_from_xlsx
+    from flimkit.utils.xlsx_tools import load_irf_export
+
+    exported = load_irf_export(path, debug=False)
+    return irf_from_xlsx(exported, n_bins, tcspc_res)
+
+
 def run_analysis(settings):
-    from flimkit.FLIM.anisotropy import analyze_anisotropy, estimate_translation
+    from flimkit.FLIM.anisotropy import (
+        analyze_anisotropy, estimate_translation, fit_polarized_decays)
     from flimkit.formats.PTU.reader import PTUFile
 
     with PTUFile(settings['parallel_path'], verbose=False) as parallel_file:
         parallel = parallel_file.pixel_stack(
             channel=settings['parallel_channel'])
         time_ns = np.asarray(parallel_file.time_ns, dtype=float)
+        parallel_period_ns = getattr(parallel_file, 'period_ns', None)
+        tcspc_res = getattr(parallel_file, 'tcspc_res', None)
     with PTUFile(settings['perpendicular_path'], verbose=False) as perpendicular_file:
         perpendicular = perpendicular_file.pixel_stack(
             channel=settings['perpendicular_channel'])
         perpendicular_time = np.asarray(perpendicular_file.time_ns, dtype=float)
+        perpendicular_period_ns = getattr(perpendicular_file, 'period_ns', None)
     if parallel.shape != perpendicular.shape:
         raise ValueError('Polarization PTUs must have matching image and time shapes')
     if not np.allclose(time_ns, perpendicular_time):
         raise ValueError('Polarization PTUs must have matching time axes')
+    analysis_mode = settings.get('analysis_mode', 'direct')
+    global_fit_bins = None
+    repetition_period_ns = None
+    if analysis_mode == 'global':
+        if (parallel_period_ns is None
+                or not np.isfinite(parallel_period_ns)
+                or parallel_period_ns <= 0
+                or perpendicular_period_ns is None
+                or not np.isfinite(perpendicular_period_ns)
+                or perpendicular_period_ns <= 0):
+            raise ValueError('Preferred global fitting requires a laser period')
+        if not np.isclose(parallel_period_ns, perpendicular_period_ns):
+            raise ValueError('Polarization PTUs must have matching laser periods')
+        if tcspc_res is None or not np.isfinite(tcspc_res) or tcspc_res <= 0:
+            raise ValueError('Preferred global fitting requires TCSPC resolution')
+        repetition_period_ns = float(parallel_period_ns)
+        time_step_ns = float(np.median(np.diff(time_ns)))
+        global_fit_bins = int(round(repetition_period_ns / time_step_ns))
+        if global_fit_bins < 2 or global_fit_bins > time_ns.size:
+            raise ValueError(
+                'Laser period is incompatible with the stored TCSPC time axis')
 
     combined_decay = (
         parallel.sum(axis=(0, 1)) / settings['parallel_exposure']
@@ -413,6 +607,26 @@ def run_analysis(settings):
         perpendicular_shift=shift_yx,
         parallel_exposure=settings['parallel_exposure'],
         perpendicular_exposure=settings['perpendicular_exposure'])
+    if analysis_mode == 'global':
+        assert global_fit_bins is not None
+        assert repetition_period_ns is not None
+        fit_time_ns = time_ns[:global_fit_bins]
+        parallel_irf = load_irf_curve(
+            settings['parallel_irf_path'], global_fit_bins, tcspc_res)
+        perpendicular_irf = load_irf_curve(
+            settings['perpendicular_irf_path'], global_fit_bins, tcspc_res)
+        result.polarized_fit = fit_polarized_decays(
+            parallel.sum(axis=(0, 1))[:global_fit_bins],
+            perpendicular.sum(axis=(0, 1))[:global_fit_bins],
+            fit_time_ns, parallel_irf=parallel_irf,
+            perpendicular_irf=perpendicular_irf,
+            intensity_lifetime_ns=settings['fixed_lifetime_ns'],
+            g_factor=settings['g_factor'],
+            parallel_exposure=settings['parallel_exposure'],
+            perpendicular_exposure=settings['perpendicular_exposure'],
+            initial_parallel_background=result.parallel_background,
+            initial_perpendicular_background=result.perpendicular_background,
+            repetition_period_ns=repetition_period_ns)
     result.metadata.update({
         'parallel_file': Path(settings['parallel_path']).name,
         'perpendicular_file': Path(settings['perpendicular_path']).name,
@@ -427,7 +641,21 @@ def run_analysis(settings):
         'min_bin_photons': settings['min_bin_photons'],
         'min_map_photons': settings['min_map_photons'],
         'auto_registration': settings['auto_register'],
+        'analysis_mode': analysis_mode,
     })
+    if analysis_mode == 'global':
+        result.metadata.update({
+            'parallel_irf_file': Path(settings['parallel_irf_path']).name,
+            'perpendicular_irf_file': Path(
+                settings['perpendicular_irf_path']).name,
+            'repetition_period_ns': repetition_period_ns,
+            'global_fit_bins': global_fit_bins,
+            'fixed_lifetime_ns': settings['fixed_lifetime_ns'],
+            'global_fit_model': (
+                'fixed single fluorescence lifetime; '
+                'single rotational correlation'),
+            'global_fit_reference': 'Lakowicz, Chapter 11, Section 11.2.2',
+        })
     return result, peak_bin
 
 

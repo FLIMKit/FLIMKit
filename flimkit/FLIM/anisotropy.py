@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.ndimage import shift as nd_shift
-from scipy.optimize import minimize
+from scipy.optimize import least_squares, minimize
 
 
 @dataclass
@@ -29,6 +29,26 @@ class AnisotropyResult:
     parallel_exposure: float
     perpendicular_exposure: float
     metadata: dict = field(default_factory=dict)
+    polarized_fit: 'PolarizedFitResult | None' = None
+
+
+@dataclass
+class PolarizedFitResult:
+    intensity_lifetime_ns: float
+    rotational_correlation_ns: float
+    initial_anisotropy: float
+    amplitude: float
+    parallel_model: np.ndarray
+    perpendicular_model: np.ndarray
+    parallel_residual: np.ndarray
+    perpendicular_residual: np.ndarray
+    poisson_deviance: float
+    success: bool
+    message: str
+    parameters_at_bounds: tuple = ()
+    common_irf_shift_bins: float = 0.0
+    parallel_background: float = 0.0
+    perpendicular_background: float = 0.0
 
 
 def apply_translation(data, shift_yx):
@@ -131,6 +151,237 @@ def subtract_background(data, background_bins):
     background = np.median(selected, axis=-1)
     corrected = data - background[..., None]
     return corrected, background
+
+
+def polarized_decay_models(time_ns, parallel_irf, perpendicular_irf,
+                             intensity_lifetime_ns,
+                             rotational_correlation_ns,
+                             initial_anisotropy, amplitude,
+                             g_factor=1.0, parallel_exposure=1.0,
+                             perpendicular_exposure=1.0,
+                             parallel_background=0.0,
+                             perpendicular_background=0.0,
+                             repetition_period_ns=None,
+                             common_irf_shift_bins=0.0):
+    time_ns = np.asarray(time_ns, dtype=float)
+    parallel_irf = np.asarray(parallel_irf, dtype=float)
+    perpendicular_irf = np.asarray(perpendicular_irf, dtype=float)
+    if time_ns.ndim != 1 or time_ns.size == 0:
+        raise ValueError('time_ns must be a non-empty one-dimensional array')
+    if parallel_irf.shape != time_ns.shape or perpendicular_irf.shape != time_ns.shape:
+        raise ValueError('Each polarization IRF must match time_ns')
+    positive = (intensity_lifetime_ns, rotational_correlation_ns,
+                amplitude, g_factor, parallel_exposure,
+                perpendicular_exposure)
+    if not np.all(np.isfinite(positive)) or np.any(np.asarray(positive) <= 0):
+        raise ValueError('Lifetimes, amplitude, G, and exposures must be positive and finite')
+    if not np.isfinite(initial_anisotropy):
+        raise ValueError('initial_anisotropy must be finite')
+    backgrounds = (parallel_background, perpendicular_background)
+    if not np.all(np.isfinite(backgrounds)) or np.any(np.asarray(backgrounds) < 0):
+        raise ValueError('Backgrounds must be finite and non-negative')
+    if (repetition_period_ns is not None
+            and (not np.isfinite(repetition_period_ns)
+                 or repetition_period_ns <= 0)):
+        raise ValueError('repetition_period_ns must be positive and finite')
+    if repetition_period_ns is not None:
+        histogram_duration_ns = time_ns.size * float(np.diff(time_ns)[0])
+        if not np.isclose(
+                repetition_period_ns, histogram_duration_ns,
+                rtol=1e-6, atol=float(np.diff(time_ns)[0]) / 2.0):
+            raise ValueError(
+                'repetition_period_ns must match the TCSPC histogram duration')
+    if not np.isfinite(common_irf_shift_bins):
+        raise ValueError('common_irf_shift_bins must be finite')
+
+    def normalize_irf(irf):
+        if np.any(~np.isfinite(irf)) or np.any(irf < 0) or irf.sum() <= 0:
+            raise ValueError('IRFs must be finite, non-negative, and non-zero')
+        return irf / irf.sum()
+
+    elapsed_ns = time_ns - time_ns[0]
+    intensity = amplitude * np.exp(-elapsed_ns / intensity_lifetime_ns)
+    effective_ns = 1.0 / (1.0 / intensity_lifetime_ns
+                          + 1.0 / rotational_correlation_ns)
+    polarized = amplitude * initial_anisotropy * np.exp(
+        -elapsed_ns / effective_ns)
+    if repetition_period_ns is not None:
+        intensity /= -np.expm1(-repetition_period_ns / intensity_lifetime_ns)
+        polarized /= -np.expm1(-repetition_period_ns / effective_ns)
+    parallel_impulse = parallel_exposure * (intensity + 2.0 * polarized) / 3.0
+    perpendicular_impulse = (perpendicular_exposure * (intensity - polarized)
+                             / (3.0 * g_factor))
+
+    def convolve(signal, irf):
+        irf = normalize_irf(irf)
+        if common_irf_shift_bins != 0.0:
+            bins = np.arange(time_ns.size, dtype=float)
+            irf = np.interp(
+                bins - common_irf_shift_bins, bins, irf,
+                left=0.0, right=0.0)
+            irf = normalize_irf(irf)
+        if repetition_period_ns is None:
+            return np.convolve(signal, irf, mode='full')[:time_ns.size]
+        return np.real(np.fft.ifft(np.fft.fft(signal) * np.fft.fft(irf)))
+
+    parallel_model = convolve(parallel_impulse, parallel_irf)
+    perpendicular_model = convolve(perpendicular_impulse, perpendicular_irf)
+    return (parallel_model + parallel_background,
+            perpendicular_model + perpendicular_background)
+
+
+def fit_polarized_decays(parallel, perpendicular, time_ns,
+                          parallel_irf, perpendicular_irf,
+                          intensity_lifetime_ns,
+                          g_factor=1.0, parallel_exposure=1.0,
+                          perpendicular_exposure=1.0,
+                          initial_parallel_background=0.0,
+                          initial_perpendicular_background=0.0,
+                          repetition_period_ns=None, fit_bins=None,
+                          initial_rotational_ns=1.0,
+                          initial_anisotropy=0.2,
+                          rotational_bounds_ns=None,
+                          anisotropy_bounds=(-0.2, 0.4),
+                          common_shift_bounds_bins=(-2.0, 2.0)):
+    parallel = np.asarray(parallel, dtype=float)
+    perpendicular = np.asarray(perpendicular, dtype=float)
+    time_ns = np.asarray(time_ns, dtype=float)
+    if parallel.shape != time_ns.shape or perpendicular.shape != time_ns.shape:
+        raise ValueError('Polarized decays must match time_ns')
+    if (np.any(~np.isfinite(parallel)) or np.any(parallel < 0)
+            or np.any(~np.isfinite(perpendicular))
+            or np.any(perpendicular < 0)):
+        raise ValueError('Polarized decays must be finite and non-negative')
+    if time_ns.size < 3 or np.any(~np.isfinite(time_ns)):
+        raise ValueError('time_ns must contain at least three finite values')
+    spacing = np.diff(time_ns)
+    if np.any(spacing <= 0) or not np.allclose(spacing, spacing[0]):
+        raise ValueError('time_ns must be increasing and evenly spaced')
+    if not np.isfinite(intensity_lifetime_ns) or intensity_lifetime_ns <= 0:
+        raise ValueError('intensity_lifetime_ns must be positive and finite')
+    for background in (initial_parallel_background,
+                       initial_perpendicular_background):
+        if not np.isfinite(background) or background < 0:
+            raise ValueError('Initial backgrounds must be finite and non-negative')
+    if fit_bins is None:
+        fit_bins = slice(None)
+    selected_parallel = _select_time_bins(parallel, fit_bins, 'fit_bins')
+    selected_perpendicular = _select_time_bins(
+        perpendicular, fit_bins, 'fit_bins')
+
+    bin_width_ns = float(spacing[0])
+    duration_ns = (time_ns[-1] - time_ns[0]) + bin_width_ns
+    if rotational_bounds_ns is None:
+        rotational_upper = min(
+            repetition_period_ns / 2.0
+            if repetition_period_ns is not None else duration_ns / 2.0,
+            10.0 * intensity_lifetime_ns)
+        rotational_bounds_ns = (2.0 * bin_width_ns, rotational_upper)
+    for lower, upper in (rotational_bounds_ns, anisotropy_bounds,
+                         common_shift_bounds_bins):
+        if (not np.isfinite(lower) or not np.isfinite(upper)
+                or lower >= upper):
+            raise ValueError('Fit bounds must be finite and increasing')
+    if not rotational_bounds_ns[0] < initial_rotational_ns < rotational_bounds_ns[1]:
+        raise ValueError('initial_rotational_ns must lie inside its bounds')
+    if not anisotropy_bounds[0] < initial_anisotropy < anisotropy_bounds[1]:
+        raise ValueError('initial_anisotropy must lie inside its bounds')
+    if not common_shift_bounds_bins[0] < 0.0 < common_shift_bounds_bins[1]:
+        raise ValueError('common_shift_bounds_bins must contain zero')
+
+    corrected_total = (
+        (parallel - initial_parallel_background) / parallel_exposure
+        + 2.0 * g_factor
+        * (perpendicular - initial_perpendicular_background)
+        / perpendicular_exposure)
+    initial_amplitude = max(float(np.max(corrected_total)), 1.0)
+
+    def unpack(params):
+        return (float(np.exp(params[0])), float(params[1]),
+                float(np.exp(params[2])), float(params[3]),
+                float(params[4]), float(params[5]))
+
+    def models(params):
+        rotational_ns, r0, amplitude, shift_bins, parallel_bg, perpendicular_bg = (
+            unpack(params))
+        return polarized_decay_models(
+            time_ns, parallel_irf, perpendicular_irf,
+            intensity_lifetime_ns=intensity_lifetime_ns,
+            rotational_correlation_ns=rotational_ns,
+            initial_anisotropy=r0, amplitude=amplitude,
+            g_factor=g_factor, parallel_exposure=parallel_exposure,
+            perpendicular_exposure=perpendicular_exposure,
+            parallel_background=parallel_bg,
+            perpendicular_background=perpendicular_bg,
+            repetition_period_ns=repetition_period_ns,
+            common_irf_shift_bins=shift_bins)
+
+    def poisson_residual(observed, expected):
+        expected = np.maximum(expected, 1e-12)
+        contribution = expected - observed
+        positive = observed > 0
+        contribution[positive] += observed[positive] * np.log(
+            observed[positive] / expected[positive])
+        contribution = np.maximum(2.0 * contribution, 0.0)
+        return np.sign(expected - observed) * np.sqrt(contribution)
+
+    def residuals(params):
+        parallel_model, perpendicular_model = models(params)
+        return np.concatenate([
+            poisson_residual(
+                selected_parallel,
+                _select_time_bins(parallel_model, fit_bins, 'fit_bins')),
+            poisson_residual(
+                selected_perpendicular,
+                _select_time_bins(perpendicular_model, fit_bins, 'fit_bins')),
+        ])
+
+    initial = np.array([
+        np.log(initial_rotational_ns), initial_anisotropy,
+        np.log(initial_amplitude), 0.0,
+        initial_parallel_background,
+        initial_perpendicular_background])
+    max_background = max(float(np.max(parallel)),
+                         float(np.max(perpendicular)), 1.0) * 10.0
+    lower = np.array([
+        np.log(rotational_bounds_ns[0]), anisotropy_bounds[0],
+        np.log(1e-12), common_shift_bounds_bins[0],
+        0.0, 0.0])
+    upper = np.array([
+        np.log(rotational_bounds_ns[1]), anisotropy_bounds[1],
+        np.log(max(initial_amplitude * 1e6, 1e6)),
+        common_shift_bounds_bins[1],
+        max_background, max_background])
+    fitted = least_squares(
+        residuals, initial, bounds=(lower, upper), method='trf',
+        max_nfev=5000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
+    rotational_ns, r0, amplitude, shift_bins, parallel_bg, perpendicular_bg = (
+        unpack(fitted.x))
+    parallel_model, perpendicular_model = models(fitted.x)
+    final_residuals = residuals(fitted.x)
+    parameter_names = (
+        'rotational_correlation_ns', 'initial_anisotropy', 'amplitude',
+        'common_irf_shift_bins', 'parallel_background',
+        'perpendicular_background')
+    parameters_at_bounds = tuple(
+        name for name, active in zip(parameter_names, fitted.active_mask)
+        if active != 0)
+    return PolarizedFitResult(
+        intensity_lifetime_ns=float(intensity_lifetime_ns),
+        rotational_correlation_ns=rotational_ns,
+        initial_anisotropy=r0,
+        amplitude=amplitude,
+        parallel_model=parallel_model,
+        perpendicular_model=perpendicular_model,
+        parallel_residual=parallel - parallel_model,
+        perpendicular_residual=perpendicular - perpendicular_model,
+        poisson_deviance=float(np.sum(final_residuals ** 2)),
+        success=bool(fitted.success),
+        message=str(fitted.message),
+        parameters_at_bounds=parameters_at_bounds,
+        common_irf_shift_bins=shift_bins,
+        parallel_background=parallel_bg,
+        perpendicular_background=perpendicular_bg)
 
 
 def calculate_anisotropy(parallel, perpendicular, g_factor=1.0,
@@ -359,6 +610,32 @@ def save_anisotropy_npz(result, path):
         'spatial_window': result.spatial_window,
         'stride': result.stride,
     }
+    if result.polarized_fit is not None:
+        fit = result.polarized_fit
+        payload.update({
+            'fit_intensity_lifetime_ns': fit.intensity_lifetime_ns,
+            'fit_rotational_correlation_ns': fit.rotational_correlation_ns,
+            'fit_initial_anisotropy': fit.initial_anisotropy,
+            'fit_amplitude': fit.amplitude,
+            'fit_parallel_observed': (
+                result.parallel_decay[:len(fit.parallel_model)]
+                + result.parallel_background),
+            'fit_perpendicular_observed': (
+                result.perpendicular_decay[:len(fit.perpendicular_model)]
+                + result.perpendicular_background),
+            'fit_parallel_model': fit.parallel_model,
+            'fit_perpendicular_model': fit.perpendicular_model,
+            'fit_parallel_residual': fit.parallel_residual,
+            'fit_perpendicular_residual': fit.perpendicular_residual,
+            'fit_poisson_deviance': fit.poisson_deviance,
+            'fit_common_irf_shift_bins': fit.common_irf_shift_bins,
+            'fit_parallel_background': fit.parallel_background,
+            'fit_perpendicular_background': fit.perpendicular_background,
+            'fit_parameters_at_bounds': np.asarray(
+                fit.parameters_at_bounds, dtype=str),
+            'fit_success': fit.success,
+            'fit_message': fit.message,
+        })
     reserved_keys = set(payload)
     for key, value in result.metadata.items():
         if not isinstance(key, str) or key in reserved_keys:

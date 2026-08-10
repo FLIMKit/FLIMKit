@@ -57,6 +57,91 @@ def test_anisotropy_dialog_exposes_explicit_file_roles():
         root.destroy()
 
 
+def test_anisotropy_dialog_offers_direct_and_preferred_modes():
+    import tkinter as tk
+    from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+
+    root = _tk_root_or_skip()
+    try:
+        dialog = show_anisotropy_tool(root)
+        labels = []
+        pending = list(dialog.winfo_children())
+        while pending:
+            widget = pending.pop()
+            pending.extend(widget.winfo_children())
+            try:
+                labels.append(widget.cget('text'))
+            except tk.TclError:
+                pass
+        assert 'Direct r(t) diagnostic (no IRF)' in labels
+        assert 'Preferred global fit (Lakowicz Section 11.2.2)' in labels
+        assert 'Parallel IRF export' in labels
+        assert 'Perpendicular IRF export' in labels
+        assert 'Method info...' in labels
+    finally:
+        root.destroy()
+
+
+def test_method_info_states_global_fit_requirements():
+    from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+
+    root = _tk_root_or_skip()
+    try:
+        dialog = show_anisotropy_tool(root)
+        with patch('flimkit.UI.anisotropy_tool.messagebox.showinfo') as showinfo:
+            dialog._show_method_info()
+        message = showinfo.call_args.args[1]
+        assert 'known fluorescence lifetime' in message
+        assert 'separate IRFs' in message
+        assert 'separate fitted backgrounds' in message
+        assert 'resolved time-zero anisotropy' in message
+    finally:
+        root.destroy()
+
+
+def test_preferred_mode_requires_two_irf_files(tmp_path):
+    from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+
+    parallel = tmp_path / 'parallel.ptu'
+    perpendicular = tmp_path / 'perpendicular.ptu'
+    parallel.touch()
+    perpendicular.touch()
+    root = _tk_root_or_skip()
+    try:
+        dialog = show_anisotropy_tool(root)
+        dialog.parallel_path.set(str(parallel))
+        dialog.perpendicular_path.set(str(perpendicular))
+        dialog.analysis_mode.set('global')
+
+        with pytest.raises(ValueError, match='IRF'):
+            dialog._settings()
+    finally:
+        root.destroy()
+
+
+def test_preferred_mode_requires_positive_known_lifetime(tmp_path):
+    from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+
+    paths = [tmp_path / name for name in (
+        'parallel.ptu', 'perpendicular.ptu', 'parallel.csv', 'perpendicular.csv')]
+    for path in paths:
+        path.touch()
+    root = _tk_root_or_skip()
+    try:
+        dialog = show_anisotropy_tool(root)
+        dialog.parallel_path.set(paths[0])
+        dialog.perpendicular_path.set(paths[1])
+        dialog.parallel_irf_path.set(paths[2])
+        dialog.perpendicular_irf_path.set(paths[3])
+        dialog.analysis_mode.set('global')
+        dialog.fixed_lifetime_ns.set(0.0)
+
+        with pytest.raises(ValueError, match='lifetime'):
+            dialog._settings()
+    finally:
+        root.destroy()
+
+
 def test_anisotropy_dialog_rejects_nonfinite_exposure(tmp_path):
     import tkinter as tk
     from flimkit.UI.anisotropy_tool import show_anisotropy_tool
@@ -209,6 +294,143 @@ def test_redrawing_result_replaces_existing_colorbar():
         root.destroy()
 
 
+def test_global_fit_mode_draws_polarized_models_and_residuals():
+    from types import SimpleNamespace
+    import numpy as np
+    from flimkit.UI.anisotropy_tool import show_anisotropy_tool
+
+    root = _tk_root_or_skip()
+    try:
+        dialog = show_anisotropy_tool(root)
+        fit = SimpleNamespace(
+            parallel_model=np.array([11.0, 8.0, 5.0]),
+            perpendicular_model=np.array([7.0, 6.0, 4.0]),
+            parallel_residual=np.array([0.0, 1.0, -1.0]),
+            perpendicular_residual=np.array([1.0, 0.0, -1.0]),
+            intensity_lifetime_ns=3.2,
+            rotational_correlation_ns=1.4,
+            initial_anisotropy=0.32,
+            poisson_deviance=5.0,
+            success=False,
+            message='maximum evaluations reached',
+            parameters_at_bounds=('initial_anisotropy',),
+            common_irf_shift_bins=0.7,
+            parallel_background=2.5,
+            perpendicular_background=7.0,
+        )
+        dialog.result = SimpleNamespace(
+            parallel_decay=np.array([9.0, 7.0, 3.0, 1.0]),
+            perpendicular_decay=np.array([5.0, 4.0, 2.0, 1.0]),
+            parallel_background=2.0,
+            perpendicular_background=2.0,
+            polarized_fit=fit,
+            time_ns=np.arange(4, dtype=float),
+            metadata={},
+        )
+        dialog.peak_bin = 1
+
+        dialog._draw_result()
+
+        assert dialog.axes[0, 0].get_title() == 'Parallel global fit'
+        assert dialog.axes[0, 1].get_title() == 'Perpendicular global fit'
+        assert dialog.axes[1, 0].get_title() == 'Residuals'
+        summary = dialog.axes[1, 1].texts[0].get_text()
+        assert 'Rotational correlation' in summary
+        assert 'Fixed fluorescence lifetime' in summary
+        assert 'Common IRF shift: 0.7 bins' in summary
+        assert 'Fitted backgrounds: 2.5, 7' in summary
+        assert 'WARNING' in summary
+        assert 'did not converge' in summary
+        assert 'maximum evaluations reached' in summary
+        assert 'initial_anisotropy' in summary
+        assert len(dialog.axes[0, 0].lines) == 2
+        assert len(dialog.axes[0, 1].lines) == 2
+        assert len(dialog.axes[0, 0].lines[0].get_xdata()) == 3
+        assert len(dialog.axes[1, 0].lines[0].get_xdata()) == 3
+    finally:
+        root.destroy()
+
+
+def test_run_analysis_preferred_mode_fits_both_decays_with_separate_irfs():
+    from types import SimpleNamespace
+    import numpy as np
+    from flimkit.UI.anisotropy_tool import run_analysis
+
+    stack = np.ones((2, 2, 16), dtype=float)
+
+    class FakePTUFile:
+        def __init__(self, path, verbose=False):
+            self.time_ns = np.arange(16, dtype=float) * 0.1
+            self.tcspc_res = 0.1e-9
+            self.period_ns = 1.51
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            pass
+
+        def pixel_stack(self, channel):
+            return stack
+
+    preferred_fit = object()
+    expected = SimpleNamespace(
+        metadata={}, parallel_background=2.0,
+        perpendicular_background=3.0, polarized_fit=None)
+    settings = {
+        'parallel_path': 'parallel.ptu',
+        'perpendicular_path': 'perpendicular.ptu',
+        'parallel_irf_path': 'parallel.csv',
+        'perpendicular_irf_path': 'perpendicular.csv',
+        'analysis_mode': 'global',
+        'fixed_lifetime_ns': 3.0,
+        'parallel_channel': 0,
+        'perpendicular_channel': 0,
+        'analysis_start_ns': 0.0,
+        'analysis_stop_ns': 1.0,
+        'auto_register': False,
+        'background_bins': slice(0, 2),
+        'g_factor': 1.2,
+        'spatial_window': 1,
+        'stride': 1,
+        'min_bin_photons': 0.0,
+        'min_map_photons': 0.0,
+        'parallel_exposure': 1.5,
+        'perpendicular_exposure': 0.8,
+    }
+    parallel_irf = np.eye(1, 15, 2).ravel()
+    perpendicular_irf = np.eye(1, 15, 4).ravel()
+
+    with (patch('flimkit.formats.PTU.reader.PTUFile', FakePTUFile),
+          patch('flimkit.FLIM.anisotropy.analyze_anisotropy',
+                return_value=expected),
+          patch('flimkit.UI.anisotropy_tool.load_irf_curve',
+                side_effect=[parallel_irf, perpendicular_irf]),
+          patch('flimkit.FLIM.anisotropy.fit_polarized_decays',
+                return_value=preferred_fit) as fit):
+        result, _ = run_analysis(settings)
+
+    assert result.polarized_fit is preferred_fit
+    call = fit.call_args
+    np.testing.assert_array_equal(call.kwargs['parallel_irf'], parallel_irf)
+    np.testing.assert_array_equal(
+        call.kwargs['perpendicular_irf'], perpendicular_irf)
+    assert call.kwargs['repetition_period_ns'] == 1.51
+    assert call.args[0].shape == (15,)
+    assert call.args[1].shape == (15,)
+    assert call.args[2].shape == (15,)
+    assert call.kwargs['intensity_lifetime_ns'] == 3.0
+    assert call.kwargs['initial_parallel_background'] == 2.0
+    assert call.kwargs['initial_perpendicular_background'] == 3.0
+    assert call.kwargs['g_factor'] == 1.2
+    assert result.metadata['analysis_mode'] == 'global'
+    assert result.metadata['parallel_irf_file'] == 'parallel.csv'
+    assert result.metadata['perpendicular_irf_file'] == 'perpendicular.csv'
+    assert result.metadata['repetition_period_ns'] == 1.51
+    assert result.metadata['global_fit_bins'] == 15
+    assert result.metadata['fixed_lifetime_ns'] == 3.0
+
+
 def test_run_analysis_records_photon_thresholds():
     from types import SimpleNamespace
     import numpy as np
@@ -306,6 +528,66 @@ def test_run_analysis_uses_g_and_exposure_normalized_peak():
         _, peak_bin = run_analysis(settings)
 
     assert peak_bin == 0
+
+
+def test_global_fit_csv_includes_models_residuals_and_parameters(tmp_path):
+    import csv
+    from types import SimpleNamespace
+    import numpy as np
+    from flimkit.UI.anisotropy_tool import AnisotropyTool
+
+    fit = SimpleNamespace(
+        parallel_model=np.array([9.0]),
+        perpendicular_model=np.array([4.0]),
+        parallel_residual=np.array([1.0]),
+        perpendicular_residual=np.array([0.0]),
+        intensity_lifetime_ns=3.2,
+        rotational_correlation_ns=1.4,
+        initial_anisotropy=0.32,
+        poisson_deviance=5.0,
+        common_irf_shift_bins=0.7,
+        parallel_background=2.5,
+        perpendicular_background=7.0,
+    )
+    tool = AnisotropyTool.__new__(AnisotropyTool)
+    tool.peak_bin = 0
+    tool.status = SimpleNamespace(set=lambda value: None)
+    tool.result = SimpleNamespace(
+        time_ns=np.array([1.0, 2.0]),
+        parallel_decay=np.array([8.0, 3.0]),
+        perpendicular_decay=np.array([3.0, 1.0]),
+        parallel_background=2.0,
+        perpendicular_background=3.0,
+        anisotropy_decay=np.array([0.2, 0.2]),
+        polarized_fit=fit,
+        g_factor=1.0,
+        parallel_exposure=1.0,
+        perpendicular_exposure=1.0,
+        perpendicular_shift=(0.0, 0.0),
+        spatial_window=1,
+        stride=1,
+        metadata={'analysis_mode': 'global'},
+    )
+    path = tmp_path / 'global.csv'
+
+    with patch('flimkit.UI.anisotropy_tool.filedialog.asksaveasfilename',
+               return_value=str(path)):
+        tool._save_csv()
+
+    with path.open(newline='') as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]['parallel_model'] == '9.0'
+    assert rows[0]['parallel_observed'] == '10.0'
+    assert rows[0]['perpendicular_observed'] == '6.0'
+    assert rows[0]['perpendicular_residual'] == '0.0'
+    assert rows[0]['intensity_lifetime_ns'] == '3.2'
+    assert rows[0]['rotational_correlation_ns'] == '1.4'
+    assert rows[0]['initial_anisotropy'] == '0.32'
+    assert rows[0]['common_irf_shift_bins'] == '0.7'
+    assert rows[0]['parallel_fit_background'] == '2.5'
+    assert rows[0]['perpendicular_fit_background'] == '7.0'
+    assert rows[1]['parallel_model'] == ''
+    assert rows[1]['parallel_observed'] == ''
 
 
 def test_csv_export_includes_relative_time_and_provenance(tmp_path):
