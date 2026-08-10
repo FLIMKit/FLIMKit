@@ -52,9 +52,12 @@ class AnisotropyTool(tk.Toplevel):
 
         self._file_row(controls, 0, 'Parallel PTU', self.parallel_path)
         self._file_row(controls, 1, 'Perpendicular PTU', self.perpendicular_path)
-        self._file_row(controls, 2, 'Parallel IRF export', self.parallel_irf_path)
         self._file_row(
-            controls, 3, 'Perpendicular IRF export', self.perpendicular_irf_path)
+            controls, 2, 'Parallel IRF export', self.parallel_irf_path,
+            file_kind='irf')
+        self._file_row(
+            controls, 3, 'Perpendicular IRF export', self.perpendicular_irf_path,
+            file_kind='irf')
 
         modes = ttk.LabelFrame(controls, text='Analysis method', padding=8)
         modes.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(8, 0))
@@ -115,12 +118,12 @@ class AnisotropyTool(tk.Toplevel):
         self.save_csv_button.pack(side='left', padx=(6, 0))
         ttk.Label(actions, textvariable=self.status).pack(side='left', padx=12)
 
-    def _file_row(self, parent, row, label, variable):
+    def _file_row(self, parent, row, label, variable, file_kind='ptu'):
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky='w', pady=2)
         ttk.Entry(parent, textvariable=variable).grid(
             row=row, column=1, sticky='ew', padx=6, pady=2)
         ttk.Button(parent, text='Browse...',
-                   command=lambda: self._browse(variable)).grid(
+                   command=lambda: self._browse(variable, file_kind=file_kind)).grid(
                        row=row, column=2, sticky='e', pady=2)
 
     def _build_plot(self):
@@ -144,12 +147,45 @@ class AnisotropyTool(tk.Toplevel):
             axis.text(0.5, 0.5, 'No result yet', ha='center', va='center',
                       transform=axis.transAxes, color='#777777')
             axis.set_axis_off()
+        self._style_plot_text()
         self.canvas.draw_idle()
 
-    def _browse(self, variable):
+    def _style_plot_text(self):
+        text_color = '#222222'
+        self.figure.set_facecolor('white')
+        for axis in self.figure.axes:
+            axis.set_facecolor('white')
+            axis.tick_params(axis='both', colors=text_color)
+            axis.title.set_color(text_color)
+            axis.xaxis.label.set_color(text_color)
+            axis.yaxis.label.set_color(text_color)
+            for spine in axis.spines.values():
+                spine.set_color(text_color)
+            for text in axis.texts:
+                text.set_color(text_color)
+            legend = axis.get_legend()
+            if legend is not None:
+                legend.get_frame().set_facecolor('white')
+                for text in legend.get_texts():
+                    text.set_color(text_color)
+
+    def _browse(self, variable, file_kind='ptu'):
+        if file_kind == 'irf':
+            title = 'Select IRF export'
+            filetypes = [
+                ('IRF exports',
+                 ('*.xlsx', '*.csv', '*.tsv', '*.txt', '*.dat',
+                  '*.ascii', '*.asc')),
+                ('All files', '*.*'),
+            ]
+        else:
+            title = 'Select PTU file'
+            filetypes = [
+                ('PicoQuant PTU', '*.ptu'),
+                ('All files', '*.*'),
+            ]
         path = filedialog.askopenfilename(
-            parent=self, title='Select PTU file',
-            filetypes=[('PicoQuant PTU', '*.ptu'), ('All files', '*.*')])
+            parent=self, title=title, filetypes=filetypes)
         if path:
             variable.set(path)
 
@@ -366,6 +402,7 @@ class AnisotropyTool(tk.Toplevel):
         self._colorbar = self.figure.colorbar(
             image, ax=self.axes[1, 1], fraction=0.04, pad=0.03,
             extend='both', location='left')
+        self._style_plot_text()
         self.canvas.draw_idle()
 
     def _draw_global_fit(self):
@@ -428,6 +465,7 @@ class AnisotropyTool(tk.Toplevel):
             0.05, 0.95, summary, ha='left', va='top',
             transform=self.axes[1, 1].transAxes)
         self.axes[1, 1].set_axis_off()
+        self._style_plot_text()
 
     def _save_npz(self):
         if self.result is None:

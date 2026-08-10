@@ -57,6 +57,25 @@ def test_anisotropy_dialog_exposes_explicit_file_roles():
         root.destroy()
 
 
+def test_anisotropy_irf_browser_lists_supported_exports():
+    from flimkit.UI.anisotropy_tool import AnisotropyTool
+
+    tool = AnisotropyTool.__new__(AnisotropyTool)
+    variable = type('Variable', (), {'set': lambda self, value: setattr(self, 'value', value)})()
+    with patch(
+            'flimkit.UI.anisotropy_tool.filedialog.askopenfilename',
+            return_value='/tmp/parallel.csv') as browse:
+        tool._browse(variable, file_kind='irf')
+
+    options = browse.call_args.kwargs
+    assert options['title'] == 'Select IRF export'
+    patterns = options['filetypes'][0][1]
+    for extension in ('*.xlsx', '*.csv', '*.tsv', '*.txt', '*.dat', '*.ascii', '*.asc'):
+        assert extension in patterns
+    assert options['filetypes'][-1] == ('All files', '*.*')
+    assert variable.value == '/tmp/parallel.csv'
+
+
 def test_anisotropy_dialog_offers_direct_and_preferred_modes():
     import tkinter as tk
     from flimkit.UI.anisotropy_tool import show_anisotropy_tool
@@ -296,9 +315,14 @@ def test_redrawing_result_replaces_existing_colorbar():
 
 def test_global_fit_mode_draws_polarized_models_and_residuals():
     from types import SimpleNamespace
+    import matplotlib as mpl
     import numpy as np
     from flimkit.UI.anisotropy_tool import show_anisotropy_tool
 
+    color_keys = ('text.color', 'axes.labelcolor', 'axes.titlecolor',
+                  'xtick.color', 'ytick.color')
+    original_colors = {key: mpl.rcParams[key] for key in color_keys}
+    mpl.rcParams.update({key: 'white' for key in color_keys})
     root = _tk_root_or_skip()
     try:
         dialog = show_anisotropy_tool(root)
@@ -347,7 +371,12 @@ def test_global_fit_mode_draws_polarized_models_and_residuals():
         assert len(dialog.axes[0, 1].lines) == 2
         assert len(dialog.axes[0, 0].lines[0].get_xdata()) == 3
         assert len(dialog.axes[1, 0].lines[0].get_xdata()) == 3
+        assert dialog.axes[0, 0].title.get_color() == '#222222'
+        assert dialog.axes[0, 0].xaxis.label.get_color() == '#222222'
+        assert dialog.axes[0, 0].get_legend().get_texts()[0].get_color() == '#222222'
+        assert dialog.axes[1, 1].texts[0].get_color() == '#222222'
     finally:
+        mpl.rcParams.update(original_colors)
         root.destroy()
 
 
