@@ -365,6 +365,8 @@ class AnisotropyTool(tk.Toplevel):
             self._draw_global_fit()
             self.canvas.draw_idle()
             return
+        self.figure.set_layout_engine('constrained')
+        self.figure.get_layout_engine().set(w_pad=0.08, h_pad=0.05)
         self.axes[0, 0].imshow(self.result.parallel_intensity, cmap='gray')
         self.axes[0, 0].set_title('Parallel intensity')
         self.axes[0, 1].imshow(self.result.perpendicular_intensity, cmap='gray')
@@ -406,6 +408,10 @@ class AnisotropyTool(tk.Toplevel):
         self.canvas.draw_idle()
 
     def _draw_global_fit(self):
+        self.figure.set_layout_engine(None)
+        self.figure.subplots_adjust(
+            left=0.10, right=0.98, bottom=0.17, top=0.93,
+            wspace=0.32, hspace=0.75)
         fit = self.result.polarized_fit
         fit_bins = len(fit.parallel_model)
         time_relative = (
@@ -423,46 +429,57 @@ class AnisotropyTool(tk.Toplevel):
         )
         for axis, observed, model, title in channels:
             axis.semilogy(time_relative, np.maximum(observed, 1e-3),
-                          color='#777777', linewidth=1, label='Measured')
+                          color='#777777', linewidth=1.2, label='Measured')
             axis.semilogy(time_relative, np.maximum(model, 1e-3),
-                          color='#2468a2', linewidth=1.5, label='Global model')
-            axis.set_title(title)
-            axis.set_xlabel('Time after peak (ns)')
-            axis.set_ylabel('Photon counts')
+                          color='#2468a2', linewidth=2.0, label='Global model')
+            axis.set_title(title, fontsize=11)
+            axis.set_xlabel('Time after peak (ns)', fontsize=9)
+            axis.set_ylabel('Photon counts', fontsize=9)
+            axis.tick_params(labelsize=8)
             axis.legend(fontsize=8)
 
         self.axes[1, 0].plot(
             time_relative, fit.parallel_residual,
-            color='#2468a2', linewidth=1, label='Parallel')
+            color='#2468a2', linewidth=1.2, label='Parallel')
         self.axes[1, 0].plot(
             time_relative, fit.perpendicular_residual,
-            color='#a34a28', linewidth=1, label='Perpendicular')
+            color='#a34a28', linewidth=1.2, label='Perpendicular')
         self.axes[1, 0].axhline(0.0, color='#777777', linewidth=0.8)
-        self.axes[1, 0].set_title('Residuals')
-        self.axes[1, 0].set_xlabel('Time after peak (ns)')
-        self.axes[1, 0].set_ylabel('Observed - model')
+        self.axes[1, 0].set_title('Residuals', fontsize=11)
+        self.axes[1, 0].set_xlabel('Time after peak (ns)', fontsize=9)
+        self.axes[1, 0].set_ylabel('Observed - model', fontsize=9)
+        self.axes[1, 0].tick_params(labelsize=8)
         self.axes[1, 0].legend(fontsize=8)
 
-        summary = (
-            'Preferred global polarized-decay fit\n\n'
-            f'Fixed fluorescence lifetime: {fit.intensity_lifetime_ns:.4g} ns\n'
-            f'Rotational correlation: {fit.rotational_correlation_ns:.4g} ns\n'
-            f'Resolved r(0): {fit.initial_anisotropy:.4g}\n'
-            f'Common IRF shift: {fit.common_irf_shift_bins:.4g} bins\n'
+        summary_lines = [
+            'Preferred global polarized-decay fit',
+            f'Fixed fluorescence lifetime: {fit.intensity_lifetime_ns:.4g} ns',
+            f'Rotational correlation: {fit.rotational_correlation_ns:.4g} ns',
+            f'Resolved r(0): {fit.initial_anisotropy:.4g}',
+            f'Common IRF shift: {fit.common_irf_shift_bins:.4g} bins',
             f'Fitted backgrounds: {fit.parallel_background:.4g}, '
-            f'{fit.perpendicular_background:.4g}\n'
-            f'Poisson deviance: {fit.poisson_deviance:.4g}\n\n'
-            'Lakowicz, Section 11.2.2\n'
-            'Separate IRFs fitted simultaneously')
+            f'{fit.perpendicular_background:.4g}',
+            f'Poisson deviance: {fit.poisson_deviance:.4g}',
+            'Lakowicz, Section 11.2.2',
+            'Separate IRFs fitted simultaneously',
+        ]
         if not getattr(fit, 'success', True):
-            summary += ('\n\nWARNING: optimizer did not converge:\n'
-                        + str(getattr(fit, 'message', 'unknown reason')))
+            summary_lines.extend([
+                'WARNING: optimizer did not converge:',
+                str(getattr(fit, 'message', 'unknown reason')),
+            ])
         parameters_at_bounds = getattr(fit, 'parameters_at_bounds', ())
         if parameters_at_bounds:
-            summary += ('\n\nWARNING: fit reached parameter bounds:\n'
-                        + ', '.join(parameters_at_bounds))
+            summary_lines.extend([
+                'WARNING: fit reached parameter bounds:',
+                ', '.join(parameters_at_bounds),
+            ])
+        summary = '\n'.join(summary_lines)
+        summary_fontsize = 8 if len(summary_lines) <= 12 else 7
+        self.axes[1, 1].set_position([0.60, 0.01, 0.37, 0.48])
         self.axes[1, 1].text(
             0.05, 0.95, summary, ha='left', va='top',
+            fontsize=summary_fontsize,
             transform=self.axes[1, 1].transAxes)
         self.axes[1, 1].set_axis_off()
         self._style_plot_text()

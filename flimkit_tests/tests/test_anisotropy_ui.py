@@ -317,15 +317,28 @@ def test_global_fit_mode_draws_polarized_models_and_residuals():
     from types import SimpleNamespace
     import matplotlib as mpl
     import numpy as np
+    import warnings
     from flimkit.UI.anisotropy_tool import show_anisotropy_tool
 
-    color_keys = ('text.color', 'axes.labelcolor', 'axes.titlecolor',
-                  'xtick.color', 'ytick.color')
-    original_colors = {key: mpl.rcParams[key] for key in color_keys}
-    mpl.rcParams.update({key: 'white' for key in color_keys})
+    rc_overrides = {
+        'text.color': 'white',
+        'axes.labelcolor': 'white',
+        'axes.titlecolor': 'white',
+        'xtick.color': 'white',
+        'ytick.color': 'white',
+        'font.size': 18.0,
+        'axes.titlesize': 18.0,
+        'axes.labelsize': 16.0,
+        'xtick.labelsize': 14.0,
+        'ytick.labelsize': 14.0,
+    }
+    original_colors = {key: mpl.rcParams[key] for key in rc_overrides}
+    mpl.rcParams.update(rc_overrides)
     root = _tk_root_or_skip()
     try:
         dialog = show_anisotropy_tool(root)
+        dialog.geometry('1180x820')
+        dialog.update_idletasks()
         fit = SimpleNamespace(
             parallel_model=np.array([11.0, 8.0, 5.0]),
             perpendicular_model=np.array([7.0, 6.0, 4.0]),
@@ -354,7 +367,17 @@ def test_global_fit_mode_draws_polarized_models_and_residuals():
         dialog.peak_bin = 1
 
         dialog._draw_result()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'error', message='constrained_layout not applied.*')
+            dialog.canvas.draw()
 
+        plot_axes = (dialog.axes[0, 0], dialog.axes[0, 1], dialog.axes[1, 0])
+        assert all(axis.get_position().height >= 0.18 for axis in plot_axes)
+        renderer = dialog.canvas.get_renderer()
+        assert not dialog.axes[0, 0].xaxis.label.get_window_extent(renderer).overlaps(
+            dialog.axes[1, 0].title.get_window_extent(renderer))
+        assert dialog.axes[1, 1].texts[0].get_window_extent(renderer).y0 >= 0
         assert dialog.axes[0, 0].get_title() == 'Parallel global fit'
         assert dialog.axes[0, 1].get_title() == 'Perpendicular global fit'
         assert dialog.axes[1, 0].get_title() == 'Residuals'

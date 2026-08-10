@@ -1,4 +1,4 @@
-__version__ = '0.9.19+anisotropy.3'
+__version__ = '0.9.19+anisotropy.4'
 fitter_version = '18'
 
 roadmap = '''Flim program roadmap:
