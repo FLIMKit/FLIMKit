@@ -329,12 +329,12 @@ Each ideal decay includes fluorescence from previous laser pulses. It is then ci
 
 $$
 \mu_{\parallel}=E_{\parallel}
-(L_{\parallel}*I_{\parallel})+B_{\parallel},
+\left(L_{\parallel}\ast I_{\parallel}\right)+B_{\parallel},
 $$
 
 $$
 \mu_{\perp}=\frac{E_{\perp}}{G}
-(L_{\perp}*I_{\perp}^{*})+B_{\perp}.
+\left(L_{\perp}\ast I_{\perp}^{*}\right)+B_{\perp}.
 $$
 
 The two raw count histograms are fitted together using Poisson deviance. Free parameters are the shared amplitude, resolved $r(0)$, one rotational correlation time $\theta$, one common IRF shift, and two nonnegative backgrounds. The fluorescence lifetime, G factor, relative exposures, separate IRF shapes, and their relative timing are fixed inputs.
