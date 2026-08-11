@@ -380,14 +380,16 @@ def _get_tile_irf(machine_irf, pi_machine,
 
 def _adapt_pixel_maps(pixel_maps, n_exp,
                       taus_ns):
+    ny, nx = pixel_maps['intensity'].shape
     adapted = {
         'intensity': pixel_maps['intensity'],
         'tau_mean_amp': pixel_maps['tau_mean_amp'],
+        'tau_mean_int': pixel_maps.get(
+            'tau_mean_int', np.full((ny, nx), np.nan, dtype=np.float32)),
         'chi2': pixel_maps['chi2_r'],
     }
     if 'calibrated_chi2_r' in pixel_maps:
         adapted['calibrated_chi2_r'] = pixel_maps['calibrated_chi2_r']
-    ny, nx = pixel_maps['intensity'].shape
     for k in range(1, n_exp + 1):
         adapted[f'tau{k}'] = np.full((ny, nx), taus_ns[k - 1], dtype=np.float32)
         adapted[f'a{k}'] = pixel_maps.get(
