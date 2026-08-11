@@ -1,0 +1,43 @@
+[build-system]
+requires = ['setuptools>=68']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'flimkit'
+description = 'Fluorescence lifetime imaging analysis: reading, fitting, phasors and stitching'
+readme = 'README.md'
+requires-python = '>=3.12'
+license = 'MIT'
+license-files = ['LICENSE.md']
+authors = [
+    {name = 'Alex Hunt', email = 'alexander.hunt@ed.ac.uk'},
+]
+keywords = ['FLIM', 'fluorescence', 'lifetime', 'microscopy', 'TCSPC', 'phasor']
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: Science/Research',
+    'Programming Language :: Python :: 3',
+    'Topic :: Scientific/Engineering :: Bio-Informatics',
+    'Topic :: Scientific/Engineering :: Image Processing',
+]
+dynamic = ['version', 'dependencies']
+
+[project.urls]
+Homepage = 'https://github.com/FLIMKit/FLIMKit'
+Documentation = 'https://github.com/FLIMKit/FLIMKit/wiki'
+Issues = 'https://github.com/FLIMKit/FLIMKit/issues'
+
+[project.entry-points.'flimkit.plugins']
+
+[tool.setuptools.dynamic]
+version = {attr = 'flimkit._version.__version__'}
+dependencies = {file = ['requirements.txt']}
+
+[tool.setuptools.packages.find]
+include = ['flimkit*']
+exclude = ['flimkit_tests*']
+namespaces = true
+
+[tool.setuptools.package-data]
+'flimkit.machine_irf' = ['*.csv', '*.npy', '*.json']
+'flimkit.UI' = ['*.png', '*.ico', '*.icns']

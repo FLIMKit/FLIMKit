@@ -1,6 +1,6 @@
 # FLIMKit Development Roadmap
 
-**Last Updated:** August 10, 2026
+**Last Updated:** August 11, 2026
 
 ## High Priority - To Do
 
@@ -11,7 +11,17 @@ UI controls to filter/select regions by tau, photon count, and other statistics.
 Histogram visualization for ROI statistical distributions (tau, photon counts, etc.).
 
 ### 3. Reading pixel data out of a Leica `.lif`
-Tile positions and pixel size already come out of a `.lif` (`parse_lif_tile_positions`, `get_pixel_size_from_lif`), and those positions were checked bit-identical to the `.xlif` ones. What is missing is reading the decay data itself, so a scan saved only into a `.lif` container still needs its `.ptu` files alongside. Requested by a collaborator working from LAS X saved files. Blocked on the `_s{N}` series flattening order, which decides how a series index maps onto the tile grid.
+The metadata already comes out. Tile positions and pixel size are read from the XML header (`parse_lif_tile_positions`, `get_pixel_size_from_lif`), and those positions were checked bit-identical to the `.xlif` ones. The FLIM data is the part that is out of reach: it sits in a proprietary container inside the same file, so a scan saved only into a `.lif` still needs its `.ptu` files alongside it. Requested by a collaborator working from LAS X saved files.
+
+Reading their XML header is one thing, decoding their data container is another, and I am not going to do the second without Leica documenting it and agreeing to it. Becker & Hickl, ISS and Photonscore all supported. After that the remaining unknown is the `_s{N}` series flattening order, which decides how a series index maps onto the tile grid.
+
+### 4. Add-on system
+Let users define their own decay models and cost functions, and let analysis tools, file formats and phasor filters register themselves the same way. Built in house as a small `flimkit.plugins` registry rather than by pulling in a plugin framework, since there is no packaging metadata for entry points to hang off and the PyInstaller build could not discover them anyway.
+
+Models and cost functions are the goal, and they are one job rather than two. The differential evolution costs are twelve hand-written classes covering model against cost function against reparameterisation, so both hooks need the same groundwork first: a parameter-layout object, and one generic cost class in place of the twelve. Tracked in issue #3. Tools, formats and filters come first, since they are close to free by comparison and they prove the registry.
+
+### 5. GPU per-pixel fitting with a fit window
+The per-pixel fit falls back to CPU whenever a fit window or an exclusion band is set, and says so (`fitters.py`, `[per-pixel] fit window/exclusions active ... GPU backends have no window support yet`). Anyone dropping a reflection peak out of the fit therefore loses the GPU path, which is the case where the speed is wanted most. The projection and the grid scan both need to run over a bin subset rather than the whole histogram, on CUDA, MPS and MLX. Tail fits fall back for the same reason and would be fixed by the same change, since a tail fit is a window starting at t0.
 
 ## Medium Priority - To Do
 

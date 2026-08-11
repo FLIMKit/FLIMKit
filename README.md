@@ -1,7 +1,7 @@
 # <img src="flimkit/UI/icon.png" alt="" width="32" height="32"> FLIMKit
 
-[![tests](https://github.com/flimkit/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/flimkit/FLIMKit/actions/workflows/test.yml)
-[![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://github.com/flimkit/FLIMKit#installation)
+[![tests](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml)
+[![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://github.com/FLIMKit/FLIMKit#installation)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
@@ -14,7 +14,7 @@ FLIMKit is a Python toolkit for FLIM data from FLIM microscope systems and commo
 
 Four entry points: desktop GUI, guided terminal UI, CLI scripts, Python API.
 
-[Examples repo](https://github.com/flimkit/FLIMKit-Examples.git) | [Full documentation](https://github.com/flimkit/FLIMKit/wiki)
+[Examples repo](https://github.com/FLIMKit/FLIMKit-Examples.git) | [Full documentation](https://github.com/FLIMKit/FLIMKit/wiki)
 
 ## GUI
 
@@ -27,7 +27,7 @@ Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed d
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
 
 ```bash
-git clone https://github.com/flimkit/FLIMKit.git
+git clone https://github.com/FLIMKit/FLIMKit.git
 cd FLIMKit
 python install.py             # auto-detects GPU and installs the right backend
 python validate_installation.py   # 10 checks - all should pass

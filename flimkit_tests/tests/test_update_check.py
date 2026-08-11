@@ -20,8 +20,8 @@ def test_compare_versions_detects_equal_even_with_prefix():
 
 
 def test_parse_github_repo_https_and_ssh():
-    assert _parse_github_repo("https://github.com/alex1075/FLIMKit.git") == "alex1075/FLIMKit"
-    assert _parse_github_repo("git@github.com:alex1075/FLIMKit.git") == "alex1075/FLIMKit"
+    assert _parse_github_repo("https://github.com/FLIMKit/FLIMKit.git") == "FLIMKit/FLIMKit"
+    assert _parse_github_repo("git@github.com:FLIMKit/FLIMKit.git") == "FLIMKit/FLIMKit"
 
 
 def test_format_report_includes_key_status_lines():

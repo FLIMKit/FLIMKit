@@ -37,8 +37,39 @@ _FORMATS = [
      'modality': 'time', 'reader': 'flimkit.formats.signal:FlimLabsSignalFile'},
 ]
 
-_EXT_TO_ID = {ext: f['id'] for f in _FORMATS for ext in f['exts']}
-_MODALITY_BY_ID = {f['id']: f['modality'] for f in _FORMATS}
+_cache = {'version': None, 'formats': None, 'ext_to_id': None, 'modality_by_id': None}
+
+def _registry():
+    from flimkit.plugins import registry
+    return registry
+
+def _all_formats():
+    reg = _registry()
+    if _cache['version'] != reg.version():
+        merged = [dict(f) for f in _FORMATS]
+        known = {f['id'] for f in merged}
+        for f in reg.formats():
+            if f.id in known:
+                continue
+            merged.append({'id': f.id, 'label': f.label, 'exts': f.exts,
+                           'modality': f.modality, 'reader': f})
+        ext_to_id = {}
+        for f in merged:
+            for ext in f['exts']:
+                ext_to_id.setdefault(ext, f['id'])
+        _cache['formats'] = merged
+        _cache['ext_to_id'] = ext_to_id
+        _cache['modality_by_id'] = {f['id']: f['modality'] for f in merged}
+        _cache['version'] = reg.version()
+    return _cache['formats']
+
+def _ext_to_id():
+    _all_formats()
+    return _cache['ext_to_id']
+
+def _modality_by_id():
+    _all_formats()
+    return _cache['modality_by_id']
 
 def _find_sibling(stem, ext_lower):
     direct = Path(str(stem) + ext_lower)
@@ -129,6 +160,17 @@ def _clean_path(path):
         s = s[1:-1].strip()
     return s
 
+def _run_sniffers(tier, p):
+    for sniffer in _registry().sniffers(tier):
+        try:
+            found = sniffer(p)
+        except Exception as exc:
+            print(f'[Plugins] sniffer from {sniffer.source} raised {exc}')
+            continue
+        if found and found != 'unknown':
+            return found
+    return None
+
 def detect_format(path):
     p = Path(_clean_path(path))
     ext = p.suffix.lower()
@@ -136,34 +178,47 @@ def detect_format(path):
         return _sniff_tiff(p)
     if ext == '.json':
         return _sniff_json(p)
-    if ext in _EXT_TO_ID:
-        return _EXT_TO_ID[ext]
+    found = _run_sniffers('extension', p)
+    if found is not None:
+        return found
+    ext_to_id = _ext_to_id()
+    if ext in ext_to_id:
+        return ext_to_id[ext]
     if _has_iss_triplet(p):
         return 'iss_tdflim'
-    return _sniff_magic(p)
+    found = _sniff_magic(p)
+    if found != 'unknown':
+        return found
+    found = _run_sniffers('magic', p)
+    if found is not None:
+        return found
+    return 'unknown'
 
 def file_modality(path):
-    return _MODALITY_BY_ID.get(detect_format(path), 'unknown')
+    return _modality_by_id().get(detect_format(path), 'unknown')
 
 def supported_formats():
-    return [dict(f) for f in _FORMATS]
+    return [dict(f) for f in _all_formats()]
 
 def supported_extensions():
-    return [ext for f in _FORMATS for ext in f['exts']]
+    return [ext for f in _all_formats() for ext in f['exts']]
 
 def file_dialog_filetypes():
     all_globs = ' '.join('*' + ext for ext in supported_extensions())
     types = [('FLIM files', all_globs)]
-    for f in _FORMATS:
+    for f in _all_formats():
         globs = ' '.join('*' + ext for ext in f['exts'])
         types.append((f['label'], globs))
     return types
 
 def _load_reader(fmt):
-    for f in _FORMATS:
+    for f in _all_formats():
         if f['id'] == fmt:
-            mod_name, cls_name = f['reader'].split(':')
-            return getattr(importlib.import_module(mod_name), cls_name)
+            spec = f['reader']
+            if isinstance(spec, str):
+                mod_name, cls_name = spec.split(':')
+                return getattr(importlib.import_module(mod_name), cls_name)
+            return spec.reader()
     return None
 
 class FLIMFile:

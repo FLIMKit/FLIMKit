@@ -25,10 +25,11 @@
 7. [Module Reference](#module-reference)
 8. [Project Structure](#project-structure)
 9. [Compiled App](#compiled-app-macos--windows--linux)
-10. [Testing](#testing)
-11. [Outputs & File Formats](#outputs--file-formats)
-12. [Troubleshooting](#troubleshooting)
-13. [Contact](#contact)
+10. [Plugins](#plugins)
+11. [Testing](#testing)
+12. [Outputs & File Formats](#outputs--file-formats)
+13. [Troubleshooting](#troubleshooting)
+14. [Contact](#contact)
 
 ---
 
@@ -119,7 +120,7 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 ### Installation
 
 ```bash
-git clone https://github.com/flimkit/FLIMKit.git
+git clone https://github.com/FLIMKit/FLIMKit.git
 cd FLIMKit
 python install.py
 ```
@@ -1087,6 +1088,152 @@ All output files are saved to the same directory as the input PTU file. The work
 ### Machine IRF
 
 Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app.
+
+---
+
+## Plugins
+
+Analysis tools reach the Tools menu through a registry, `flimkit.plugins`. FLIMKit's own tools are registered the same way an add-on is, so the file a contributor writes is the file a third party writes.
+
+A plugin is a Python module that decorates a function:
+
+```python
+from flimkit.plugins import tool
+
+FLIMKIT_PLUGIN_API = 1
+
+@tool(id='hello_example', label='Hello Plugin...', menu='Tools', order=900)
+def open_hello(app):
+    from tkinter import messagebox
+    messagebox.showinfo('Hello', 'This window came from an add-on, not from FLIMKit.')
+```
+
+`id` has to be unique across everything loaded. `menu` is a slash path, so `'Tools/Batch Processing'` nests one level down and any depth works. `order` sorts entries within a menu, low first, ties broken by label. The function is called with the GUI object, and `app.root` is the Tk parent to hang a window off. Keep the tkinter import inside the body so the module still imports on a headless machine.
+
+Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch is refused rather than half-loaded.
+
+The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
+
+Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
+
+Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
+
+`FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
+
+### File formats
+
+A reader class registers with `@file_format`, and FLIMKit's own readers keep working exactly as they did:
+
+```python
+from flimkit.plugins import file_format
+
+@file_format(id='mine', label='My Format', exts=('.mine',), modality='time')
+class MyReader:
+    def __init__(self, path, **kwargs):
+        ...
+```
+
+`modality` is `time`, `frequency` or `intensity`, and it is what `file_modality()` reports. The extension then works everywhere a path is accepted, including `FLIMFile(path)` and the file dialogs.
+
+A built-in extension always wins. Registering `.ptu` does not take `.ptu` away from the PicoQuant reader.
+
+For a format that has no extension of its own, register a sniffer:
+
+```python
+from flimkit.plugins import format_sniffer
+
+@format_sniffer(tier='magic')
+def sniff(path):
+    with open(path, 'rb') as fh:
+        if fh.read(7) == b'MYMAGIC':
+            return 'mine'
+    return None
+```
+
+`tier='magic'` runs after the built-in extension table and the built-in magic-byte checks, which is the safe place. `tier='extension'` runs before the extension table and can therefore take a file away from a built-in reader, so use it only for a format that genuinely shares an extension with something else. A sniffer that raises is reported and skipped.
+
+### Phasor filters
+
+```python
+from flimkit.plugins import phasor_filter
+
+@phasor_filter(id='mine', label='My Filter')
+def mine(real, imag, sigma=1.0):
+    return real, imag
+```
+
+The filter is then usable anywhere the `gaussian`, `median` and `wavelet` methods are, and `flimkit.phasor.filters.phasor_filter_methods()` lists it. Only the keyword arguments your function declares get passed to it. The three built-in methods cannot be overridden.
+
+### Installing a plugin
+
+Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.
+
+FLIMKit never creates that folder and does not load from it until you say so. Open `Help > Plugins...` and press Enable, or set `plugins.allow_user_plugins` to `true` in `~/.flimkit/config.json`. If the folder already has files in it the first time you start FLIMKit, you get asked once. Enabling takes effect on the next start.
+
+`Help > Plugins...` lists what loaded, what failed and why, so a plugin that raises on import can be diagnosed without going near the log files.
+
+`FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
+
+### Settings a plugin owns
+
+```python
+from flimkit.plugins import plugin_config
+
+cfg = plugin_config('my_plugin')
+cfg.set('threshold', 12)
+cfg.save()
+threshold = cfg.get('threshold', 10)
+```
+
+That writes to a `plugin:my_plugin` section of `~/.flimkit/config.json`, which FLIMKit itself never reads. A plugin cannot reach the `expert` or `preferences` sections through this, so it cannot change how the fitters behave behind your back.
+
+### Shipping a plugin as a package
+
+A plugin that has dependencies of its own, or that you want people to install with `pip`, declares an entry point in its own `pyproject.toml`:
+
+```toml
+[project.entry-points.'flimkit.plugins']
+my_plugin = 'my_plugin.register'
+```
+
+The module named on the right is imported at startup, so put the decorated functions there. Installed packages load after the built-ins and before anything in `~/.flimkit/plugins`, and they are not gated by the user-folder switch, since `pip install` is already a deliberate act. They do respect the master switch and the per-plugin disable list, under the entry point name.
+
+This is how a plugin distributed to other people should be shipped. The folder is for a script you wrote yourself.
+
+The frozen macOS and Windows builds cannot see entry points at all, since there is no site-packages to look in. A plugin that has to work in the compiled app goes in the folder.
+
+### Preferences
+
+`File > Preferences...` has a Plugins tab with the three settings that decide what gets loaded:
+
+| Setting | Config key | Default |
+|---|---|---|
+| Load plugins at startup | `plugins.enabled` | `true` |
+| Load from `~/.flimkit/plugins` | `plugins.allow_user_plugins` | `false` |
+| Extra plugin folders | `plugins.paths` | empty |
+
+Turning the first one off skips everything, built-ins included, which is the config equivalent of `--no-plugins`. Folders in `plugins.paths` are scanned after `FLIMKIT_PLUGIN_PATH` and are subject to the same treatment: they are an explicit choice, so they load without the `~/.flimkit/plugins` switch. All three take effect on the next start.
+
+### Turning one off
+
+`Help > Plugins...` has a checkbox per plugin. Unticking one adds it to `plugins.disabled` in the config and it stops loading on the next start. Built-ins can be turned off the same way, so ticking `core_tools` off empties the Tools menu.
+
+From the command line:
+
+```bash
+python main.py --no-plugins              # load nothing, built-ins included
+python main.py --plugins /path/to/dir    # extra folder, repeatable
+```
+
+`--no-plugins` is the same switch as `FLIMKIT_NO_PLUGINS=1`.
+
+### Compatibility
+
+`FLIMKIT_PLUGIN_API` is 1 and the hooks documented above are frozen at that version. New hooks get added; the ones here keep their arguments and their meaning. `flimkit_tests/tests/fixtures/plugin_api_v1/` holds a plugin written against v1 that the test suite loads on every run, so a change that would break an installed plugin fails the build rather than reaching a release.
+
+### Trust
+
+A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.
 
 ---
 

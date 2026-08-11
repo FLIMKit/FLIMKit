@@ -12,7 +12,14 @@ os.environ.setdefault('MPLCONFIGDIR', _mpl_cache)
 import argparse
 from pathlib import Path
 
-def main(fast=False, cli=False, check_updates=False):
+def main(fast=False, cli=False, check_updates=False, no_plugins=False, plugin_path=None):
+    if no_plugins:
+        os.environ['FLIMKIT_NO_PLUGINS'] = '1'
+    if plugin_path:
+        existing = os.environ.get('FLIMKIT_PLUGIN_PATH', '')
+        os.environ['FLIMKIT_PLUGIN_PATH'] = (
+            existing + os.pathsep + os.pathsep.join(plugin_path) if existing
+            else os.pathsep.join(plugin_path))
     if check_updates:
         from flimkit.utils.update_check import (
             check_installation_freshness,
@@ -27,6 +34,8 @@ def main(fast=False, cli=False, check_updates=False):
         from flimkit.UI.gui import launch_gui
         launch_gui()
         return
+    from flimkit import plugins
+    plugins.ensure_loaded()
     from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles, timelapse_flim_fit, zstack_flim_fit
     import inquirer
     from flimkit._version import __version__, roadmap
@@ -101,5 +110,17 @@ if __name__ == '__main__':
         action='store_true',
         help='Check whether git checkout and local version are up to date, then exit',
     )
+    parser.add_argument(
+        '--no-plugins',
+        action='store_true',
+        help='Skip every plugin, built in and user, for a reproducible baseline',
+    )
+    parser.add_argument(
+        '--plugins',
+        action='append',
+        metavar='DIR',
+        help='Extra folder to load plugins from, repeatable',
+    )
     args = parser.parse_args()
-    main(fast=args.fast, cli=args.cli, check_updates=args.check_updates)
+    main(fast=args.fast, cli=args.cli, check_updates=args.check_updates,
+         no_plugins=args.no_plugins, plugin_path=args.plugins)
