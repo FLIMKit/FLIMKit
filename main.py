@@ -27,6 +27,8 @@ def main(fast=False, cli=False, check_updates=False):
         from flimkit.UI.gui import launch_gui
         launch_gui()
         return
+    from flimkit import plugins
+    plugins.ensure_loaded()
     from flimkit.interactive import single_FOV_flim_fit, stitch_and_fit, stitch_tiles, timelapse_flim_fit, zstack_flim_fit
     import inquirer
     from flimkit._version import __version__, roadmap

@@ -25,10 +25,11 @@
 7. [Module Reference](#module-reference)
 8. [Project Structure](#project-structure)
 9. [Compiled App](#compiled-app-macos--windows--linux)
-10. [Testing](#testing)
-11. [Outputs & File Formats](#outputs--file-formats)
-12. [Troubleshooting](#troubleshooting)
-13. [Contact](#contact)
+10. [Plugins](#plugins)
+11. [Testing](#testing)
+12. [Outputs & File Formats](#outputs--file-formats)
+13. [Troubleshooting](#troubleshooting)
+14. [Contact](#contact)
 
 ---
 
@@ -1087,6 +1088,37 @@ All output files are saved to the same directory as the input PTU file. The work
 ### Machine IRF
 
 Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app.
+
+---
+
+## Plugins
+
+Analysis tools reach the Tools menu through a registry, `flimkit.plugins`. FLIMKit's own tools are registered the same way an add-on is, so the file a contributor writes is the file a third party writes.
+
+A plugin is a Python module that decorates a function:
+
+```python
+from flimkit.plugins import tool
+
+FLIMKIT_PLUGIN_API = 1
+
+@tool(id='hello_example', label='Hello Plugin...', menu='Tools', order=900)
+def open_hello(app):
+    from tkinter import messagebox
+    messagebox.showinfo('Hello', 'This window came from an add-on, not from FLIMKit.')
+```
+
+`id` has to be unique across everything loaded. `menu` is a slash path, so `'Tools/Batch Processing'` nests one level down and any depth works. `order` sorts entries within a menu, low first, ties broken by label. The function is called with the GUI object, and `app.root` is the Tk parent to hang a window off. Keep the tkinter import inside the body so the module still imports on a headless machine.
+
+Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch is refused rather than half-loaded.
+
+The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
+
+Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
+
+`FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
+
+Scanning a user directory is not implemented yet, so today a plugin is loaded by calling `flimkit.plugins.load_path('/path/to/plugin.py')`. When the directory arrives it will be off by default: a plugin is ordinary Python running with your privileges, there is no sandbox, and the same trust applies as to a Fiji plugin or a pytest plugin.
 
 ---
 

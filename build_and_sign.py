@@ -5,12 +5,10 @@ import subprocess
 import platform
 from pathlib import Path
 from flimkit._version import __version__
-# Configuration
 APP_NAME = "FLIMKit"
 MAIN_SCRIPT = "main.py"
 VERSION = __version__
 
-# Platform-specific config
 MACOS_TEAM_ID = os.getenv("APPLE_TEAM_ID")
 MACOS_DEVELOPER_ID = os.getenv("APPLE_DEVELOPER_ID")
 MACOS_APPLE_ID = os.getenv("APPLE_ID")
@@ -118,7 +116,6 @@ def generate_mpl_cache():
         for line in result.stdout.strip().splitlines():
             print(f"  {line}")
 
-    # Sanity-check: font list JSON must exist after the rebuild.
     font_lists = list(cache_dir.glob("fontlist-*.json"))
     if not font_lists:
         print("✗ mpl-cache/ exists but contains no fontlist-*.json — rebuild failed.")
@@ -128,7 +125,6 @@ def generate_mpl_cache():
 
 
 def build_app():
-    """Build the app with PyInstaller."""
     print(f"\n{'='*60}")
     print(f"Building {APP_NAME} with PyInstaller")
     print(f"{'='*60}")
@@ -176,8 +172,6 @@ def build_app():
         "--hidden-import", "openpyxl",
         "--hidden-import", "tkinterdnd2",
         "--hidden-import", "TKinterModernThemes",
-        # GPU backends — all imported dynamically inside try/except so PyInstaller
-        # static analysis misses them.  List every submodule explicitly.
         "--hidden-import", "flimkit.GPU",
         "--hidden-import", "flimkit.GPU._base",
         "--hidden-import", "flimkit.GPU.mlx_backend",
@@ -185,6 +179,7 @@ def build_app():
         "--hidden-import", "flimkit.GPU.cuda",
         "--hidden-import", "flimkit.GPU.mps",
         "--hidden-import", "flimkit.GPU.rocm",
+        "--collect-submodules", "flimkit.plugins.builtin",
     ]
 
     try:
@@ -327,7 +322,6 @@ def sign_linux():
 
 
 def main():
-    """Main build and sign process."""
     print(f"\n{'='*60}")
     print(f"FLIMKit Build & Sign Script")
     print(f"Platform: {platform.system()}")

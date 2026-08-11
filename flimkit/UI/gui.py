@@ -197,7 +197,40 @@ class _UIBuilder:
                 sys.stderr = orig_stderr
         threading.Thread(target=worker, daemon=True).start()
 
+    def _build_plugin_menu(self, menu, path):
+        from flimkit import plugins
+        items = []
+        subs = {}
+        for t in plugins.tools('/'.join(path)):
+            rest = t.menu_path[len(path):]
+            if rest:
+                if rest[0] not in subs or t.order < subs[rest[0]]:
+                    subs[rest[0]] = t.order
+            else:
+                items.append((t.order, t.label, t))
+        for name, order in subs.items():
+            items.append((order, name, None))
+        for order, label, t in sorted(items, key=lambda e: (e[0], e[1])):
+            if t is None:
+                sub = tk.Menu(menu, tearoff=0)
+                menu.add_cascade(label=label, menu=sub)
+                self._build_plugin_menu(sub, path + (label,))
+            else:
+                menu.add_command(label=label,
+                                 command=lambda t=t: self._run_plugin_tool(t))
+
+    def _run_plugin_tool(self, t):
+        try:
+            t.callback(self)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror('Tool failed',
+                                 f'{t.label} ({t.source}) raised {type(exc).__name__}: {exc}')
+
     def _build_menu_bar(self):
+        from flimkit import plugins
+        plugins.ensure_loaded()
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         file_menu = tk.Menu(menubar, tearoff=0)
@@ -234,16 +267,7 @@ class _UIBuilder:
         self.root.bind('<Control-Shift-Z>', lambda e: self._menu_redo())
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Tools', menu=tools_menu)
-        tools_menu.add_command(label='Machine IRF Builder', command=self._menu_irf_builder)
-        tools_menu.add_command(label='Generate Synthetic PTU...', command=self._menu_synth_generator)
-        batch_menu = tk.Menu(tools_menu, tearoff=0)
-        tools_menu.add_cascade(label='Batch Processing', menu=batch_menu)
-        batch_menu.add_command(label='Multi-Tile ROI Fit',
-                               command=lambda: self._menu_batch_processing('tiled'))
-        batch_menu.add_command(label='Single FOV Fit',
-                               command=lambda: self._menu_batch_processing('fov'))
-        batch_menu.add_command(label='Timelapse Fit',
-                               command=lambda: self._menu_batch_processing('timelapse'))
+        self._build_plugin_menu(tools_menu, ('Tools',))
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Help', menu=help_menu)
         help_menu.add_command(label='About', command=self._menu_about)
@@ -3750,6 +3774,8 @@ def launch_gui():
     GUI_MODE = True
     from flimkit.utils.crash_handler import init_crash_handler
     init_crash_handler()
+    from flimkit import plugins
+    plugins.ensure_loaded()
     if HAS_TKMT:
         app = FLIMKitGUIThemed(theme='sun-valley', mode='dark')
     else:
