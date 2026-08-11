@@ -273,9 +273,11 @@ class _UIBuilder:
         help_menu.add_command(label='About', command=self._menu_about)
         help_menu.add_command(label='Documentation', command=self._menu_documentation)
         help_menu.add_command(label='Check for Updates', command=self._menu_check_updates)
+        help_menu.add_command(label='Plugins...', command=self._menu_plugins)
         help_menu.add_separator()
         help_menu.add_command(label='View Error Logs', command=self._menu_view_error_logs)
         help_menu.add_command(label='Export Error Logs', command=self._menu_export_error_logs)
+        self.root.after(800, self._maybe_prompt_user_plugins)
     _RECENT_FILE = os.path.join(os.path.expanduser('~'), '.flimkit', 'recent.json')
     _MAX_RECENT = 10
 
@@ -668,6 +670,75 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 text_widget.config(state=tk.DISABLED)
             self.root.after(0, _done)
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _plugin_report_text(self):
+        from flimkit import plugins
+        lines = []
+        for result in plugins.load_report():
+            if result.ok:
+                lines.append(f'loaded   {result.source}  ({result.n_registered} tool(s))')
+            else:
+                lines.append(f'FAILED   {result.source}')
+        if not lines:
+            lines.append('No plugins loaded.')
+        home = plugins.user_dir()
+        lines.append('')
+        lines.append(f'User plugin folder: {home}')
+        if plugins.user_plugins_allowed():
+            lines.append('User plugins are enabled.')
+        else:
+            waiting = plugins.pending_user_plugins()
+            lines.append(f'User plugins are disabled, {len(waiting)} file(s) waiting there.')
+        for directory in plugins.extra_dirs():
+            lines.append(f'FLIMKIT_PLUGIN_PATH: {directory}')
+        for result in plugins.failures():
+            lines.append('')
+            lines.append(f'--- {result.source} ---')
+            lines.append(result.error.strip())
+        return '\n'.join(lines)
+
+    def _menu_plugins(self):
+        from flimkit import plugins
+        from tkinter.scrolledtext import ScrolledText
+        win = tk.Toplevel(self.root)
+        win.title('Plugins')
+        win.geometry('700x420')
+        text_widget = ScrolledText(win, wrap=tk.WORD)
+        text_widget.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        text_widget.insert(tk.END, self._plugin_report_text())
+        text_widget.config(state=tk.DISABLED)
+        row = ttk.Frame(win)
+        row.pack(fill=tk.X, padx=4, pady=(0, 6))
+        if plugins.user_plugins_allowed() == False:
+            ttk.Button(row, text='Enable user plugins',
+                       command=lambda: self._enable_user_plugins(win)).pack(side=tk.LEFT)
+        ttk.Button(row, text='Close', command=win.destroy).pack(side=tk.RIGHT)
+
+    def _maybe_prompt_user_plugins(self):
+        from flimkit import plugins
+        from flimkit.utils.config_manager import cfg
+        if cfg.get('plugins.prompted', False) == True:
+            return
+        if not plugins.pending_user_plugins():
+            return
+        cfg.set('plugins.prompted', True)
+        cfg.save()
+        self._enable_user_plugins()
+
+    def _enable_user_plugins(self, win=None):
+        from flimkit import plugins
+        agreed = messagebox.askyesno(
+            'Enable user plugins',
+            f'Every .py file in {plugins.user_dir()} will be imported at startup.\n\n'
+            'A plugin is ordinary Python with the same access to your machine as '
+            'FLIMKit itself. There is no sandbox. Only enable this for files you '
+            'trust.\n\nEnable and restart to load them?')
+        if agreed == False:
+            return
+        plugins.allow_user_plugins(True)
+        if win is not None:
+            win.destroy()
+        messagebox.showinfo('Enabled', 'User plugins load on the next start of FLIMKit.')
 
     def _menu_view_error_logs(self):
         from flimkit.utils.crash_handler import build_export_report, get_log_dir

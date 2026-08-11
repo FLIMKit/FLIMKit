@@ -1118,7 +1118,19 @@ Loading is isolated per plugin. If one raises on import, its registrations are r
 
 `FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
 
-Scanning a user directory is not implemented yet, so today a plugin is loaded by calling `flimkit.plugins.load_path('/path/to/plugin.py')`. When the directory arrives it will be off by default: a plugin is ordinary Python running with your privileges, there is no sandbox, and the same trust applies as to a Fiji plugin or a pytest plugin.
+### Installing a plugin
+
+Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.
+
+FLIMKit never creates that folder and does not load from it until you say so. Open `Help > Plugins...` and press Enable, or set `plugins.allow_user_plugins` to `true` in `~/.flimkit/config.json`. If the folder already has files in it the first time you start FLIMKit, you get asked once. Enabling takes effect on the next start.
+
+`Help > Plugins...` lists what loaded, what failed and why, so a plugin that raises on import can be diagnosed without going near the log files.
+
+`FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
+
+### Trust
+
+A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.
 
 ---
 

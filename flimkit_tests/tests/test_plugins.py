@@ -145,6 +145,120 @@ def test_non_callable_callback_is_refused(clean_registry):
         plugins.register_tool('nope', 'Nope', 'not a function')
 
 
+@pytest.fixture
+def user_dir(clean_registry, tmp_path, monkeypatch):
+    home = tmp_path / '.flimkit' / 'plugins'
+    home.mkdir(parents=True)
+    monkeypatch.setattr(loader, 'user_dir', lambda: str(home))
+    monkeypatch.setattr(loader, 'user_plugins_allowed', lambda: True)
+    return home
+
+
+def test_user_directory_is_scanned_when_allowed(user_dir):
+    write_plugin(user_dir, 'mine', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='mine', label='Mine')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    plugins.ensure_loaded()
+    assert plugins.get_tool('mine').source == str(user_dir / 'mine.py')
+
+
+def test_user_directory_is_skipped_when_not_allowed(clean_registry, tmp_path, monkeypatch):
+    home = tmp_path / 'plugins'
+    home.mkdir()
+    write_plugin(home, 'mine', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='mine', label='Mine')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    monkeypatch.setattr(loader, 'user_dir', lambda: str(home))
+    monkeypatch.setattr(loader, 'user_plugins_allowed', lambda: False)
+    plugins.ensure_loaded()
+    assert plugins.get_tool('mine') is None
+    assert plugins.pending_user_plugins() == [str(home / 'mine.py')]
+
+
+def test_underscored_and_non_python_files_are_ignored(user_dir):
+    (user_dir / '_private.py').write_text('raise RuntimeError("must not load")\n')
+    (user_dir / 'notes.txt').write_text('hello\n')
+    (user_dir / '.hidden.py').write_text('raise RuntimeError("must not load")\n')
+    plugins.ensure_loaded()
+    assert plugins.failures() == []
+
+
+def test_package_directory_loads(user_dir):
+    pkg = user_dir / 'toolpack'
+    pkg.mkdir()
+    (pkg / 'helper.py').write_text("LABEL = 'From A Package'\n")
+    (pkg / '__init__.py').write_text(
+        'from flimkit.plugins import tool\n'
+        'from .helper import LABEL\n'
+        "@tool(id='packaged', label=LABEL)\n"
+        'def a(app):\n'
+        '    pass\n'
+    )
+    plugins.ensure_loaded()
+    assert plugins.get_tool('packaged').label == 'From A Package'
+
+
+def test_user_plugins_load_after_builtins(user_dir):
+    write_plugin(user_dir, 'later', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='later', label='Later')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    plugins.ensure_loaded()
+    order = [r.source for r in plugins.load_report()]
+    assert order[0] == 'flimkit.plugins.builtin.core_tools'
+    assert order[-1] == str(user_dir / 'later.py')
+
+
+def test_no_plugins_env_var_beats_the_user_directory(user_dir, monkeypatch):
+    write_plugin(user_dir, 'mine', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='mine', label='Mine')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    monkeypatch.setenv('FLIMKIT_NO_PLUGINS', '1')
+    plugins.ensure_loaded()
+    assert plugins.tools() == []
+
+
+def test_plugin_path_env_var_is_scanned(clean_registry, tmp_path, monkeypatch):
+    extra = tmp_path / 'extra'
+    extra.mkdir()
+    write_plugin(extra, 'fromenv', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='fromenv', label='From Env')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    monkeypatch.setattr(loader, 'user_dir', lambda: str(tmp_path / 'missing'))
+    monkeypatch.setenv('FLIMKIT_PLUGIN_PATH', str(extra))
+    plugins.ensure_loaded()
+    assert plugins.get_tool('fromenv') is not None
+
+
+def test_a_broken_user_plugin_leaves_the_builtins_alone(user_dir):
+    write_plugin(user_dir, 'bad', 'raise ValueError("nope")\n')
+    plugins.ensure_loaded()
+    assert {t.id for t in plugins.tools()} == BUILTIN_IDS
+    assert len(plugins.failures()) == 1
+
+
+def test_missing_user_directory_is_not_created(clean_registry, tmp_path, monkeypatch):
+    home = tmp_path / 'never'
+    monkeypatch.setattr(loader, 'user_dir', lambda: str(home))
+    monkeypatch.setattr(loader, 'user_plugins_allowed', lambda: True)
+    plugins.ensure_loaded()
+    assert home.exists() == False
+
+
 def menu_labels(menu):
     out = []
     for i in range(menu.index('end') + 1):
@@ -203,6 +317,71 @@ def test_a_plugin_tool_appears_in_the_menu(clean_registry):
     menubar = root.nametowidget(root['menu'])
     assert 'Hello Plugin...' in menu_labels(submenu(menubar, 'Tools'))
     root.destroy()
+
+
+def test_user_plugins_are_off_by_default(clean_registry, monkeypatch):
+    from flimkit.utils import config_manager
+    monkeypatch.setattr(config_manager.cfg, '_global', {})
+    monkeypatch.setattr(config_manager.cfg, '_project', {})
+    assert loader.user_plugins_allowed() == False
+
+
+def test_enabling_user_plugins_writes_the_config_key(clean_registry, monkeypatch):
+    from flimkit.utils import config_manager
+    monkeypatch.setattr(config_manager.cfg, '_global', {})
+    monkeypatch.setattr(config_manager.cfg, '_project', {})
+    monkeypatch.setattr(config_manager.cfg, 'save', lambda: None)
+    loader.allow_user_plugins(True)
+    assert loader.user_plugins_allowed() == True
+
+
+def test_help_menu_offers_the_plugins_dialog(menu_app):
+    menubar = menu_app.root.nametowidget(menu_app.root['menu'])
+    assert 'Plugins...' in menu_labels(submenu(menubar, 'Help'))
+
+
+def test_plugin_report_names_what_loaded(menu_app):
+    report = menu_app._plugin_report_text()
+    assert 'flimkit.plugins.builtin.core_tools' in report
+    assert 'User plugin folder' in report
+
+
+def test_plugin_report_includes_the_traceback_of_a_failure(menu_app, tmp_path):
+    path = write_plugin(tmp_path, 'bad', 'raise ValueError("nope")\n')
+    plugins.load_path(str(path))
+    report = menu_app._plugin_report_text()
+    assert 'FAILED' in report
+    assert 'ValueError: nope' in report
+
+
+def test_startup_prompt_asks_once(clean_registry, monkeypatch):
+    from flimkit.UI.gui import _UIBuilder
+    from flimkit.utils import config_manager
+    monkeypatch.setattr(config_manager.cfg, '_global', {})
+    monkeypatch.setattr(config_manager.cfg, '_project', {})
+    monkeypatch.setattr(config_manager.cfg, 'save', lambda: None)
+    monkeypatch.setattr(plugins, 'pending_user_plugins', lambda: ['/somewhere/mine.py'])
+    asked = []
+    b = _UIBuilder.__new__(_UIBuilder)
+    monkeypatch.setattr(_UIBuilder, '_enable_user_plugins',
+                        lambda self, win=None: asked.append(1))
+    b._maybe_prompt_user_plugins()
+    b._maybe_prompt_user_plugins()
+    assert len(asked) == 1
+
+
+def test_startup_prompt_stays_quiet_with_an_empty_folder(clean_registry, monkeypatch):
+    from flimkit.UI.gui import _UIBuilder
+    from flimkit.utils import config_manager
+    monkeypatch.setattr(config_manager.cfg, '_global', {})
+    monkeypatch.setattr(config_manager.cfg, '_project', {})
+    monkeypatch.setattr(plugins, 'pending_user_plugins', lambda: [])
+    asked = []
+    b = _UIBuilder.__new__(_UIBuilder)
+    monkeypatch.setattr(_UIBuilder, '_enable_user_plugins',
+                        lambda self, win=None: asked.append(1))
+    b._maybe_prompt_user_plugins()
+    assert asked == []
 
 
 def test_a_failing_tool_is_reported_not_raised(clean_registry, monkeypatch):

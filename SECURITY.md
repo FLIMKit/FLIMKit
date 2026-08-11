@@ -62,6 +62,19 @@ FLIMKit runs locally on data you point it at. The realistic risk is a hostile or
 - The Panel interface being reachable by other users when you deliberately bind it to a public interface. It is intended for `localhost` and has no authentication layer.
 - Vulnerabilities in a dependency that FLIMKit does not call into. Report those upstream.
 - Anything requiring an attacker who already has your user account on the machine.
+- A plugin in `~/.flimkit/plugins/` doing something harmful. See below.
+
+## Plugins
+
+FLIMKit can load add-ons from `~/.flimkit/plugins/`. A plugin is ordinary Python, imported into the running process, with your account's access to your files and your network. There is no sandbox, and there is no practical way to add one that would survive contact with a determined author. Loading a plugin is the same trust decision as installing a Fiji plugin or a pytest plugin.
+
+What FLIMKit does do:
+
+- The folder is never created automatically, and nothing in it loads until you turn user plugins on, either in `Help > Plugins...` or by setting `plugins.allow_user_plugins` in `~/.flimkit/config.json`.
+- `FLIMKIT_NO_PLUGINS=1` turns the whole mechanism off, including the built-in registrations.
+- `Help > Plugins...` names every plugin that loaded and every one that failed.
+
+A plugin misbehaving is therefore out of scope as a vulnerability. A way to get a file loaded from that folder without the setting being on, or a way to make FLIMKit create the folder or write a plugin into it, is in scope and worth reporting.
 
 ## Notes for users
 
