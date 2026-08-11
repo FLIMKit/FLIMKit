@@ -25,7 +25,7 @@ If you hit a problem on an older version, please confirm it still happens on the
 
 Use one of these instead:
 
-1. GitHub's private vulnerability reporting: go to the [Security tab](https://github.com/flimkit/FLIMKit/security/advisories/new) and open a draft advisory. This is preferred, because it keeps the report, the fix, and the disclosure in one place.
+1. GitHub's private vulnerability reporting: go to the [Security tab](https://github.com/FLIMKit/FLIMKit/security/advisories/new) and open a draft advisory. This is preferred, because it keeps the report, the fix, and the disclosure in one place.
 2. Email alexander.hunt@ed.ac.uk with `FLIMKit security` in the subject line.
 
 Please include:
@@ -57,7 +57,7 @@ FLIMKit runs locally on data you point it at. The realistic risk is a hostile or
 
 **Out of scope:**
 
-- Crashes, hangs, or unhandled exceptions on malformed files with no path to code execution or data loss. Those are ordinary bugs: please [open an issue](https://github.com/flimkit/FLIMKit/issues), they are still worth fixing.
+- Crashes, hangs, or unhandled exceptions on malformed files with no path to code execution or data loss. Those are ordinary bugs: please [open an issue](https://github.com/FLIMKit/FLIMKit/issues), they are still worth fixing.
 - Running out of memory on a large file or a large fit. See the documented hardware limits.
 - The Panel interface being reachable by other users when you deliberately bind it to a public interface. It is intended for `localhost` and has no authentication layer.
 - Vulnerabilities in a dependency that FLIMKit does not call into. Report those upstream.

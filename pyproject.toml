@@ -23,9 +23,9 @@ classifiers = [
 dynamic = ['version', 'dependencies']
 
 [project.urls]
-Homepage = 'https://github.com/alex1075/FLIMKit'
-Documentation = 'https://github.com/alex1075/FLIMKit/wiki'
-Issues = 'https://github.com/alex1075/FLIMKit/issues'
+Homepage = 'https://github.com/FLIMKit/FLIMKit'
+Documentation = 'https://github.com/FLIMKit/FLIMKit/wiki'
+Issues = 'https://github.com/FLIMKit/FLIMKit/issues'
 
 [project.entry-points.'flimkit.plugins']
 
