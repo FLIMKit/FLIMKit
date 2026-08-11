@@ -11,6 +11,7 @@ from flimkit.plugins.builtin import BUILTIN
 _lock = threading.RLock()
 _loaded = False
 _report = []
+_skipped = []
 
 
 class LoadResult:
@@ -128,7 +129,38 @@ def user_dir():
 
 def extra_dirs():
     raw = os.environ.get('FLIMKIT_PLUGIN_PATH', '')
-    return [os.path.expanduser(p) for p in raw.split(os.pathsep) if p.strip()]
+    found = [os.path.expanduser(p) for p in raw.split(os.pathsep) if p.strip()]
+    for p in config_dirs():
+        if p not in found:
+            found.append(p)
+    return found
+
+
+def config_dirs():
+    from flimkit.utils.config_manager import cfg
+    found = cfg.get('plugins.paths', [])
+    if isinstance(found, str):
+        found = found.split(os.pathsep)
+    if isinstance(found, (list, tuple)) == False:
+        return []
+    return [os.path.expanduser(str(p)) for p in found if str(p).strip()]
+
+
+def set_config_dirs(paths):
+    from flimkit.utils.config_manager import cfg
+    cfg.set('plugins.paths', [str(p) for p in paths if str(p).strip()])
+    cfg.save()
+
+
+def plugins_enabled():
+    from flimkit.utils.config_manager import cfg
+    return cfg.get('plugins.enabled', True) != False
+
+
+def set_plugins_enabled(enabled=True):
+    from flimkit.utils.config_manager import cfg
+    cfg.set('plugins.enabled', bool(enabled))
+    cfg.save()
 
 
 def user_plugins_allowed():
@@ -148,6 +180,71 @@ def allow_user_plugins(allowed=True):
     cfg.save()
 
 
+def short_name(source):
+    name = os.path.basename(str(source).rstrip(os.sep))
+    if name.endswith('.py'):
+        name = name[:-3]
+    if '.' in name and os.sep not in name:
+        name = name.rsplit('.', 1)[-1]
+    return name
+
+
+def disabled_plugins():
+    from flimkit.utils.config_manager import cfg
+    found = cfg.get('plugins.disabled', [])
+    if isinstance(found, (list, tuple)) == False:
+        return []
+    return [str(x) for x in found]
+
+
+def set_plugin_disabled(name, disabled=True):
+    from flimkit.utils.config_manager import cfg
+    current = [n for n in disabled_plugins() if n != name]
+    if disabled:
+        current.append(name)
+    cfg.set('plugins.disabled', sorted(current))
+    cfg.save()
+    return current
+
+
+def plugin_config(name):
+    return PluginConfig(name)
+
+
+class PluginConfig:
+
+    def __init__(self, name):
+        self.section = 'plugin:' + short_name(name)
+
+    def get(self, key, default=None):
+        from flimkit.utils.config_manager import cfg
+        return cfg.get(self.section + '.' + key, default)
+
+    def set(self, key, value):
+        from flimkit.utils.config_manager import cfg
+        cfg.set(self.section + '.' + key, value)
+
+    def save(self):
+        from flimkit.utils.config_manager import cfg
+        cfg.save()
+
+    def all(self):
+        from flimkit.utils.config_manager import cfg
+        return cfg.get(self.section)
+
+    def __repr__(self):
+        return f'<PluginConfig {self.section!r}>'
+
+
+def _load_unless_disabled(target, is_module=False):
+    name = short_name(target)
+    if name in disabled_plugins():
+        print(f'[Plugins] {name} disabled, skipping')
+        _skipped.append(name)
+        return None
+    return load_module(target) if is_module else load_path(target)
+
+
 def ensure_loaded():
     global _loaded
     with _lock:
@@ -157,12 +254,15 @@ def ensure_loaded():
         if disabled():
             print('[Plugins] FLIMKIT_NO_PLUGINS set, loading nothing')
             return list(_report)
+        if plugins_enabled() == False:
+            print('[Plugins] plugins.enabled is false in the config, loading nothing')
+            return list(_report)
         for dotted in BUILTIN:
-            load_module(dotted)
+            _load_unless_disabled(dotted, is_module=True)
         home = user_dir()
         if user_plugins_allowed():
             for path in candidates(home):
-                load_path(path)
+                _load_unless_disabled(path)
         else:
             waiting = candidates(home)
             if waiting:
@@ -170,7 +270,7 @@ def ensure_loaded():
                       f'set plugins.allow_user_plugins to enable them')
         for directory in extra_dirs():
             for path in candidates(directory):
-                load_path(path)
+                _load_unless_disabled(path)
         return list(_report)
 
 
@@ -182,9 +282,14 @@ def failures():
     return [r for r in _report if not r.ok]
 
 
+def skipped():
+    return list(_skipped)
+
+
 def reset():
     global _loaded
     with _lock:
         _loaded = False
         _report.clear()
+        _skipped.clear()
         registry.clear()

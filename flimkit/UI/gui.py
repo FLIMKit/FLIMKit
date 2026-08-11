@@ -457,10 +457,32 @@ class _UIBuilder:
         ttk.Label(files_frame, text='Auto-save NPZ:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         autosave_var = tk.BooleanVar(value=prefs.get('auto_save_npz', True))
         ttk.Checkbutton(files_frame, text='Enable auto-save', variable=autosave_var).pack(anchor='w', pady=(0, 10))
+        from flimkit import plugins
+        plug_frame = ttk.Frame(note, padding=10)
+        note.add(plug_frame, text='Plugins')
+        enabled_var = tk.BooleanVar(value=plugins.plugins_enabled())
+        ttk.Checkbutton(plug_frame, text='Load plugins at startup',
+                        variable=enabled_var).pack(anchor='w', pady=(5, 0))
+        user_var = tk.BooleanVar(value=plugins.user_plugins_allowed())
+        ttk.Checkbutton(plug_frame, text=f'Load from {plugins.user_dir()}',
+                        variable=user_var).pack(anchor='w', pady=(0, 10))
+        ttk.Label(plug_frame, text='Extra plugin folders, one per line:',
+                  font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
+        paths_box = tk.Text(plug_frame, height=4, width=44)
+        paths_box.pack(anchor='w', pady=(0, 5))
+        paths_box.insert('1.0', '\n'.join(plugins.config_dirs()))
+        ttk.Button(plug_frame, text='Add folder...', width=14,
+                   command=lambda: self._add_plugin_folder(paths_box)).pack(anchor='w')
+        ttk.Label(plug_frame, text='Changes take effect on the next start.',
+                  foreground='grey').pack(anchor='w', pady=(8, 0))
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(0, 0))
 
         def save_prefs():
+            plugins.set_plugins_enabled(enabled_var.get())
+            plugins.allow_user_plugins(user_var.get())
+            plugins.set_config_dirs(
+                [line.strip() for line in paths_box.get('1.0', 'end').splitlines()])
             cfg.update_section('preferences', {
                 'colormap': cmap_var.get(),
                 'font_size': font_var.get(),
@@ -473,6 +495,14 @@ class _UIBuilder:
             pref_win.destroy()
         ttk.Button(btn_frame, text='Save', command=save_prefs).pack(side='right', padx=5)
         ttk.Button(btn_frame, text='Cancel', command=pref_win.destroy).pack(side='right', padx=5)
+
+    def _add_plugin_folder(self, paths_box):
+        chosen = filedialog.askdirectory()
+        if not chosen:
+            return
+        current = paths_box.get('1.0', 'end').strip()
+        paths_box.delete('1.0', 'end')
+        paths_box.insert('1.0', (current + '\n' + chosen).strip())
 
     def _menu_undo(self):
         print('[Menu] Undo')
@@ -689,6 +719,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         else:
             waiting = plugins.pending_user_plugins()
             lines.append(f'User plugins are disabled, {len(waiting)} file(s) waiting there.')
+        for name in plugins.skipped():
+            lines.append(f'skipped  {name}  (disabled)')
         for directory in plugins.extra_dirs():
             lines.append(f'FLIMKIT_PLUGIN_PATH: {directory}')
         for result in plugins.failures():
@@ -702,11 +734,21 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         from tkinter.scrolledtext import ScrolledText
         win = tk.Toplevel(self.root)
         win.title('Plugins')
-        win.geometry('700x420')
-        text_widget = ScrolledText(win, wrap=tk.WORD)
+        win.geometry('700x520')
+        text_widget = ScrolledText(win, wrap=tk.WORD, height=14)
         text_widget.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         text_widget.insert(tk.END, self._plugin_report_text())
         text_widget.config(state=tk.DISABLED)
+        box = ttk.LabelFrame(win, text='Load on next start')
+        box.pack(fill=tk.X, padx=4, pady=4)
+        off = plugins.disabled_plugins()
+        names = sorted({plugins.short_name(r.source) for r in plugins.load_report()} | set(off))
+        for name in names:
+            var = tk.BooleanVar(value=name not in off)
+            ttk.Checkbutton(
+                box, text=name, variable=var,
+                command=lambda n=name, v=var: plugins.set_plugin_disabled(n, v.get() == False),
+            ).pack(anchor='w', padx=6)
         row = ttk.Frame(win)
         row.pack(fill=tk.X, padx=4, pady=(0, 6))
         if plugins.user_plugins_allowed() == False:

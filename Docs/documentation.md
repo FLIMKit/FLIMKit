@@ -1172,6 +1172,48 @@ FLIMKit never creates that folder and does not load from it until you say so. Op
 
 `FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
 
+### Settings a plugin owns
+
+```python
+from flimkit.plugins import plugin_config
+
+cfg = plugin_config('my_plugin')
+cfg.set('threshold', 12)
+cfg.save()
+threshold = cfg.get('threshold', 10)
+```
+
+That writes to a `plugin:my_plugin` section of `~/.flimkit/config.json`, which FLIMKit itself never reads. A plugin cannot reach the `expert` or `preferences` sections through this, so it cannot change how the fitters behave behind your back.
+
+### Preferences
+
+`File > Preferences...` has a Plugins tab with the three settings that decide what gets loaded:
+
+| Setting | Config key | Default |
+|---|---|---|
+| Load plugins at startup | `plugins.enabled` | `true` |
+| Load from `~/.flimkit/plugins` | `plugins.allow_user_plugins` | `false` |
+| Extra plugin folders | `plugins.paths` | empty |
+
+Turning the first one off skips everything, built-ins included, which is the config equivalent of `--no-plugins`. Folders in `plugins.paths` are scanned after `FLIMKIT_PLUGIN_PATH` and are subject to the same treatment: they are an explicit choice, so they load without the `~/.flimkit/plugins` switch. All three take effect on the next start.
+
+### Turning one off
+
+`Help > Plugins...` has a checkbox per plugin. Unticking one adds it to `plugins.disabled` in the config and it stops loading on the next start. Built-ins can be turned off the same way, so ticking `core_tools` off empties the Tools menu.
+
+From the command line:
+
+```bash
+python main.py --no-plugins              # load nothing, built-ins included
+python main.py --plugins /path/to/dir    # extra folder, repeatable
+```
+
+`--no-plugins` is the same switch as `FLIMKIT_NO_PLUGINS=1`.
+
+### Compatibility
+
+`FLIMKIT_PLUGIN_API` is 1 and the hooks documented above are frozen at that version. New hooks get added; the ones here keep their arguments and their meaning. `flimkit_tests/tests/fixtures/plugin_api_v1/` holds a plugin written against v1 that the test suite loads on every run, so a change that would break an installed plugin fails the build rather than reaching a release.
+
 ### Trust
 
 A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.

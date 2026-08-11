@@ -405,9 +405,141 @@ def test_missing_user_directory_is_not_created(clean_registry, tmp_path, monkeyp
     assert home.exists() == False
 
 
+@pytest.fixture
+def blank_config(monkeypatch):
+    from flimkit.utils import config_manager
+    monkeypatch.setattr(config_manager.cfg, '_global', {})
+    monkeypatch.setattr(config_manager.cfg, '_project', {})
+    monkeypatch.setattr(config_manager.cfg, 'save', lambda: None)
+    return config_manager.cfg
+
+
+def test_short_name_covers_every_source_shape(clean_registry):
+    assert plugins.short_name('flimkit.plugins.builtin.core_tools') == 'core_tools'
+    assert plugins.short_name('/a/b/hello_tool.py') == 'hello_tool'
+    assert plugins.short_name('/a/b/toolpack') == 'toolpack'
+    assert plugins.short_name('/a/b/toolpack/') == 'toolpack'
+
+
+def test_a_disabled_builtin_is_not_loaded(clean_registry, blank_config):
+    plugins.set_plugin_disabled('core_tools', True)
+    plugins.ensure_loaded()
+    assert plugins.tools() == []
+    assert plugins.skipped() == ['core_tools']
+
+
+def test_re_enabling_puts_it_back(clean_registry, blank_config):
+    plugins.set_plugin_disabled('core_tools', True)
+    plugins.set_plugin_disabled('core_tools', False)
+    assert plugins.disabled_plugins() == []
+    plugins.ensure_loaded()
+    assert {t.id for t in plugins.tools()} == BUILTIN_IDS
+
+
+def test_a_disabled_user_plugin_is_skipped(user_dir, blank_config):
+    write_plugin(user_dir, 'unwanted', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='unwanted', label='Unwanted')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    plugins.set_plugin_disabled('unwanted', True)
+    plugins.ensure_loaded()
+    assert plugins.get_tool('unwanted') is None
+    assert 'unwanted' in plugins.skipped()
+
+
+def test_plugin_config_is_namespaced(clean_registry, blank_config):
+    mine = plugins.plugin_config('/a/b/mine.py')
+    theirs = plugins.plugin_config('theirs')
+    mine.set('threshold', 12)
+    theirs.set('threshold', 99)
+    assert mine.get('threshold') == 12
+    assert theirs.get('threshold') == 99
+    assert mine.get('missing', 'fallback') == 'fallback'
+    assert blank_config._global['plugin:mine'] == {'threshold': 12}
+
+
+def test_plugin_config_cannot_reach_flimkit_settings(clean_registry, blank_config):
+    mine = plugins.plugin_config('mine')
+    mine.set('optimizer', 'nonsense')
+    assert blank_config.get('expert.optimizer') == 'de'
+
+
+def test_plugins_are_enabled_by_default(clean_registry, blank_config):
+    assert plugins.plugins_enabled() == True
+
+
+def test_config_switch_stops_everything_loading(clean_registry, blank_config):
+    plugins.set_plugins_enabled(False)
+    plugins.ensure_loaded()
+    assert plugins.tools() == []
+    assert plugins.load_report() == []
+
+
+def test_config_switch_back_on_loads_again(clean_registry, blank_config):
+    plugins.set_plugins_enabled(False)
+    plugins.set_plugins_enabled(True)
+    plugins.ensure_loaded()
+    assert {t.id for t in plugins.tools()} == BUILTIN_IDS
+
+
+def test_config_paths_are_scanned(clean_registry, blank_config, tmp_path, monkeypatch):
+    extra = tmp_path / 'from_config'
+    extra.mkdir()
+    write_plugin(extra, 'configured', (
+        'from flimkit.plugins import tool\n'
+        "@tool(id='configured', label='Configured')\n"
+        'def a(app):\n'
+        '    pass\n'
+    ))
+    monkeypatch.setattr(loader, 'user_dir', lambda: str(tmp_path / 'missing'))
+    plugins.set_config_dirs([str(extra)])
+    assert plugins.config_dirs() == [str(extra)]
+    plugins.ensure_loaded()
+    assert plugins.get_tool('configured') is not None
+
+
+def test_config_paths_and_the_env_var_both_apply(clean_registry, blank_config,
+                                                 tmp_path, monkeypatch):
+    from_env = tmp_path / 'env'
+    from_cfg = tmp_path / 'cfg'
+    from_env.mkdir()
+    from_cfg.mkdir()
+    monkeypatch.setenv('FLIMKIT_PLUGIN_PATH', str(from_env))
+    plugins.set_config_dirs([str(from_cfg)])
+    assert plugins.extra_dirs() == [str(from_env), str(from_cfg)]
+
+
+def test_a_blank_line_in_the_path_list_is_dropped(clean_registry, blank_config):
+    plugins.set_config_dirs(['/one', '   ', '', '/two'])
+    assert plugins.config_dirs() == ['/one', '/two']
+
+
+def test_no_plugins_env_var_beats_the_config_switch(clean_registry, blank_config, monkeypatch):
+    plugins.set_plugins_enabled(True)
+    monkeypatch.setenv('FLIMKIT_NO_PLUGINS', '1')
+    plugins.ensure_loaded()
+    assert plugins.tools() == []
+
+
+def test_cli_flags_map_onto_the_environment(monkeypatch):
+    import main as flimkit_main
+    monkeypatch.setenv('FLIMKIT_NO_PLUGINS', '')
+    monkeypatch.setenv('FLIMKIT_PLUGIN_PATH', '')
+    monkeypatch.setattr(flimkit_main, 'main', flimkit_main.main)
+    calls = []
+    monkeypatch.setattr('flimkit.UI.gui.launch_gui', lambda: calls.append(1), raising=False)
+    flimkit_main.main(no_plugins=True, plugin_path=['/tmp/one', '/tmp/two'])
+    assert os.environ['FLIMKIT_NO_PLUGINS'] == '1'
+    assert os.environ['FLIMKIT_PLUGIN_PATH'] == os.pathsep.join(['/tmp/one', '/tmp/two'])
+    assert calls == [1]
+
+
 def menu_labels(menu):
     out = []
-    for i in range(menu.index('end') + 1):
+    end = menu.index('end')
+    for i in range(0 if end is None else end + 1):
         if menu.type(i) in ('command', 'cascade'):
             out.append(menu.entrycget(i, 'label'))
     return out
@@ -430,7 +562,8 @@ def menu_app(clean_registry):
 
 
 def submenu(menu, label):
-    for i in range(menu.index('end') + 1):
+    end = menu.index('end')
+    for i in range(0 if end is None else end + 1):
         if menu.type(i) == 'cascade' and menu.entrycget(i, 'label') == label:
             return menu.nametowidget(menu.entrycget(i, 'menu'))
     raise AssertionError(f'no submenu {label!r} in {menu_labels(menu)}')
@@ -528,6 +661,45 @@ def test_startup_prompt_stays_quiet_with_an_empty_folder(clean_registry, monkeyp
                         lambda self, win=None: asked.append(1))
     b._maybe_prompt_user_plugins()
     assert asked == []
+
+
+def test_preferences_has_a_plugins_tab(menu_app, blank_config):
+    import tkinter as tk
+    menu_app._menu_preferences()
+    win = [w for w in menu_app.root.winfo_children() if isinstance(w, tk.Toplevel)][-1]
+    tabs = []
+    for note in win.winfo_children()[0].winfo_children():
+        if isinstance(note, ttk_notebook()):
+            tabs = [note.tab(i, 'text') for i in range(note.index('end'))]
+    assert 'Plugins' in tabs
+    win.destroy()
+
+
+def ttk_notebook():
+    from tkinter import ttk
+    return ttk.Notebook
+
+
+def test_saving_preferences_writes_the_plugin_settings(menu_app, blank_config, monkeypatch):
+    import tkinter as tk
+    plugins.set_plugins_enabled(True)
+    menu_app._menu_preferences()
+    win = [w for w in menu_app.root.winfo_children() if isinstance(w, tk.Toplevel)][-1]
+    checks = []
+
+    def walk(widget):
+        for child in widget.winfo_children():
+            checks.append(child)
+            walk(child)
+    walk(win)
+    boxes = [w for w in checks if w.winfo_class() == 'TCheckbutton'
+             and 'Load plugins at startup' in str(w.cget('text'))]
+    assert len(boxes) == 1
+    boxes[0].invoke()
+    buttons = [w for w in checks if w.winfo_class() == 'TButton'
+               and str(w.cget('text')) == 'Save']
+    buttons[0].invoke()
+    assert plugins.plugins_enabled() == False
 
 
 def test_a_failing_tool_is_reported_not_raised(clean_registry, monkeypatch):
