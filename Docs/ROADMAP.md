@@ -1,6 +1,6 @@
 # FLIMKit Development Roadmap
 
-**Last Updated:** August 10, 2026
+**Last Updated:** August 11, 2026
 
 ## High Priority - To Do
 
@@ -19,6 +19,9 @@ Reading their XML header is one thing, decoding their data container is another,
 Let users define their own decay models and cost functions, and let analysis tools, file formats and phasor filters register themselves the same way. Built in house as a small `flimkit.plugins` registry rather than by pulling in a plugin framework, since there is no packaging metadata for entry points to hang off and the PyInstaller build could not discover them anyway.
 
 Models and cost functions are the goal, and they are one job rather than two. The differential evolution costs are twelve hand-written classes covering model against cost function against reparameterisation, so both hooks need the same groundwork first: a parameter-layout object, and one generic cost class in place of the twelve. Tracked in issue #3. Tools, formats and filters come first, since they are close to free by comparison and they prove the registry.
+
+### 5. GPU per-pixel fitting with a fit window
+The per-pixel fit falls back to CPU whenever a fit window or an exclusion band is set, and says so (`fitters.py`, `[per-pixel] fit window/exclusions active ... GPU backends have no window support yet`). Anyone dropping a reflection peak out of the fit therefore loses the GPU path, which is the case where the speed is wanted most. The projection and the grid scan both need to run over a bin subset rather than the whole histogram, on CUDA, MPS and MLX. Tail fits fall back for the same reason and would be fixed by the same change, since a tail fit is a window starting at t0.
 
 ## Medium Priority - To Do
 
