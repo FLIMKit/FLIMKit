@@ -1118,6 +1118,50 @@ Loading is isolated per plugin. If one raises on import, its registrations are r
 
 `FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
 
+### File formats
+
+A reader class registers with `@file_format`, and FLIMKit's own readers keep working exactly as they did:
+
+```python
+from flimkit.plugins import file_format
+
+@file_format(id='mine', label='My Format', exts=('.mine',), modality='time')
+class MyReader:
+    def __init__(self, path, **kwargs):
+        ...
+```
+
+`modality` is `time`, `frequency` or `intensity`, and it is what `file_modality()` reports. The extension then works everywhere a path is accepted, including `FLIMFile(path)` and the file dialogs.
+
+A built-in extension always wins. Registering `.ptu` does not take `.ptu` away from the PicoQuant reader.
+
+For a format that has no extension of its own, register a sniffer:
+
+```python
+from flimkit.plugins import format_sniffer
+
+@format_sniffer(tier='magic')
+def sniff(path):
+    with open(path, 'rb') as fh:
+        if fh.read(7) == b'MYMAGIC':
+            return 'mine'
+    return None
+```
+
+`tier='magic'` runs after the built-in extension table and the built-in magic-byte checks, which is the safe place. `tier='extension'` runs before the extension table and can therefore take a file away from a built-in reader, so use it only for a format that genuinely shares an extension with something else. A sniffer that raises is reported and skipped.
+
+### Phasor filters
+
+```python
+from flimkit.plugins import phasor_filter
+
+@phasor_filter(id='mine', label='My Filter')
+def mine(real, imag, sigma=1.0):
+    return real, imag
+```
+
+The filter is then usable anywhere the `gaussian`, `median` and `wavelet` methods are, and `flimkit.phasor.filters.phasor_filter_methods()` lists it. Only the keyword arguments your function declares get passed to it. The three built-in methods cannot be overridden.
+
 ### Installing a plugin
 
 Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.

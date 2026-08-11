@@ -44,7 +44,7 @@ def _api_ok(module, source):
 
 
 def _load(source, importer):
-    before = len(registry.tools())
+    before = registry.count()
     prev = registry._set_source(source)
     print(f'[Plugins] loading {source}')
     try:
@@ -61,7 +61,7 @@ def _load(source, importer):
         print(f'[Plugins] {source} failed, {len(dropped)} registration(s) rolled back')
         return _record(LoadResult(source, False, 0, err))
     registry._set_source(prev)
-    return _record(LoadResult(source, True, len(registry.tools()) - before))
+    return _record(LoadResult(source, True, registry.count() - before))
 
 
 def load_module(dotted, source=None):

@@ -676,7 +676,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         lines = []
         for result in plugins.load_report():
             if result.ok:
-                lines.append(f'loaded   {result.source}  ({result.n_registered} tool(s))')
+                lines.append(f'loaded   {result.source}  ({result.n_registered} registration(s))')
             else:
                 lines.append(f'FAILED   {result.source}')
         if not lines:

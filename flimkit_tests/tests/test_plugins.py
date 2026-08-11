@@ -145,6 +145,152 @@ def test_non_callable_callback_is_refused(clean_registry):
         plugins.register_tool('nope', 'Nope', 'not a function')
 
 
+def test_plugin_format_is_detected_by_extension(clean_registry, tmp_path):
+    from flimkit.formats import detect_format, file_modality, supported_extensions
+    plugins.ensure_loaded()
+    path = write_plugin(tmp_path, 'fmt', (
+        'from flimkit.plugins import file_format\n'
+        "@file_format(id='mine', label='My Format', exts=('.mine',), modality='frequency')\n"
+        'class MyReader:\n'
+        '    def __init__(self, path, **kw):\n'
+        '        self.path = path\n'
+    ))
+    assert plugins.load_path(str(path)).ok == True
+    assert detect_format('a.mine') == 'mine'
+    assert file_modality('a.mine') == 'frequency'
+    assert '.mine' in supported_extensions()
+
+
+def test_plugin_format_opens_through_flimfile(clean_registry, tmp_path):
+    from flimkit.formats import FLIMFile
+    plugins.ensure_loaded()
+    path = write_plugin(tmp_path, 'fmt2', (
+        'from flimkit.plugins import file_format\n'
+        "@file_format(id='mine2', label='My Format 2', exts=('.mine2',))\n"
+        'class MyReader:\n'
+        '    def __init__(self, path, **kw):\n'
+        '        self.path = path\n'
+    ))
+    plugins.load_path(str(path))
+    handle = FLIMFile('a.mine2')
+    assert handle.path == 'a.mine2'
+
+
+def test_plugin_sniffer_runs_after_the_builtin_magic(clean_registry, tmp_path):
+    from flimkit.formats import detect_format
+    plugins.ensure_loaded()
+    target = tmp_path / 'thing.unknownext'
+    target.write_bytes(b'MYMAGIC and then some')
+    path = write_plugin(tmp_path, 'sniffer', (
+        'from flimkit.plugins import file_format, format_sniffer\n'
+        "@file_format(id='magicfmt', label='Magic Format', reader='flimkit.formats.PTU.reader:PTUFile')\n"
+        'def _unused():\n'
+        '    pass\n'
+        "@format_sniffer(tier='magic')\n"
+        'def sniff(p):\n'
+        "    with open(p, 'rb') as fh:\n"
+        "        if fh.read(7) == b'MYMAGIC':\n"
+        "            return 'magicfmt'\n"
+        '    return None\n'
+    ))
+    plugins.load_path(str(path))
+    assert detect_format(str(target)) == 'magicfmt'
+
+
+def test_a_raising_sniffer_does_not_break_detection(clean_registry, tmp_path):
+    from flimkit.formats import detect_format
+    plugins.ensure_loaded()
+    path = write_plugin(tmp_path, 'badsniff', (
+        'from flimkit.plugins import format_sniffer\n'
+        "@format_sniffer(tier='magic')\n"
+        'def sniff(p):\n'
+        '    raise ValueError("bad sniffer")\n'
+    ))
+    plugins.load_path(str(path))
+    assert detect_format('a.ptu') == 'ptu'
+    assert detect_format('a.nothing') == 'unknown'
+
+
+def test_duplicate_format_id_is_refused(clean_registry):
+    plugins.register_format('dupfmt', 'One', exts=('.one',), reader='a:B')
+    with pytest.raises(registry.PluginError):
+        plugins.register_format('dupfmt', 'Two', exts=('.two',), reader='a:B')
+
+
+def test_bad_modality_is_refused(clean_registry):
+    with pytest.raises(registry.PluginError):
+        plugins.register_format('badmod', 'Bad', exts=('.bad',),
+                                modality='wavelength', reader='a:B')
+
+
+def test_format_registrations_roll_back_with_their_plugin(clean_registry, tmp_path):
+    from flimkit.formats import detect_format
+    plugins.ensure_loaded()
+    path = write_plugin(tmp_path, 'halfbad', (
+        'from flimkit.plugins import file_format, format_sniffer\n'
+        "@file_format(id='rollback_fmt', label='Rollback', exts=('.rb',))\n"
+        'class R:\n'
+        '    pass\n'
+        "@format_sniffer(tier='magic')\n"
+        'def sniff(p):\n'
+        '    return None\n'
+        'raise RuntimeError("too late")\n'
+    ))
+    assert plugins.load_path(str(path)).ok == False
+    assert plugins.get_format('rollback_fmt') is None
+    assert plugins.sniffers() == []
+    assert detect_format('a.rb') == 'unknown'
+
+
+def test_plugin_phasor_filter_runs(clean_registry, tmp_path):
+    import numpy as np
+    from flimkit.phasor.filters import phasor_filter, phasor_filter_methods
+    plugins.ensure_loaded()
+    path = write_plugin(tmp_path, 'pf', (
+        'from flimkit.plugins import phasor_filter\n'
+        "@phasor_filter(id='double', label='Double it')\n"
+        'def double(real, imag):\n'
+        '    return real * 2, imag * 2\n'
+    ))
+    assert plugins.load_path(str(path)).ok == True
+    real = np.ones((2, 2))
+    imag = np.ones((2, 2))
+    out_real, out_imag = phasor_filter(real, imag, 'double')
+    assert out_real.max() == 2.0
+    assert out_imag.max() == 2.0
+    assert 'double' in phasor_filter_methods()
+
+
+def test_plugin_phasor_filter_only_gets_the_kwargs_it_asks_for(clean_registry):
+    import numpy as np
+    from flimkit.phasor.filters import phasor_filter
+    seen = {}
+
+    def scaled(real, imag, sigma=1.0):
+        seen['sigma'] = sigma
+        return real * sigma, imag
+    plugins.register_phasor_filter('scaled', 'Scaled', scaled)
+    phasor_filter(np.ones((2, 2)), np.ones((2, 2)), 'scaled', sigma=3.0, size=9)
+    assert seen == {'sigma': 3.0}
+
+
+def test_builtin_phasor_filters_still_win(clean_registry):
+    import numpy as np
+    from flimkit.phasor.filters import phasor_filter
+    plugins.register_phasor_filter('gaussian', 'Hijack', lambda real, imag: (real * 0, imag * 0))
+    out_real, _ = phasor_filter(np.ones((4, 4)), np.ones((4, 4)), 'gaussian', sigma=1.0)
+    assert out_real.max() > 0
+
+
+def test_unknown_phasor_filter_lists_what_is_available(clean_registry):
+    import numpy as np
+    plugins.register_phasor_filter('custom', 'Custom', lambda real, imag: (real, imag))
+    from flimkit.phasor.filters import phasor_filter
+    with pytest.raises(ValueError) as excinfo:
+        phasor_filter(np.ones((2, 2)), np.ones((2, 2)), 'nonesuch')
+    assert 'custom' in str(excinfo.value)
+
+
 @pytest.fixture
 def user_dir(clean_registry, tmp_path, monkeypatch):
     home = tmp_path / '.flimkit' / 'plugins'
