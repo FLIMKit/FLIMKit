@@ -8,13 +8,13 @@ By taking part in this project you agree to abide by the [Code of Conduct](CODE_
 
 ## Getting support
 
-- **Questions about using FLIMKit:** open an [issue](https://github.com/alex1075/FLIMKit/issues) and label it `question`.
-- **Documentation:** the [wiki](https://github.com/alex1075/FLIMKit/wiki) covers installation, workflows, the module reference, and troubleshooting.
+- **Questions about using FLIMKit:** open an [issue](https://github.com/flimkit/FLIMKit/issues) and label it `question`.
+- **Documentation:** the [wiki](https://github.com/flimkit/FLIMKit/wiki) covers installation, workflows, the module reference, and troubleshooting.
 - **Email:** Alex Hunt, alexander.hunt@ed.ac.uk. Please prefer issues where possible so answers are searchable by other users.
 
 ## Reporting bugs
 
-Open an issue at https://github.com/alex1075/FLIMKit/issues and include:
+Open an issue at https://github.com/flimkit/FLIMKit/issues and include:
 
 - What you ran (the CLI command, GUI action, or a minimal Python snippet).
 - The full traceback, not just the last line.
@@ -27,14 +27,14 @@ FLIM files are often large and sometimes unpublished, so do not attach data you 
 
 ## Sharing sample files
 
-Sample files are the single most useful contribution to a format reader. Several FLIMKit readers were written from vendor specifications and have never been run against a real acquisition, which is the main source of uncertainty in the project. See the [supported formats table](https://github.com/alex1075/FLIMKit/wiki/Supported-Input-Formats) for which readers are validated and which are not.
+Sample files are the single most useful contribution to a format reader. Several FLIMKit readers were written from vendor specifications and have never been run against a real acquisition, which is the main source of uncertainty in the project. See the [supported formats table](https://github.com/flimkit/FLIMKit/wiki/Supported-Input-Formats) for which readers are validated and which are not.
 
 If you can share a file, a calibration sample with a documented lifetime (a dye with a known tau) is ideal. Best of all is a matched pair: the same sample recorded on two instruments, which allows a bin-for-bin cross-check. Only share data you have the right to share.
 
 ## Development setup
 
 ```bash
-git clone https://github.com/alex1075/FLIMKit.git
+git clone https://github.com/flimkit/FLIMKit.git
 cd FLIMKit
 python install.py --dev
 ```
