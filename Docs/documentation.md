@@ -119,7 +119,7 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 ### Installation
 
 ```bash
-git clone https://github.com/alex1075/FLIMKit.git
+git clone https://github.com/flimkit/FLIMKit.git
 cd FLIMKit
 python install.py
 ```
