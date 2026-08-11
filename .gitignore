@@ -34,3 +34,4 @@ PTU.sptw/
 *-out/
 *s.md
 out_*
+*.egg-info/

@@ -466,6 +466,79 @@ def test_plugin_config_cannot_reach_flimkit_settings(clean_registry, blank_confi
     assert blank_config.get('expert.optimizer') == 'de'
 
 
+class FakeEntryPoint:
+
+    def __init__(self, name, body):
+        self.name = name
+        self.body = body
+
+    def load(self):
+        import types
+        module = types.ModuleType('fake_ep_module')
+        exec(self.body, module.__dict__)
+        return module
+
+
+TOOL_FROM_EP = (
+    'from flimkit.plugins import tool\n'
+    "@tool(id='from_ep', label='From Entry Point')\n"
+    'def a(app):\n'
+    '    pass\n'
+)
+
+
+def test_entry_point_plugins_load(clean_registry, blank_config, monkeypatch):
+    monkeypatch.setattr(loader, 'entry_points',
+                        lambda: [FakeEntryPoint('installed_pkg', TOOL_FROM_EP)])
+    plugins.ensure_loaded()
+    found = plugins.get_tool('from_ep')
+    assert found is not None
+    assert found.source == 'flimkit.plugins:installed_pkg'
+
+
+def test_entry_point_plugins_load_after_the_builtins(clean_registry, blank_config, monkeypatch):
+    monkeypatch.setattr(loader, 'entry_points',
+                        lambda: [FakeEntryPoint('installed_pkg', TOOL_FROM_EP)])
+    plugins.ensure_loaded()
+    order = [r.source for r in plugins.load_report()]
+    assert order == ['flimkit.plugins.builtin.core_tools', 'flimkit.plugins:installed_pkg']
+
+
+def test_a_disabled_entry_point_plugin_is_skipped(clean_registry, blank_config, monkeypatch):
+    monkeypatch.setattr(loader, 'entry_points',
+                        lambda: [FakeEntryPoint('installed_pkg', TOOL_FROM_EP)])
+    plugins.set_plugin_disabled('installed_pkg', True)
+    plugins.ensure_loaded()
+    assert plugins.get_tool('from_ep') is None
+    assert 'installed_pkg' in plugins.skipped()
+
+
+def test_a_broken_entry_point_plugin_is_isolated(clean_registry, blank_config, monkeypatch):
+    class Exploding:
+        name = 'broken_pkg'
+
+        def load(self):
+            raise ImportError('no such dependency')
+    monkeypatch.setattr(loader, 'entry_points', lambda: [Exploding()])
+    plugins.ensure_loaded()
+    assert {t.id for t in plugins.tools()} == BUILTIN_IDS
+    assert len(plugins.failures()) == 1
+    assert 'no such dependency' in plugins.failures()[0].error
+
+
+def test_entry_points_are_not_scanned_when_plugins_are_off(clean_registry, blank_config,
+                                                           monkeypatch):
+    called = []
+    monkeypatch.setattr(loader, 'entry_points', lambda: called.append(1) or [])
+    plugins.set_plugins_enabled(False)
+    plugins.ensure_loaded()
+    assert called == []
+
+
+def test_entry_point_group_name_is_stable(clean_registry):
+    assert plugins.ENTRY_POINT_GROUP == 'flimkit.plugins'
+
+
 def test_plugins_are_enabled_by_default(clean_registry, blank_config):
     assert plugins.plugins_enabled() == True
 

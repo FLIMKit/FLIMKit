@@ -1114,6 +1114,8 @@ Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch 
 
 The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
 
+Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
+
 Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
 
 `FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
@@ -1184,6 +1186,21 @@ threshold = cfg.get('threshold', 10)
 ```
 
 That writes to a `plugin:my_plugin` section of `~/.flimkit/config.json`, which FLIMKit itself never reads. A plugin cannot reach the `expert` or `preferences` sections through this, so it cannot change how the fitters behave behind your back.
+
+### Shipping a plugin as a package
+
+A plugin that has dependencies of its own, or that you want people to install with `pip`, declares an entry point in its own `pyproject.toml`:
+
+```toml
+[project.entry-points.'flimkit.plugins']
+my_plugin = 'my_plugin.register'
+```
+
+The module named on the right is imported at startup, so put the decorated functions there. Installed packages load after the built-ins and before anything in `~/.flimkit/plugins`, and they are not gated by the user-folder switch, since `pip install` is already a deliberate act. They do respect the master switch and the per-plugin disable list, under the entry point name.
+
+This is how a plugin distributed to other people should be shipped. The folder is for a script you wrote yourself.
+
+The frozen macOS and Windows builds cannot see entry points at all, since there is no site-packages to look in. A plugin that has to work in the compiled app goes in the folder.
 
 ### Preferences
 

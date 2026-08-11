@@ -236,6 +236,30 @@ class PluginConfig:
         return f'<PluginConfig {self.section!r}>'
 
 
+ENTRY_POINT_GROUP = 'flimkit.plugins'
+
+
+def entry_points():
+    try:
+        from importlib.metadata import entry_points as _eps
+    except ImportError:
+        return []
+    try:
+        return sorted(_eps(group=ENTRY_POINT_GROUP), key=lambda e: e.name)
+    except Exception as exc:
+        print(f'[Plugins] entry point lookup failed: {exc}')
+        return []
+
+
+def _load_entry_point(ep):
+    if ep.name in disabled_plugins():
+        print(f'[Plugins] {ep.name} disabled, skipping')
+        _skipped.append(ep.name)
+        return None
+    source = f'{ENTRY_POINT_GROUP}:{ep.name}'
+    return _load(source, ep.load)
+
+
 def _load_unless_disabled(target, is_module=False):
     name = short_name(target)
     if name in disabled_plugins():
@@ -259,6 +283,8 @@ def ensure_loaded():
             return list(_report)
         for dotted in BUILTIN:
             _load_unless_disabled(dotted, is_module=True)
+        for ep in entry_points():
+            _load_entry_point(ep)
         home = user_dir()
         if user_plugins_allowed():
             for path in candidates(home):

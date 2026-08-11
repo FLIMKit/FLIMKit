@@ -27,10 +27,12 @@ from flimkit.plugins.registry import (
 from flimkit.plugins.loader import (
     PluginConfig,
     allow_user_plugins,
+    ENTRY_POINT_GROUP,
     candidates,
     config_dirs,
     disabled_plugins,
     ensure_loaded,
+    entry_points,
     extra_dirs,
     failures,
     load_module,
@@ -51,6 +53,7 @@ from flimkit.plugins.loader import (
 
 __all__ = [
     'API_VERSION',
+    'ENTRY_POINT_GROUP',
     'Format',
     'PhasorFilter',
     'PluginConfig',
@@ -63,6 +66,7 @@ __all__ = [
     'config_dirs',
     'disabled_plugins',
     'ensure_loaded',
+    'entry_points',
     'extra_dirs',
     'failures',
     'file_format',
