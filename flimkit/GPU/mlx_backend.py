@@ -328,6 +328,7 @@ class MLXBackend(_BackendMixin):
         lr=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         mx = self._mx
         ny, nx, n_bins = stack.shape
@@ -355,7 +356,7 @@ class MLXBackend(_BackendMixin):
         taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
             raw_valid, bg_valid, irf_array, tcspc_res,
             taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
-            tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+            tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
         )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],
