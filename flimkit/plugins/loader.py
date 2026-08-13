@@ -123,6 +123,47 @@ def candidates(directory):
     return found
 
 
+def archives(directory):
+    if not os.path.isdir(directory):
+        return []
+    found = []
+    for entry in sorted(os.listdir(directory)):
+        if entry.startswith(('_', '.')):
+            continue
+        if entry.endswith(('.whl', '.zip')):
+            found.append(os.path.join(directory, entry))
+    return found
+
+
+def portable_wheel(path):
+    name = os.path.basename(path)
+    if not name.endswith('.whl'):
+        return True
+    parts = name[:-4].split('-')
+    if len(parts) < 5:
+        return False
+    return parts[-1] == 'any' and parts[-2] == 'none'
+
+
+def add_archive(path):
+    name = short_name(path)
+    if name in disabled_plugins():
+        print(f'[Plugins] {name} disabled, skipping')
+        _skipped.append(name)
+        return False
+    if not portable_wheel(path):
+        print(f'[Plugins] {name} is built for one platform and cannot be imported '
+              f'from a zip, install it with pip instead')
+        _record(LoadResult(path, False, 0,
+                           'wheel is not py3-none-any, so it cannot be imported from a zip'))
+        return False
+    if path not in sys.path:
+        sys.path.insert(0, path)
+        importlib.invalidate_caches()
+        print(f'[Plugins] added {path} to the import path')
+    return True
+
+
 def user_dir():
     return os.path.join(os.path.expanduser('~'), '.flimkit', 'plugins')
 
@@ -182,6 +223,8 @@ def allow_user_plugins(allowed=True):
 
 def short_name(source):
     name = os.path.basename(str(source).rstrip(os.sep))
+    if name.endswith(('.whl', '.zip')):
+        return name.rsplit('.', 1)[0].split('-')[0]
     if name.endswith('.py'):
         name = name[:-3]
     if '.' in name and os.sep not in name:
@@ -283,14 +326,21 @@ def ensure_loaded():
             return list(_report)
         for dotted in BUILTIN:
             _load_unless_disabled(dotted, is_module=True)
+        home = user_dir()
+        allowed = user_plugins_allowed()
+        if allowed:
+            for path in archives(home):
+                add_archive(path)
+        for directory in extra_dirs():
+            for path in archives(directory):
+                add_archive(path)
         for ep in entry_points():
             _load_entry_point(ep)
-        home = user_dir()
-        if user_plugins_allowed():
+        if allowed:
             for path in candidates(home):
                 _load_unless_disabled(path)
         else:
-            waiting = candidates(home)
+            waiting = candidates(home) + archives(home)
             if waiting:
                 print(f'[Plugins] {len(waiting)} plugin(s) in {home} not loaded, '
                       f'set plugins.allow_user_plugins to enable them')
