@@ -634,13 +634,17 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                              irf_fft=irf_fft, t0=t0_px)
     A = conv_basis.T
     A_fit = A[fit_idx]
-    if _windowed and use_gpu is not False and not _tail:
-        print(f'  [per-pixel] fit window/exclusions active ({len(fit_idx)}/{n_bins} bins); '
-              f'using CPU path (GPU backends have no window support yet)')
     if _tail and use_gpu is not False:
         print(f'  [per-pixel] tail fit uses the CPU path; the projection has to be '
               f'restricted to bins past t0')
-    if use_gpu is not False and not _windowed and not _tail:
+    if _windowed and use_gpu is not False and not _tail and free_tau:
+        print(f'  [per-pixel] fit window/exclusions active ({len(fit_idx)}/{n_bins} bins); '
+              f'free-tau has no window support on the GPU yet, using the CPU path')
+    _gpu_windowed_ok = not (_windowed and (free_tau or (n_exp == 1 and tvb_on)))
+    if _windowed and use_gpu is not False and not _tail and n_exp == 1 and tvb_on:
+        print(f'  [per-pixel] fit window with a time-varying background is not supported '
+              f'on the GPU for one-exponential fits, using the CPU path')
+    if use_gpu is not False and not _tail and _gpu_windowed_ok:
         _backend = gpu_backend if gpu_backend is not None else (
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
         )
@@ -665,6 +669,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         progress_callback,
                         tvb_profile=tvb_profile if tvb_on else None,
                         fit_tvb=tvb_on,
+                        fit_idx=fit_idx if _windowed else None,
                     )
                 else:
                     return _backend.batch_fixed_tau(
@@ -673,6 +678,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         progress_callback,
                         tvb_profile=tvb_profile if tvb_on else None,
                         fit_tvb=tvb_on,
+                        fit_idx=fit_idx if _windowed else None,
                     )
             else:
                 _tau_min_s = (tau_min_ns if tau_min_ns is not None

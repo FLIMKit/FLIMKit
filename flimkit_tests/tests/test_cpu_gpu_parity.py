@@ -500,3 +500,83 @@ class TestCPUGPUParityFreeTau:
         for label, maps in [("CPU", cpu), ("GPU", gpu)]:
             missing = required - maps.keys()
             assert not missing, f"free-tau 3-exp {label} missing keys: {missing}"
+
+
+FIT_START = 8
+FIT_END = 112
+
+
+def _windowed_idx(n_bins=N_BINS):
+    idx = np.arange(FIT_START, FIT_END)
+    return idx[(idx < 40) | (idx > 52)]
+
+
+def _fit_both_windowed(stack, n_exp, global_popt, gpu_backend, fit_idx):
+    irf_prompt = _make_irf()
+    kwargs = dict(
+        stack       = stack,
+        tcspc_res   = TCSPC_RES,
+        n_bins      = N_BINS,
+        irf_prompt  = irf_prompt,
+        has_tail    = False,
+        fit_bg      = False,
+        fit_sigma   = False,
+        global_popt = global_popt,
+        n_exp       = n_exp,
+        min_photons = MIN_PHOTONS,
+        fit_idx     = fit_idx,
+    )
+    cpu = fit_per_pixel(**kwargs, use_gpu=False)
+    gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
+    return cpu, gpu
+
+
+class TestCPUGPUParityWindowed1Exp:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_1exp(ny=6, nx=8, tau_ns=2.0)
+        self.cpu, self.gpu = _fit_both_windowed(
+            stack, 1, _global_popt_1exp(tau_ns=2.0), gpu_backend, self.fit_idx)
+
+    def test_the_window_is_actually_narrower(self):
+        assert len(self.fit_idx) < N_BINS
+
+    def test_intensity_is_the_full_decay_not_the_window(self):
+        np.testing.assert_array_equal(self.cpu['intensity'], self.gpu['intensity'])
+
+    def test_tau_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_amp'], self.gpu['tau_mean_amp']) < TAU_TOL
+
+    def test_gpu_window_changes_the_answer(self):
+        stack = _synthetic_stack_1exp(ny=6, nx=8, tau_ns=2.0)
+        full = fit_per_pixel(
+            stack=stack, tcspc_res=TCSPC_RES, n_bins=N_BINS, irf_prompt=_make_irf(),
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=_global_popt_1exp(tau_ns=2.0), n_exp=1,
+            min_photons=MIN_PHOTONS, use_gpu=False)
+        assert not np.allclose(np.nanmedian(full['chi2_r']),
+                               np.nanmedian(self.gpu['chi2_r']))
+
+
+class TestCPUGPUParityWindowed2Exp:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_2exp(ny=6, nx=8)
+        self.cpu, self.gpu = _fit_both_windowed(
+            stack, 2, _global_popt_2exp(), gpu_backend, self.fit_idx)
+
+    def test_tau_mean_amp_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_amp'], self.gpu['tau_mean_amp']) < TAU_TOL
+
+    def test_tau_mean_int_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_int'], self.gpu['tau_mean_int']) < TAU_TOL
+
+    def test_amplitudes_agree(self):
+        assert _rel_err(self.cpu['alpha_1'], self.gpu['alpha_1']) < AMP_TOL
+
+    def test_chi2_agrees(self):
+        assert _rel_err(self.cpu['chi2_r'], self.gpu['chi2_r']) < 0.15
