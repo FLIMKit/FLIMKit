@@ -1323,7 +1323,7 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 ---
 

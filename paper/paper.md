@@ -1,5 +1,5 @@
 ---
-title: 'FLIMKit: fluorescence lifetime imaging analysis from vendor files to fitted mosaics'
+title: 'FLIMKit: a Python toolkit for reconvolution fitting, lifetime-distribution fitting, and phasor analysis of FLIM data'
 tags:
   - Python
   - FLIM
@@ -25,7 +25,7 @@ authors:
     orcid: 0000-0003-4605-1682
     affiliation: 1
 affiliations:
-  - name: Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK
+  - name: Centre for Inflammation Research, Institute for Regeneration and Repair, The University of Edinburgh, Edinburgh, United Kingdom
     index: 1
 date: 11 August 2026
 bibliography: paper.bib
@@ -33,48 +33,58 @@ bibliography: paper.bib
 
 # Summary
 
-<!-- TO WRITE. What FLIMKit is, in a paragraph or two, for a reader who knows
-microscopy but not this software. JOSS asks for a description of the software
-at a high level, understandable to a non-specialist. -->
+Fluorescence lifetime imaging microscopy (FLIM) measures the time a fluorescent molecule remains in its excited state before emitting a photon. This lifetime is determined by the local chemical environment of the molecule (pH, oxygen tension, ion binding, or proximity to an acceptor through Förster resonance energy transfer, FRET) rather than by its concentration or by the intensity of the excitation light, which makes it well suited to quantitative, excitation-independent measurement [@datta2020]. The molecule may be an introduced label or an endogenous species such as the metabolic cofactors NAD(P)H and FAD, so FLIM is applicable label-free to tissue autofluorescence as well as to stained preparations. This sensitivity to the local environment underpins a growing body of translational work: autofluorescence lifetime alone classifies human T cells by activation state and subtype with 97--99% accuracy, without any exogenous label or destructive assay [@walsh2021]. Label-free lifetime imaging has also been used to discriminate lung cancer from adjacent non-cancerous tissue during fibre-based imaging [@fernandes2024], to generate virtual haematoxylin-and-eosin histology from unstained tissue [@wang2024npj], and to predict EGFR mutation status in lung adenocarcinoma without staining or sequencing [@zang2026]. Realising that potential at scale depends on analysis software that is reproducible, scriptable, and not tied to a single instrument vendor.
+
+FLIMKit is a Python toolkit for the analysis of FLIM data acquired on time-correlated single-photon counting (TCSPC) instruments [@shcheslavskiy2025]. PicoQuant `.ptu`, Becker & Hickl `.sdt`, Photonscore `.photons`, and, experimentally, ISS time-tag files are read through one shared file abstraction, and three analysis routes are supported: reconvolution fitting of discrete multi-exponential models, fitting of continuous lifetime distributions, and calibrated phasor analysis [@digman2007; @ranjit2018]. Per-pixel fitting is GPU-accelerated on Apple Silicon, NVIDIA CUDA, and AMD ROCm hardware. FLIMKit may be operated as a desktop application, a guided terminal interface, standalone command-line scripts, or a Python API, and exports results as OME-TIFF, GeoJSON for QuPath, and CSV.
 
 # Statement of need
 
-<!-- TO WRITE. Who has this problem, what they do today, and why that is not
-enough. JOSS weighs this section heavily. Candidate points from the work so
-far, to keep or drop:
+Laboratories operating Leica FALCON/STELLARIS, Becker & Hickl SPC, Photonscore LINCam, or ISS FastFLIM/Vista instruments typically analyse their FLIM data using the software bundled by the instrument vendor, such as LAS X, SPCImage, or VistaVision. Given that these packages are typically closed-source, graphical-only, and built around the file format of their own instrument, batching and scripting are difficult, and analyses beyond those the vendor anticipated -- whether more detailed, or drawing on newer methods -- are correspondingly hard to implement. A facility operating more than one TCSPC platform is consequently left without a single reproducible pipeline spanning its instruments. FLIMKit addresses this through a single `FLIMFile` abstraction, to which every supported format is decoded, such that the same fitting, phasor, stitching, and export code operates regardless of the instrument of origin.
 
-- vendor software is per-instrument and per-format, so a lab with more than one
-  instrument cannot analyse its data one way
-- tiled acquisitions are fitted tile by tile, so a mosaic is not a single
-  measurement
-- reading a format and fitting it are usually separate tools with a manual
-  export between them
-- the readers most people can reach are either closed or unmaintained
--->
+Other open-source software addresses a separate part of this problem. FLIMfit [@warren2013] provides well-established reconvolution and global fitting, though it does not perform phasor analysis, is constructed around PicoQuant and OME-TIFF data, and has had no release since 2017. On the phasor side, PhasorPy [@phasorpy], the `napari-flim-phasor-plotter` and `napari-phasors` plugins [@napariflim; @napariphasors], FLIMPA [@flimpa2025], and GSLab [@gslab2025] all implement the phasor method described by Digman et al. [@digman2007] and formalised as a fit-free protocol by Ranjit et al. [@ranjit2018]. FLIMKit does not reimplement that method: PhasorPy is adopted as its phasor backbone, and calibration, interactive cursors, spatial filtering, and ROI-based batch export are layered upon it. FLIMPA invites close comparison, being an actively maintained, standalone desktop application with its own region-of-interest (ROI) selection tool. None of these packages, however, performs reconvolution fitting with full instrument-response-function (IRF) deconvolution, and GSLab additionally requires a MATLAB installation or runtime rather than operating standalone. To current knowledge, no third-party desktop application combines reconvolution fitting, phasor analysis, and ROI-based batch export within a single, actively maintained package. The field instead divides into fitting tools, which are largely unmaintained (FLIMfit; TRI2/FLIMLib, distributed as an ImageJ library rather than a standalone application), and phasor tools, which do not fit decays. FLIMKit is intended for laboratories and imaging facilities requiring vendor-independent FLIM analysis spanning these routes within one tool, and is aimed at both ends of the user range: those who wish to open an acquisition, fit it, and export the result through a graphical interface without writing code, and those constructing automated pipelines that require a command-line or programmatic interface. PicoQuant `.ptu`, Becker & Hickl `.sdt`, and Photonscore `.photons` support have been validated against real instrument files; ISS support is derived from the vendor's format specifications and has not yet been verified against real ISS acquisitions, and is therefore offered as experimental.
 
 # State of the field
 
-<!-- TO WRITE. Name the alternatives honestly and say where FLIMKit sits.
-At least: FLIMfit, FLIMJ/ImageJ, PhasorPy, napari-flim-phasor-plotter, and the
-vendor packages (SPCImage, LAS X, VistaVision). Say what each does well. -->
+| Software | Access | Formats | Fitting + phasor | Scriptable |
+|---|---|---|---|---|
+| LAS X / SPCImage / VistaVision | Proprietary | Vendor-locked | Yes / partial | No |
+| FLIMfit [@warren2013] | Open source | PicoQuant, OME-TIFF | Yes / no | Partial |
+| PhasorPy [@phasorpy] | Open source | Many (readers) | No / yes | Yes |
+| napari-flim-phasor-plotter / napari-phasors [@napariflim; @napariphasors] | Open source | Several | No / yes | Via napari |
+| FLIMPA [@flimpa2025] | Open source | PTU, .sdt, .tif | No / yes (+ROI) | No |
+| GSLab [@gslab2025] | Open source | Several | No / yes | Via MATLAB |
+| FLIMKit | Open source | PTU, .sdt, Photonscore, ISS (exp.) | Yes / yes | Yes |
 
-# Functionality
+Table: Comparison of FLIM analysis software along axes relevant to FLIMKit's design. FLIMKit's phasor analysis is implemented on PhasorPy rather than independently of it.
 
-<!-- TO WRITE, or fold into Summary if the paper runs long. Rough shape:
-formats read, fitting models, phasor analysis, stitching, GPU backends,
-the add-on system, the interfaces (GUI, CLI, Python API, Docker). -->
+Table 1 summarises how FLIMKit relates to the packages described above. To our knowledge, FLIMKit is the only package that is open-source, supports multiple instrument vendors behind one abstraction, performs both reconvolution fitting and phasor analysis, and is scriptable with GPU acceleration built in. FLIMfit and the phasor-only tools each address approximately half of this scope. The phasor-focused packages remain more mature in that domain, and FLIMKit builds directly upon PhasorPy rather than competing with it. The contribution of FLIMKit is therefore integrative: a single file abstraction, both analysis families within one interface, and three validated instrument vendors alongside an experimental fourth, in place of assembling several single-purpose tools manually. The desktop application has been designed so that a complete analysis -- loading an acquisition, fitting it, defining regions of interest, and exporting results -- may be carried out entirely through the graphical interface, with little or no programming knowledge required.
 
-# Validation
+# Software design
 
-<!-- TO WRITE. This is the section a reviewer will press on. What exists:
-synthetic ground-truth generation with known lifetimes, cross-checks of the
-readers against maintained third-party libraries, CPU/GPU parity tests.
-What does not exist yet should be said plainly rather than left out. -->
+The principal design decision in FLIMKit is the `FLIMFile` format abstraction. To avoid duplicating work that is already well established, instrument formats are not reimplemented where mature decoders exist: each reader wraps an existing library, `ptufile` and `sdtfile` (both by Gohlke) for PicoQuant and Becker & Hickl data and `photonsfile` [@photonsfile] for Photonscore, and reduces its output to a common `(Y, X, H)` decay-cube-and-metadata contract, so that the fitting, phasor, stitching, and ROI code need be written only once and remains format-agnostic. Photonscore `.photons` files reach that cube by a different route: rather than arriving pre-binned as scan-line images, each photon carries its own $(x, y)$ position and TCSPC micro-time (the arrival time of the photon relative to the excitation pulse), so the image is formed by binning positions onto a pixel grid and the decay by histogramming the micro-time. That reader, `photonsfile`, was written for FLIMKit and released as a standalone package, validated bit-exact against the vendor SDK. The abstraction does constrain what a new reader may expose, since no instrument-specific field is passed further into the pipeline, but it yields one tested code path rather than one per format.
+
+Per-pixel fitting is the principal computational cost in FLIMKit: a $1024 \times 1024$ acquisition requires of the order of a million independent non-linear fits, one for each pixel. This workload suits a GPU well, but there is no single GPU programming interface common to the Apple Silicon, NVIDIA, and AMD hardware found across different laboratories. A GPU backend abstraction (MLX, PyTorch MPS/CUDA/ROCm, or a CPU fallback, detected automatically at install time) therefore allows the same `fit_per_pixel()` call to execute on whichever hardware is available, without separate fitting code for each backend. The single global ('summed') fit is deliberately restricted to the CPU, since it does not constitute a bottleneck and does not warrant the additional complexity.
+
+Two lifetime models are provided for two different situations: a discrete multi-exponential model, which assumes a fixed and small number of decaying species, and a continuous Gaussian/Lorentzian $\alpha(\tau)$ distribution model, following Lakowicz [@lakowicz2006] (§4.11.2), for genuinely heterogeneous lifetime populations that a fixed-species model would misrepresent. The latter is of particular relevance to autofluorescence, where the measured decay arises from a distribution of endogenous species rather than a small number of discrete ones. A separate time-varying background correction, following the method described by Görlitz et al. [@gorlitz2017], subtracts a measured and scaled time-varying background rather than a flat offset alone.
+
+Multi-tile acquisitions are stitched into a single mosaic prior to fitting. Tile positions are read from the stage metadata of the acquisition and refined by cross-correlation registration between neighbouring tiles, following the approach of Preibisch et al. [@preibisch2009], so that per-pixel fitting and phasor analysis operate on one continuous field of view rather than tile by tile. For batch ROI workflows, cell masks may be generated directly from the summed intensity image using Cellpose-SAM [@cellposesam2025], allowing per-cell lifetime and phasor statistics to be exported without a separate segmentation step in another package (\autoref{fig:gui}).
+
+![The FLIMKit desktop interface in Single FOV Fit mode with the ROI Analysis tab open. Five freehand regions of interest have been drawn over individual cells; the Regions table reports the mean, median, and standard deviation of the fitted lifetime for each ROI alongside photon counts, and the Fit Summary panel lists the recovered tri-exponential parameters ($\tau_1$--$\tau_3$ with their amplitude fractions), the amplitude- and intensity-weighted mean lifetimes, the fitted background and IRF shift, and reduced $\chi^2$ (a goodness-of-fit statistic normalised by the degrees of freedom, with values near unity indicating an adequate fit). The FOV Preview panel shows the intensity image and the corresponding per-pixel lifetime map with the same ROI outlines overlaid, above the summed decay with its reconvolution fit and IRF, and the weighted residuals. Data are a PicoQuant `.ptu` acquisition ($1024 \times 1024$ pixels, $1.7 \times 10^{6}$ photons).\label{fig:gui}](paper_fig_gui.png)
+
+Serving both audiences from one codebase is the reason for the four entry points. The desktop application, terminal interface, command-line scripts, and Python API all call the same underlying fitting and phasor functions, so an analysis performed interactively can be reproduced in a script without alteration, and the graphical and scripted implementations cannot diverge over time. Correctness is assessed using a test suite of 42 test modules (`flimkit_tests/`) covering CPU and GPU numerical parity, ground-truth lifetime recovery, and format-specific decoding, together with an installation validation script (`validate_installation.py`). A GitHub Actions workflow builds self-contained desktop applications for macOS, Linux, and Windows on each tagged release, and publishes them as release assets alongside the source; these compiled builds require neither an existing Python installation nor any use of the command line, so that FLIMKit may be installed by users who do not maintain a Python environment. A Docker image is also provided, which runs the full desktop interface headlessly on a virtual X server and serves it to a browser over noVNC, with a documented TrueNAS SCALE deployment path, chosen so that FLIMKit may be deployed on shared imaging-facility hardware rather than individual workstations alone.
+
+# Research impact statement
+
+FLIMKit has been developed and applied to the analysis of PicoQuant and Leica FALCON/STELLARIS acquisitions within an ongoing research program at the Centre for Inflammation Research, University of Edinburgh, where it is the routine analysis route for FLIM data and for work currently in preparation.
+
+Format support has been developed in direct collaboration with the instrument vendors. Becker & Hickl format support was constructed and verified against sample data and file-format documentation provided by the vendor; Photonscore format support was validated against a sample `.photons` file and SDK documentation provided by Photonscore, and the resulting reader released as a standalone package [@photonsfile]; ISS format specifications were likewise provided by ISS following a discussion on the CONFOCALMICROSCOPY listserv. Beyond the authors' own group, researchers at the CRUK Scotland Institute and at the National University of Singapore have trialled FLIMKit on their own FLIM data. This represents early-stage, exploratory use rather than validated deployment, and broader external adoption remains a priority for the project.
+
+# AI usage disclosure
+
+Anthropic's Claude was used as an assistant for parts of the graphical user interface implementation, the add-on system, compiled-application packaging, Docker and TrueNAS deployment scripting, and code debugging, under the direction of the lead author (A.H.). All scientific design, comprising the fitting models, IRF handling, phasor methods, validation approach, and overall software architecture, is the authors' own work. AI-assisted code was reviewed and tested by the authors, including through the automated test suite, the installation validation script, and CPU/GPU numerical parity tests, before being merged. No AI tool was used to generate or to verify the scientific or statistical methods described in this paper.
 
 # Acknowledgements
 
-<!-- TO WRITE. Format documentation and sample files from Becker & Hickl
-(Jens Balke, Enzo Marscheck), ISS (Shih-Chu Liao, via Anand Yethiraj) and
-Photonscore. Contributors. Funding, if any applies. -->
+We thank Christoph Gohlke for PhasorPy, `ptufile`, and `sdtfile`, upon which FLIMKit depends; Dr. Jens Balke and Enzo Marscheck (Becker & Hickl) for `.sdt` format documentation and sample data; Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format; and Jeff Liao (ISS) for ISS time-tag format specifications.
 
 # References
