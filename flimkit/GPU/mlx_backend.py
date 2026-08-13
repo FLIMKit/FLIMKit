@@ -1,5 +1,5 @@
 import numpy as np
-from flimkit.GPU._base import _BackendMixin
+from flimkit.GPU._base import _BackendMixin, fit_window
 from flimkit.FLIM.fit_tools import calibrated_chi2, estimate_bg, coates_pileup_correction
 
 class MLXBackend(_BackendMixin):
@@ -23,12 +23,15 @@ class MLXBackend(_BackendMixin):
         progress_callback=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         mx = self._mx
         ny, nx, n_bins = stack.shape
         n_exp = A.shape[1]
         taus_ns = taus_fixed * 1e9
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        win = fit_window(fit_idx, n_bins)
+        A = A if win is None else A[win]
         intensity_flat = flat.sum(axis=1)
         valid_mask = intensity_flat >= min_photons
         valid_idx = np.where(valid_mask)[0]
@@ -43,8 +46,10 @@ class MLXBackend(_BackendMixin):
         tvb_np = None
         if fit_tvb and tvb_profile is not None:
             B_col = np.asarray(tvb_profile, dtype=np.float32)
-            A_aug = np.column_stack([A, B_col, np.ones(n_bins, dtype=np.float32)]).astype(np.float32)
-            data_in = flat.copy()
+            B_col = B_col if win is None else B_col[win]
+            A_aug = np.column_stack(
+                [A, B_col, np.ones(A.shape[0], dtype=np.float32)]).astype(np.float32)
+            data_in = flat.copy() if win is None else flat[:, win].copy()
             if correct_pileup and n_sync_px > 0:
                 for idx in valid_idx:
                     data_in[idx] = coates_pileup_correction(data_in[idx], n_sync_px)
@@ -58,6 +63,7 @@ class MLXBackend(_BackendMixin):
         else:
             bg_flat = self._estimate_bg_batch(flat, valid_mask)
             dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)
+            dc_flat = dc_flat if win is None else dc_flat[:, win]
             if correct_pileup and n_sync_px > 0:
                 for idx in valid_idx:
                     dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
@@ -73,13 +79,12 @@ class MLXBackend(_BackendMixin):
             valid_idx = valid_idx,
             amps = amps_np[valid_idx],
             bg = bg_np[valid_idx],
-            decay_valid= flat[valid_idx],
+            decay_valid= flat[valid_idx] if win is None else flat[valid_idx][:, win],
             A = A,
             taus_ns = taus_ns,
             ny=ny, nx=nx,
             tvb = tvb_np[valid_idx] if tvb_np is not None else None,
-            tvb_profile = np.asarray(tvb_profile, dtype=np.float32)
-                         if (fit_tvb and tvb_profile is not None) else None,
+            tvb_profile = (B_col if (fit_tvb and tvb_profile is not None) else None),
         )
         return maps
 
@@ -95,11 +100,22 @@ class MLXBackend(_BackendMixin):
         progress_callback=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         mx = self._mx
         ny, nx, n_bins = stack.shape
         N_GRID = len(tau_grid)
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        win = fit_window(fit_idx, n_bins)
+        if win is not None:
+            if fit_tvb and tvb_profile is not None:
+                raise ValueError('a fit window with time-varying background is not '
+                                 'supported on the GPU for one-exponential fits')
+            basis_grid = basis_grid[:, win]
+            bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)
+            n_fit = len(win)
+        else:
+            n_fit = n_bins
         intensity_flat = flat.sum(axis=1)
         valid_mask = intensity_flat >= min_photons
         valid_idx = np.where(valid_mask)[0]
@@ -147,7 +163,7 @@ class MLXBackend(_BackendMixin):
         if correct_pileup and n_sync_px > 0:
             for idx in valid_idx:
                 dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
-        dc_valid = dc_flat[valid_idx]
+        dc_valid = dc_flat[valid_idx] if win is None else dc_flat[valid_idx][:, win]
         basis_mx = mx.array(basis_grid.astype(np.float32))
         bb_mx = mx.array(bb_grid.astype(np.float32))
         dc_mx = mx.array(dc_valid)
@@ -168,10 +184,10 @@ class MLXBackend(_BackendMixin):
             tau_v = tau_v,
             amp_v = amp_v,
             bg_v = bg_flat[valid_idx],
-            decay_valid = flat[valid_idx],
+            decay_valid = flat[valid_idx] if win is None else flat[valid_idx][:, win],
             basis_best = basis_best,
             ny=ny, nx=nx,
-            n_bins=n_bins,
+            n_bins=n_fit,
         )
         return maps
 

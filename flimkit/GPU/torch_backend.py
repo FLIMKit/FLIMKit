@@ -1,7 +1,7 @@
 import threading
 
 import numpy as np
-from flimkit.GPU._base import _BackendMixin
+from flimkit.GPU._base import _BackendMixin, fit_window
 from flimkit.FLIM.fit_tools import calibrated_chi2, estimate_bg, coates_pileup_correction
 
 _MATMUL_PRECISION_LOCK = threading.Lock()
@@ -38,21 +38,26 @@ class TorchBackend(_BackendMixin):
         progress_callback=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         torch = self._torch
         ny, nx, n_bins = stack.shape
         n_exp = A.shape[1]
         taus_ns = taus_fixed * 1e9
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        win = fit_window(fit_idx, n_bins)
+        A = A if win is None else A[win]
         intensity_flat = flat.sum(axis=1)
         valid_mask = intensity_flat >= min_photons
         # Compute pinv on CPU - linalg_svd (used internally by pinv) is not supported on MPS and would silently fall back, triggering a UserWarning. :(
         tvb_np = None
         if fit_tvb and tvb_profile is not None:
             B_col = np.asarray(tvb_profile, dtype=np.float32)
-            A_aug = np.column_stack([A, B_col, np.ones(n_bins, dtype=np.float32)]).astype(np.float32)
+            B_col = B_col if win is None else B_col[win]
+            A_aug = np.column_stack(
+                [A, B_col, np.ones(A.shape[0], dtype=np.float32)]).astype(np.float32)
             A_pinv = torch.linalg.pinv(torch.as_tensor(A_aug, device='cpu')).to(self.device)
-            data_in = flat.copy()
+            data_in = flat.copy() if win is None else flat[:, win].copy()
             if correct_pileup and n_sync_px > 0:
                 for idx in np.where(valid_mask)[0]:
                     data_in[idx] = coates_pileup_correction(data_in[idx], n_sync_px)
@@ -66,6 +71,7 @@ class TorchBackend(_BackendMixin):
             A_pinv = torch.linalg.pinv(A_cpu).to(self.device)
             bg_flat = self._estimate_bg_batch(flat, valid_mask)
             data_corr = np.maximum(flat - bg_flat[:, None], 0.0)
+            data_corr = data_corr if win is None else data_corr[:, win]
             if correct_pileup and n_sync_px > 0:
                 for idx in np.where(valid_mask)[0]:
                     data_corr[idx] = coates_pileup_correction(data_corr[idx], n_sync_px)
@@ -86,13 +92,12 @@ class TorchBackend(_BackendMixin):
             valid_idx = valid_idx,
             amps = amps_np[valid_idx],
             bg = bg_np[valid_idx],
-            decay_valid = flat[valid_idx],
+            decay_valid = flat[valid_idx] if win is None else flat[valid_idx][:, win],
             A = A,
             taus_ns = taus_ns,
             ny = ny, nx = nx,
             tvb = tvb_np[valid_idx] if tvb_np is not None else None,
-            tvb_profile= np.asarray(tvb_profile, dtype=np.float32)
-                         if (fit_tvb and tvb_profile is not None) else None,
+            tvb_profile= (B_col if (fit_tvb and tvb_profile is not None) else None),
         )
         return maps
 
@@ -108,11 +113,22 @@ class TorchBackend(_BackendMixin):
         progress_callback=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         torch = self._torch
         ny, nx, n_bins = stack.shape
         N_GRID = len(tau_grid)
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        win = fit_window(fit_idx, n_bins)
+        if win is not None:
+            if fit_tvb and tvb_profile is not None:
+                raise ValueError('a fit window with time-varying background is not '
+                                 'supported on the GPU for one-exponential fits')
+            basis_grid = basis_grid[:, win]
+            bb_grid = np.maximum((basis_grid ** 2).sum(axis=1), 1e-20)
+            n_fit = len(win)
+        else:
+            n_fit = n_bins
         intensity_flat = flat.sum(axis=1)
         valid_mask = intensity_flat >= min_photons
         valid_idx = np.where(valid_mask)[0]
@@ -158,7 +174,7 @@ class TorchBackend(_BackendMixin):
         if correct_pileup and n_sync_px > 0:
             for idx in valid_idx:
                 dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
-        dc_valid = dc_flat[valid_idx]
+        dc_valid = dc_flat[valid_idx] if win is None else dc_flat[valid_idx][:, win]
         bg_t = torch.as_tensor(bb_grid, dtype=torch.float32, device=self.device)
         basis_t = torch.as_tensor(basis_grid, dtype=torch.float32, device=self.device)
         dc_t = torch.as_tensor(dc_valid, dtype=torch.float32, device=self.device)
@@ -179,10 +195,10 @@ class TorchBackend(_BackendMixin):
             tau_v = tau_v,
             amp_v = amp_v,
             bg_v = bg_flat[valid_idx],
-            decay_valid = flat[valid_idx],
+            decay_valid = flat[valid_idx] if win is None else flat[valid_idx][:, win],
             basis_best = basis_best,
             ny = ny, nx = nx,
-            n_bins = n_bins,
+            n_bins = n_fit,
         )
         return maps
 

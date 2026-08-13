@@ -5,6 +5,15 @@ from scipy.optimize import least_squares
 from ..FLIM.fit_tools import calibrated_chi2
 from ..FLIM.models import reconvolution_model
 
+def fit_window(fit_idx, n_bins):
+    if fit_idx is None:
+        return None
+    idx = np.asarray(fit_idx, dtype=int)
+    if idx.size == n_bins:
+        return None
+    return idx
+
+
 class GPUBackend:
 
     def batch_fixed_tau(
@@ -16,6 +25,7 @@ class GPUBackend:
         correct_pileup,
         n_sync_px,
         progress_callback,
+        fit_idx=None,
     ):
         raise NotImplementedError
 
@@ -29,6 +39,7 @@ class GPUBackend:
         correct_pileup,
         n_sync_px,
         progress_callback,
+        fit_idx=None,
     ):
         raise NotImplementedError
 
