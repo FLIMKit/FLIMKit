@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- In-app explanations of the fit settings. An information icon on the Fitting Parameters, IRF and Masking section headers, and next to the optimizer choice in Expert Fit Settings, opens a single window covering six topics: fit model, component count, fitting mode, optimizer, IRF source and masking. Every option in those sections gets a paragraph on what it does and when to pick it, along with the caveats that are easy to miss: that a lower chi-squared alone does not justify an extra component, that a tau near the IRF width is unresolved rather than measured, and that the Coates correction leaves the decay non-Poisson while the default cost function still assumes it is. The text lives in `flimkit/UI/fit_help.py` and the icons sit inside label rows that already existed, so no panel grew.
+
 ## [0.10.0] - 2026-08-11
 
 ### Added
