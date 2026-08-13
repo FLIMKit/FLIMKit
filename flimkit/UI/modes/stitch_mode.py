@@ -75,7 +75,7 @@ class StitchMode(BaseMode):
         self.b._irf_st.grid(row=0, column=0, sticky='ew', pady=(0, 6))
         self.b._irf_st.frame.columnconfigure(1, weight=1)
 
-        fp = _section(parent, 'Fitting Parameters')
+        fp = _section(parent, 'Fitting Parameters', help_topic='fit_model')
         fp.grid(row=1, column=0, sticky='ew', pady=(0, 6))
 
         ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
@@ -174,7 +174,7 @@ class StitchMode(BaseMode):
         ttk.Entry(fp, textvariable=self.b.sv_tau_fit_hi, width=7).grid(row=3, column=3, padx=4)
         ttk.Label(fp, text='ns  (fitting range)', foreground='grey').grid(row=3, column=4, padx=4)
 
-        fm = _section(parent, 'Masking & Thresholding')
+        fm = _section(parent, 'Masking & Thresholding', help_topic='masking')
         fm.grid(row=2, column=0, sticky='ew', pady=(0, 6))
 
         self.b.state.bv_thr_st = tk.BooleanVar(value=False)

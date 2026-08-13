@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from flimkit.UI.utils import _C
+from flimkit.UI.fit_help import help_button
 from typing import Optional
 
 _EXPERT_DEFAULTS = {
@@ -57,7 +58,10 @@ class ExpertSettingsDialog(tk.Toplevel):
         f = ttk.Frame(self, padding=12)
         f.pack(fill='both', expand=True)
 
-        ttk.Label(f, text='Optimizer:').grid(row=row, column=0, sticky='w', **PAD)
+        opt_label = ttk.Frame(f)
+        opt_label.grid(row=row, column=0, sticky='w', **PAD)
+        ttk.Label(opt_label, text='Optimizer:').pack(side='left')
+        help_button(opt_label, 'optimizer').pack(side='left', padx=(4, 0))
         self._sv_optimizer = tk.StringVar(value=vals['optimizer'])
         opt_frame = ttk.Frame(f)
         opt_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)

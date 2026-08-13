@@ -16,11 +16,12 @@ class IRFWidget:
         ('Gaussian (fallback)',                          'gaussian'),
     ]
     def __init__(self, parent, default='irf_xlsx', xlsx_var=None, machine_irf_default: str = ''):
-        self.xlsx_var  = xlsx_var
+        self.xlsx_var = xlsx_var
         self._machine_irf_default = machine_irf_default
         self.sv_method = tk.StringVar(value=default)
-        self.sv_path   = tk.StringVar()
-        self.frame = _section(parent, 'Instrument Response Function (IRF)')
+        self.sv_path = tk.StringVar()
+        self.frame = _section(parent, 'Instrument Response Function (IRF)',
+                              help_topic='irf')
         self.frame.columnconfigure(1, weight=1)
         for i, (lbl, val) in enumerate(self.CHOICES):
             ttk.Radiobutton(self.frame, text=lbl, variable=self.sv_method,
@@ -87,7 +88,7 @@ class IRFWidget:
         self.frame.grid_remove()
     def get_args(self, xlsx_fallback: Optional[str] = None) -> dict:
         method = self.sv_method.get()
-        path   = self.sv_path.get().strip() or None
+        path = self.sv_path.get().strip() or None
         if method == 'irf_xlsx':
             xlsx = (self.xlsx_var.get().strip() if self.xlsx_var else None) \
                    or xlsx_fallback or path

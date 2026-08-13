@@ -7,6 +7,7 @@ from tkinter import ttk, filedialog, scrolledtext
 from pathlib import Path
 from typing import Optional
 import numpy as np
+from flimkit.UI.fit_help import help_button
 try:
     from tkinterdnd2 import DND_FILES, DND_TEXT
     HAS_DND = True
@@ -108,8 +109,8 @@ class _Redirect:
 
     def __init__(self, widget: scrolledtext.ScrolledText, buf: list, root=None, is_stderr=False):
         self.widget = widget
-        self.buf    = buf
-        self.root   = root
+        self.buf = buf
+        self.root = root
         self._is_stderr = is_stderr
         self._batch = []
         self._batch_size = 5000
@@ -268,8 +269,14 @@ def _row(parent, label, var, row, browse_fn, width=45, state='normal'):
             pass
     return e
 
-def _section(parent, text: str) -> ttk.LabelFrame:
-    return ttk.LabelFrame(parent, text=f'  {text}  ', padding=(10, 6))
+def _section(parent, text: str, help_topic: Optional[str] = None) -> ttk.LabelFrame:
+    lf = ttk.LabelFrame(parent, text=f'  {text}  ', padding=(10, 6))
+    if help_topic:
+        holder = ttk.Frame(lf)
+        ttk.Label(holder, text=f'  {text} ').pack(side='left')
+        help_button(holder, help_topic).pack(side='left', padx=(0, 6))
+        lf.configure(labelwidget=holder)
+    return lf
 
 def _tog(bvar: tk.BooleanVar, entry: ttk.Entry):
     entry.configure(state='normal' if bvar.get() else 'disabled')

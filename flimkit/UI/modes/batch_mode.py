@@ -21,8 +21,8 @@ class BatchMode(BaseMode):
         ff.grid(row=1, column=0, sticky='ew', pady=(0, 6))
         ff.columnconfigure(1, weight=1)
         self.b.state.sv_batch_xlif_dir = tk.StringVar()
-        self.b.state.sv_batch_ptu_dir  = tk.StringVar()
-        self.b.state.sv_batch_out_dir  = tk.StringVar()
+        self.b.state.sv_batch_ptu_dir = tk.StringVar()
+        self.b.state.sv_batch_out_dir = tk.StringVar()
 
         self.b._batch_xlif_fr = ttk.Frame(ff)
         self.b._batch_xlif_fr.grid(row=0, column=0, columnspan=3, sticky='ew')
@@ -94,7 +94,7 @@ class BatchMode(BaseMode):
              lambda: _browse_file(self.b.sv_batch_mirf, 'Machine IRF',
                                   [('NumPy', '*.npy'), ('All', '*.*')]))
 
-        fp = _section(tab, 'Fitting Parameters')
+        fp = _section(tab, 'Fitting Parameters', help_topic='fit_model')
         fp.grid(row=3, column=0, sticky='ew', pady=(0, 6))
         ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
         self.b.state.sv_fit_model_batch = tk.StringVar(value='discrete')
@@ -165,7 +165,7 @@ class BatchMode(BaseMode):
         ttk.Label(freg, text='(increase if drift > 120px)',
                   foreground='grey').grid(row=1, column=2, sticky='w')
 
-        fm = _section(tab, 'Masking')
+        fm = _section(tab, 'Masking', help_topic='masking')
         fm.grid(row=5, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_batch_thr = tk.BooleanVar(value=False)
         self.b.state.sv_batch_thr = tk.StringVar()
@@ -195,11 +195,11 @@ class BatchMode(BaseMode):
 
         fexp = _section(tab, 'Image Export')
         fexp.grid(row=6, column=0, sticky='ew', pady=(0, 6))
-        self.b.state.bv_batch_save_lifetime  = tk.BooleanVar(value=True)
-        self.b.state.bv_batch_save_rgb       = tk.BooleanVar(value=True)
+        self.b.state.bv_batch_save_lifetime = tk.BooleanVar(value=True)
+        self.b.state.bv_batch_save_rgb = tk.BooleanVar(value=True)
         self.b.state.bv_batch_save_intensity = tk.BooleanVar(value=True)
-        self.b.state.bv_batch_save_npy       = tk.BooleanVar(value=True)
-        self.b.state.bv_batch_save_ind       = tk.BooleanVar(value=False)
+        self.b.state.bv_batch_save_npy = tk.BooleanVar(value=True)
+        self.b.state.bv_batch_save_ind = tk.BooleanVar(value=False)
         ttk.Checkbutton(fexp, text='Lifetime image (uint16 TIFF)',
                         variable=self.b.bv_batch_save_lifetime).grid(row=0, column=0, sticky='w', **PAD)
         ttk.Checkbutton(fexp, text='Component RGB TIFF',
@@ -241,9 +241,9 @@ class BatchMode(BaseMode):
         self.b._batch_tl_fr = ftl
 
         self.b.state.bv_tl_fix_tau = tk.BooleanVar(value=False)
-        self.b.state.sv_tl_tau1    = tk.StringVar(value='')
-        self.b.state.sv_tl_tau2    = tk.StringVar(value='')
-        self.b.state.sv_tl_tau3    = tk.StringVar(value='')
+        self.b.state.sv_tl_tau1 = tk.StringVar(value='')
+        self.b.state.sv_tl_tau2 = tk.StringVar(value='')
+        self.b.state.sv_tl_tau3 = tk.StringVar(value='')
 
         ttk.Checkbutton(ftl,
                         text='Fix reference τ values (skip pooled-decay fit)',
