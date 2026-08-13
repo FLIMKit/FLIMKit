@@ -1174,6 +1174,12 @@ FLIMKit never creates that folder and does not load from it until you say so. Op
 
 `FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
 
+A wheel works in that folder too, which is the only way to install a packaged add-on into the compiled app, since it has no `pip`. Download the `.whl` from the add-on's releases, drop it in, and restart. FLIMKit puts it on the import path before it looks for entry points, so the add-on registers exactly as it would if it had been pip installed.
+
+Two limits on that route. The wheel has to be pure Python, tagged `py3-none-any`; one built for a specific platform cannot be imported from a zip and is refused with that reason rather than failing later. And its dependencies have to be ones FLIMKit already bundles, because there is nothing in the compiled app to fetch the rest with. `numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile` and tkinter are there.
+
+Running from source, `pip install` is the better route and this is unnecessary.
+
 ### Settings a plugin owns
 
 ```python
