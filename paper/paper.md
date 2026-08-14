@@ -12,6 +12,9 @@ authors:
     orcid: 0009-0006-2990-649X
     corresponding: true
     affiliation: 1
+  - name: Zhen Yuan Yeo
+    orcid: 0000-0003-2766-6972
+    affiliation: 2
   - name: Ava Russell
     orcid: 0009-0004-6340-1167
     affiliation: 1
@@ -27,6 +30,8 @@ authors:
 affiliations:
   - name: Centre for Inflammation Research, Institute for Regeneration and Repair, The University of Edinburgh, Edinburgh, United Kingdom
     index: 1
+  - name: Department of Statistics and Data Science, National University of Singapore, Singapore
+    index: 2
 date: 11 August 2026
 bibliography: paper.bib
 ---
