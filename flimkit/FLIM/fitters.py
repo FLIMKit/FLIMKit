@@ -9,7 +9,7 @@ from ..FLIM.irf_tools import build_full_irf
 from ..FLIM.fit_tools import (estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
-                              calibrated_chi2)
+                              calibrated_chi2, distribution_dof)
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
                            dist_reconvolution_model, build_dist_basis_grid,
@@ -1241,8 +1241,14 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                        progress_callback=None,
                        use_gpu='auto',
                        gpu_backend=None,
-                       tvb_profile=None, fit_tvb=False) -> dict:
+                       tvb_profile=None, fit_tvb=False,
+                       fit_idx=None) -> dict:
+    from ..GPU._base import fit_window
+
     ny, nx, _ = stack.shape
+    window = fit_window(fit_idx, n_bins)
+    fit_idx = np.arange(n_bins) if window is None else window
+    n_fit = len(fit_idx)
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     if tvb_on and n_components != 1:
         print('  Per-pixel distribution TVB only supported for unimodal (1 component); ignoring TVB here.')
@@ -1264,7 +1270,8 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
     print(f"  Building distribution basis grid ({n_tau_grid}×{n_width_grid})...")
     basis, param_pairs = build_dist_basis_grid(
         tcspc_res, n_bins, irf_fixed, tau_grid, width_grid, dist_type)
-    bb_grid = np.maximum((basis.astype(np.float64) ** 2).sum(axis=1), 1e-20).astype(np.float32)
+    basis_fit = basis[:, fit_idx]
+    bb_grid = np.maximum((basis_fit.astype(np.float64) ** 2).sum(axis=1), 1e-20).astype(np.float32)
     maps = dict(
         intensity = stack.sum(axis=2),
         tau_mean_amp = np.full((ny, nx), np.nan),
@@ -1280,44 +1287,47 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
     if tvb_on:
         maps['tvb_scale'] = np.full((ny, nx), np.nan)
     if n_components == 1:
-        backend = gpu_backend if gpu_backend is not None else (
-            None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
-        )
+        backend = None
+        if use_gpu is not False:
+            backend = gpu_backend if gpu_backend is not None else (
+                None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
+            )
         if backend is not None and stack.nbytes > _GPU_MAX_STACK_BYTES:
             print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
                   f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
             backend = None
         if backend is not None:
             return backend.batch_dist_scan_unimodal(
-                stack, basis, bb_grid, param_pairs,
+                stack, basis_fit, bb_grid, param_pairs,
                 irf_fixed, tcspc_res, n_bins, dist_type,
                 min_photons, progress_callback,
                 tvb_profile=tvb_profile if tvb_on else None,
-                fit_tvb=tvb_on)
+                fit_tvb=tvb_on, fit_idx=fit_idx)
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
         ph_counts = flat.sum(axis=1)
         valid_idx = np.where(ph_counts >= min_photons)[0]
         if tvb_on and valid_idx.size > 0:
-            _U = np.column_stack([np.asarray(tvb_profile, dtype=float), np.ones(n_bins)])
+            tvb_fit = np.asarray(tvb_profile, dtype=float)[fit_idx]
+            _U = np.column_stack([tvb_fit, np.ones(n_fit)])
             _Up = np.linalg.pinv(_U)
-            _bp = basis.astype(np.float64) - (basis.astype(np.float64) @ _Up.T) @ _U.T
+            _bp = basis_fit.astype(np.float64) - (basis_fit.astype(np.float64) @ _Up.T) @ _U.T
             _bbp = np.maximum((_bp ** 2).sum(axis=1), 1e-20)
-            d_valid = flat[valid_idx].astype(np.float64)
+            d_valid = flat[valid_idx][:, fit_idx].astype(np.float64)
             d_perp = d_valid - (d_valid @ _Up.T) @ _U.T
             bd = d_perp @ _bp.T
             costs = (d_perp ** 2).sum(axis=1)[:, None] - np.maximum(bd, 0.0) ** 2 / _bbp[None, :]
             best_g = np.argmin(costs, axis=1)
             amp_v = np.maximum(bd[np.arange(len(valid_idx)), best_g] / _bbp[best_g], 0.0)
-            basis_best = basis[best_g].astype(np.float64)
+            basis_best = basis_fit[best_g].astype(np.float64)
             resid_after = d_valid - amp_v[:, None] * basis_best
             vz = resid_after @ _Up.T
             tvb_v = np.maximum(vz[:, 0], 0.0)
             bg_z = vz[:, 1]
-            B_arr = np.asarray(tvb_profile, dtype=np.float64)
             tau_v = param_pairs[best_g, 0]
             w_v = param_pairs[best_g, 1]
-            model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * B_arr[None, :] + bg_z[:, None]
-            chi2_v = ((d_valid - model_v) ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+            model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * tvb_fit[None, :] + bg_z[:, None]
+            chi2_v = ((d_valid - model_v) ** 2 / np.maximum(model_v, 1.0)).sum(axis=1)
+            chi2_v /= distribution_dof(n_fit, 1, True)
             chi2_cal_v = calibrated_chi2(d_valid, model_v, axis=1)
             for k, fi in enumerate(valid_idx):
                 if amp_v[k] <= 0:
@@ -1343,9 +1353,10 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 if ph_counts[flat_idx] < min_photons:
                     continue
                 d = flat[flat_idx].astype(np.float64)
+                d_fit = d[fit_idx]
                 bg = estimate_bg(d, int(np.argmax(d)))
-                dc = np.maximum(d - bg, 0.0)
-                bd = basis.astype(np.float64) @ dc
+                dc = np.maximum(d_fit - bg, 0.0)
+                bd = basis_fit.astype(np.float64) @ dc
                 amps_g = np.maximum(bd / bb_grid.astype(np.float64), 0.0)
                 costs = (dc ** 2).sum() - np.maximum(bd, 0.0) ** 2 / bb_grid.astype(np.float64)
                 best = int(np.argmin(costs))
@@ -1354,8 +1365,8 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 amp_px = float(amps_g[best])
                 tau_amp_ns = tau_c_px * 1e9
                 tau_int_ns = (tau_c_px + (w_px ** 2) / max(tau_c_px, 1e-15)) * 1e9
-                model_px = amp_px * basis[best].astype(np.float64) + bg
-                resid_px = d - model_px
+                model_px = amp_px * basis_fit[best].astype(np.float64) + bg
+                resid_px = d_fit - model_px
                 chi2_px = float(np.sum(resid_px ** 2 / np.maximum(model_px, 1.0)))
                 maps['tau_center_1'][row_i, xi] = tau_c_px * 1e9
                 maps['width_1'][row_i, xi] = w_px * 1e9
@@ -1363,8 +1374,8 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 maps['frac_1'][row_i, xi] = 1.0
                 maps['tau_mean_amp'][row_i, xi] = tau_amp_ns
                 maps['tau_mean_int'][row_i, xi] = tau_int_ns
-                maps['chi2_r'][row_i, xi] = chi2_px / max(n_bins - 3, 1)
-                maps['calibrated_chi2_r'][row_i, xi] = calibrated_chi2(d, model_px)
+                maps['chi2_r'][row_i, xi] = chi2_px / distribution_dof(n_fit, 1, False)
+                maps['calibrated_chi2_r'][row_i, xi] = calibrated_chi2(d_fit, model_px)
     else:
         from ..FLIM.fit_tools import estimate_bg as _ebg
         from concurrent.futures import ThreadPoolExecutor
@@ -1375,16 +1386,17 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         tau_hi_s = tau_centers_g.max() * 5.0
         w_lo_s = widths_g.min() / 5.0
         w_hi_s = widths_g.max() * 5.0
-        amp_hi = float(stack.max()) * 10.0
+        fit_stack_max = float(stack[..., fit_idx].max())
+        amp_hi = fit_stack_max * 10.0
         lo_px = np.array([tau_lo_s] * n_components + [w_lo_s] * n_components + [0.0] * n_components)
         hi_px = np.array([tau_hi_s] * n_components + [w_hi_s] * n_components + [amp_hi] * n_components)
         p0_px = np.concatenate([tau_centers_g, widths_g,
-                                 np.full(n_components, float(stack.max()) / n_components)])
+                                np.full(n_components, fit_stack_max / n_components)])
         def _fit_pixel_dist(flat_idx):
             d = flat[flat_idx].astype(np.float64)
+            d_fit = d[fit_idx]
             bg = _ebg(d, int(np.argmax(d)))
-            dc = np.maximum(d - bg, 0.0)
-            wt = np.sqrt(np.maximum(d, 1.0))
+            wt_fit = np.sqrt(np.maximum(d_fit, 1.0))
             def _resid(p):
                 full_p = np.concatenate([p, [shift]])
                 if fit_sigma:
@@ -1394,7 +1406,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                 m = dist_reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_prompt,
                     n_components, dist_type, bg, False, False)
-                return (m - d) / wt
+                return (m[fit_idx] - d_fit) / wt_fit
             try:
                 res = least_squares(_resid, p0_px, bounds=(lo_px, hi_px),
                                     method='trf', max_nfev=500,
@@ -1427,6 +1439,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             maps['tau_mean_amp'][yi, xi] = tau_amp_ns
             maps['tau_mean_int'][yi, xi] = tau_int_ns
             d = flat[flat_idx].astype(np.float64)
+            d_fit = d[fit_idx]
             bg = _ebg(d, int(np.argmax(d)))
             full_p = np.concatenate([sol, [shift]])
             if fit_sigma:
@@ -1436,7 +1449,13 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             model_px = dist_reconvolution_model(
                 full_p, tcspc_res, n_bins, irf_prompt,
                 n_components, dist_type, bg, False, False)
-            maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(d, model_px)
+            model_fit = model_px[fit_idx]
+            resid_fit = d_fit - model_fit
+            chi2_px = float(np.sum(resid_fit ** 2 / np.maximum(model_fit, 1.0)))
+            maps['chi2_r'][yi, xi] = chi2_px / distribution_dof(
+                n_fit, n_components, False)
+            maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
+                d_fit, model_fit)
             for i in range(n_components):
                 maps[f"tau_center_{i+1}"][yi, xi] = tau_cs[i] * 1e9
                 maps[f"width_{i+1}"][yi, xi] = ws[i] * 1e9

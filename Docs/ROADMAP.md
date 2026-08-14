@@ -25,7 +25,7 @@ Fixed-tau and the one-exponential grid scan now honour a fit window and exclusio
 
 Free-tau honours it too, by slicing the residual: that path is `least_squares` per pixel across a thread pool rather than GPU maths, so there was no kernel to change. Two cases still fall back and say so: one-exponential with a time-varying background, and tail fits. The tail fit is different, since its window starts at the fitted `t0` rather than at a bin the user chose.
 
-The per-pixel distribution fit is a separate gap rather than a GPU one. `fit_summed_dist` takes `fit_start_ns`, `fit_end_ns` and `exclude_ns`, but `fit_per_pixel_dist` has no window parameter at all, so with a Gaussian or Lorentzian model the window applies to the summed fit and is ignored for every per-pixel map.
+Per-pixel Gaussian and Lorentzian distribution fits now receive the same selected bins as the summed fit. The CPU, Torch and MLX paths restrict the distribution projection, iterative residual and fit diagnostics to those bins, while background estimation, `intensity` and the `min_photons` mask continue to use the whole decay.
 
 ## Medium Priority - To Do
 

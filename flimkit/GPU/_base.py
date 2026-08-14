@@ -8,8 +8,17 @@ from ..FLIM.models import reconvolution_model
 def fit_window(fit_idx, n_bins):
     if fit_idx is None:
         return None
-    idx = np.asarray(fit_idx, dtype=int)
-    if idx.size == n_bins:
+    raw = np.asarray(fit_idx)
+    if raw.ndim != 1 or raw.size == 0:
+        raise ValueError('fit_idx must be a non-empty one-dimensional array')
+    if not np.issubdtype(raw.dtype, np.integer):
+        raise ValueError('fit_idx must contain integer bin indices')
+    idx = raw.astype(int, copy=False)
+    if np.any(idx < 0) or np.any(idx >= n_bins):
+        raise ValueError(f'fit_idx entries must be between 0 and {n_bins - 1}')
+    if np.unique(idx).size != idx.size:
+        raise ValueError('fit_idx must not contain duplicate bins')
+    if np.array_equal(idx, np.arange(n_bins)):
         return None
     return idx
 
@@ -73,6 +82,9 @@ class GPUBackend:
         dist_type,
         min_photons,
         progress_callback,
+        tvb_profile=None,
+        fit_tvb=False,
+        fit_idx=None,
     ):
         raise NotImplementedError
 

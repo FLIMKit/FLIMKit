@@ -541,6 +541,9 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            fit_start_ns=getattr(args, 'fit_start_ns', None),
+            fit_end_ns=getattr(args, 'fit_end_ns', None),
+            exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
         )
     else:
         print(f'\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...')
@@ -600,6 +603,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 min_photons=args.min_photons,
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
             )
         else:
@@ -1108,6 +1112,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 min_photons=args.min_photons,
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
