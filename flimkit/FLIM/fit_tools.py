@@ -3,6 +3,11 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 
 
+def distribution_dof(n_fit, n_components=1, fit_tvb=False):
+    n_params = 3 * n_components + 1 + int(fit_tvb)
+    return max(int(n_fit) - n_params, 1)
+
+
 def calibrated_chi2(data, model, axis=None):
     data_arr, model_arr = np.broadcast_arrays(
         np.asarray(data, dtype=float), np.asarray(model, dtype=float))

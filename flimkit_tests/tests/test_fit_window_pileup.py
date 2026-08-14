@@ -1,11 +1,33 @@
+import ast
+from pathlib import Path
+
 import numpy as np
 import pytest
 from flimkit.FLIM.models import apply_pileup
 from flimkit.FLIM.fit_tools import (coates_pileup_correction, build_fit_idx,
                                     bins_from_ns)
+from flimkit.GPU._base import fit_window
 
 RES = 0.097e-9
 N = 133
+
+
+def test_fit_window_validates_indices():
+    identity = np.arange(8)
+    assert fit_window(identity, 8) is None
+    np.testing.assert_array_equal(fit_window(identity[::-1], 8), identity[::-1])
+    for invalid in (np.array([], dtype=int), np.array([0, 1, 1]),
+                    np.array([-1, 0]), np.array([0, 8])):
+        with pytest.raises(ValueError):
+            fit_window(invalid, 8)
+
+
+def test_distribution_dof_counts_all_fitted_terms():
+    from flimkit.FLIM.fit_tools import distribution_dof
+
+    assert distribution_dof(100, 1, False) == 96
+    assert distribution_dof(100, 1, True) == 95
+    assert distribution_dof(100, 2, False) == 93
 
 def _decay(tau_ns=4.1, total=3e5):
     t = np.arange(N) * RES * 1e9
@@ -129,3 +151,27 @@ class TestExclusionBandInFit:
                                   fit_start_ns=0.5, fit_end_ns=12.0, exclude_ns=ex)
             out.append(s['dof'])
         assert out[1] < out[0]
+
+
+def test_interactive_distribution_calls_propagate_fit_window():
+    import flimkit.interactive as interactive
+
+    tree = ast.parse(Path(interactive.__file__).read_text())
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+    summed_calls = [
+        node for node in calls
+        if isinstance(node.func, ast.Name) and node.func.id == 'fit_summed_dist'
+    ]
+    pixel_calls = [
+        node for node in calls
+        if isinstance(node.func, ast.Name) and node.func.id == 'fit_per_pixel_dist'
+    ]
+
+    assert len(summed_calls) == 2
+    assert len(pixel_calls) == 2
+    for node in summed_calls:
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert {'fit_start_ns', 'fit_end_ns', 'exclude_ns'} <= keywords
+    for node in pixel_calls:
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert 'fit_idx' in keywords

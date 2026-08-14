@@ -1,6 +1,7 @@
 import numpy as np
 from flimkit.GPU._base import _BackendMixin, fit_window
-from flimkit.FLIM.fit_tools import calibrated_chi2, estimate_bg, coates_pileup_correction
+from flimkit.FLIM.fit_tools import (calibrated_chi2, distribution_dof,
+                                    estimate_bg, coates_pileup_correction)
 
 class MLXBackend(_BackendMixin):
 
@@ -205,10 +206,14 @@ class MLXBackend(_BackendMixin):
         progress_callback=None,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         mx = self._mx
         ny, nx, _ = stack.shape
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
+        win = fit_window(fit_idx, n_bins)
+        n_fit = n_bins if win is None else len(win)
+        flat_fit = flat if win is None else flat[:, win]
         intensity_flat = flat.sum(axis=1)
         valid_mask = intensity_flat >= min_photons
         valid_idx = np.where(valid_mask)[0]
@@ -227,8 +232,9 @@ class MLXBackend(_BackendMixin):
             return maps
         if fit_tvb and tvb_profile is not None:
             maps['tvb_scale'] = np.full((ny, nx), np.nan)
-            U, U_pinv, basis_perp, bb_perp = self._tvb_grid_prep(basis, tvb_profile, n_bins)
-            d_valid = flat[valid_idx]
+            tvb_fit = np.asarray(tvb_profile) if win is None else np.asarray(tvb_profile)[win]
+            U, U_pinv, basis_perp, bb_perp = self._tvb_grid_prep(basis, tvb_fit, n_fit)
+            d_valid = flat_fit[valid_idx]
             d_perp = self._tvb_project_data(d_valid.astype(np.float64), U, U_pinv).astype(np.float32)
             basis_pmx = mx.array(basis_perp)
             bbp_mx = mx.array(bb_perp)
@@ -251,10 +257,10 @@ class MLXBackend(_BackendMixin):
             vz = resid_after @ U_pinv.T
             tvb_v = np.maximum(vz[:, 0], 0.0)
             bg_z = vz[:, 1]
-            B_arr = np.asarray(tvb_profile, dtype=np.float64)
+            B_arr = np.asarray(tvb_fit, dtype=np.float64)
             model_v = amp_v[:, None] * basis_best + tvb_v[:, None] * B_arr[None, :] + bg_z[:, None]
             resid_v = d_valid.astype(np.float64) - model_v
-            chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
+            chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / distribution_dof(n_fit, 1, True)
             chi2_cal_v = calibrated_chi2(d_valid, model_v, axis=1)
             yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
             maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
@@ -268,7 +274,7 @@ class MLXBackend(_BackendMixin):
             maps['tvb_scale'][yi_arr[good], xi_arr[good]] = tvb_v[good]
             return maps
         bg_flat = self._estimate_bg_batch(flat, valid_mask)
-        dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)
+        dc_flat = np.maximum(flat_fit - bg_flat[:, None], 0.0)
         dc_valid = dc_flat[valid_idx]
         basis_mx = mx.array(basis)
         bb_mx = mx.array(bb_grid)
@@ -288,9 +294,9 @@ class MLXBackend(_BackendMixin):
         tau_int_ns = (tau_v + w_v ** 2 / np.maximum(tau_v, 1e-15)) * 1e9
         basis_best = basis[best_g].astype(np.float64)
         model_v = amp_v[:, None] * basis_best + bg_flat[valid_idx, None]
-        resid_v = dc_valid.astype(np.float64) - model_v
-        chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / max(n_bins - 3, 1)
-        chi2_cal_v = calibrated_chi2(flat[valid_idx], model_v, axis=1)
+        resid_v = flat_fit[valid_idx].astype(np.float64) - model_v
+        chi2_v = (resid_v ** 2 / np.maximum(model_v, 1.0)).sum(axis=1) / distribution_dof(n_fit, 1, False)
+        chi2_cal_v = calibrated_chi2(flat_fit[valid_idx], model_v, axis=1)
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
         maps['tau_center_1'][yi_arr[good], xi_arr[good]] = tau_amp_ns[good]
         maps['width_1'][yi_arr[good], xi_arr[good]] = w_v[good] * 1e9
