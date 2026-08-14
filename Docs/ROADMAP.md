@@ -23,7 +23,9 @@ Models and cost functions are the goal, and they are one job rather than two. Th
 ### 5. GPU per-pixel fitting with a fit window
 Fixed-tau and the one-exponential grid scan now honour a fit window and exclusion bands on the GPU, so dropping a reflection peak out of the fit no longer costs the GPU path. `intensity` and the `min_photons` mask stay computed over the whole decay, as on the CPU, and CPU/GPU parity is tested with a window active.
 
-Three cases still fall back, each saying so: free-tau, one-exponential with a time-varying background, and tail fits. The first two are the same shape of change as the ones already done. The tail fit is different, since its window starts at the fitted `t0` rather than at a bin the user chose.
+Free-tau honours it too, by slicing the residual: that path is `least_squares` per pixel across a thread pool rather than GPU maths, so there was no kernel to change. Two cases still fall back and say so: one-exponential with a time-varying background, and tail fits. The tail fit is different, since its window starts at the fitted `t0` rather than at a bin the user chose.
+
+The per-pixel distribution fit is a separate gap rather than a GPU one. `fit_summed_dist` takes `fit_start_ns`, `fit_end_ns` and `exclude_ns`, but `fit_per_pixel_dist` has no window parameter at all, so with a Gaussian or Lorentzian model the window applies to the summed fit and is ignored for every per-pixel map.
 
 ## Medium Priority - To Do
 

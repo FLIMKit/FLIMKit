@@ -57,6 +57,7 @@ class GPUBackend:
         n_sync_px,
         n_steps,
         lr,
+        fit_idx=None,
     ):
         raise NotImplementedError
 
@@ -242,8 +243,11 @@ class _BackendMixin:
         n_bins,
         tvb_profile=None,
         fit_tvb=False,
+        fit_idx=None,
     ):
         B = raw_valid.shape[0]
+        win = fit_window(fit_idx, n_bins)
+        n_fit = n_bins if win is None else len(win)
 
         amp0    = float(raw_valid.max()) / n_exp
         # Use the same bounds as the CPU free-tau path in fit_per_pixel
@@ -276,7 +280,9 @@ class _BackendMixin:
                     model  = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, bg_b, False, False, False)
-                return (model - decay_b) / wt
+                if win is None:
+                    return (model - decay_b) / wt
+                return (model[win] - decay_b[win]) / wt[win]
 
             try:
                 res = least_squares(_resid, p0, bounds=(lo_px, hi_px),
@@ -320,16 +326,22 @@ class _BackendMixin:
                 model_b = reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_array,
                     n_exp, bg_b, False, False, False)
-            resid_b = raw_valid[b].astype(np.float64) - model_b
-            chi2_b  = (resid_b ** 2 / np.maximum(model_b, 1.0)).sum()
-            dof     = max(n_bins - 2 * n_exp, 1)
+            decay_fit = raw_valid[b].astype(np.float64)
+            if win is None:
+                model_fit = model_b
+            else:
+                decay_fit = decay_fit[win]
+                model_fit = model_b[win]
+            resid_b = decay_fit - model_fit
+            chi2_b  = (resid_b ** 2 / np.maximum(model_fit, 1.0)).sum()
+            dof     = max(n_fit - 2 * n_exp, 1)
 
             taus_out[b]  = taus_b.astype(np.float32)
             amps_out[b]  = amps_b.astype(np.float32)
             model_out[b] = model_b.astype(np.float32)
             tvb_out[b]   = tvb_b
             chi2r_out[b] = chi2_b / dof
-            chi2c_out[b] = calibrated_chi2(raw_valid[b], model_b)
+            chi2c_out[b] = calibrated_chi2(decay_fit, model_fit)
             valid_b[b]   = True
 
         return taus_out, amps_out, chi2r_out, chi2c_out, model_out, valid_b, tvb_out

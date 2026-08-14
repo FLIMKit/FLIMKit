@@ -637,10 +637,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     if _tail and use_gpu is not False:
         print(f'  [per-pixel] tail fit uses the CPU path; the projection has to be '
               f'restricted to bins past t0')
-    if _windowed and use_gpu is not False and not _tail and free_tau:
-        print(f'  [per-pixel] fit window/exclusions active ({len(fit_idx)}/{n_bins} bins); '
-              f'free-tau has no window support on the GPU yet, using the CPU path')
-    _gpu_windowed_ok = not (_windowed and (free_tau or (n_exp == 1 and tvb_on)))
+    _gpu_windowed_ok = not (_windowed and n_exp == 1 and tvb_on)
     if _windowed and use_gpu is not False and not _tail and n_exp == 1 and tvb_on:
         print(f'  [per-pixel] fit window with a time-varying background is not supported '
               f'on the GPU for one-exponential fits, using the CPU path')
@@ -691,6 +688,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     n_exp, min_photons, correct_pileup, _n_sync_px,
                     tvb_profile=tvb_profile if tvb_on else None,
                     fit_tvb=tvb_on,
+                    fit_idx=fit_idx if _windowed else None,
                 )
     if tvb_on:
         B_cpu = np.asarray(tvb_profile, dtype=float)

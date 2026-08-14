@@ -580,3 +580,41 @@ class TestCPUGPUParityWindowed2Exp:
 
     def test_chi2_agrees(self):
         assert _rel_err(self.cpu['chi2_r'], self.gpu['chi2_r']) < 0.15
+
+
+class TestCPUGPUParityWindowedFreeTau:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0)
+        irf_prompt = _make_irf()
+        kwargs = dict(
+            stack       = stack,
+            tcspc_res   = TCSPC_RES,
+            n_bins      = N_BINS,
+            irf_prompt  = irf_prompt,
+            has_tail    = False,
+            fit_bg      = False,
+            fit_sigma   = False,
+            global_popt = _global_popt_1exp(tau_ns=2.0),
+            n_exp       = 1,
+            min_photons = MIN_PHOTONS,
+            fit_idx     = self.fit_idx,
+            free_tau    = True,
+        )
+        self.cpu = fit_per_pixel(**kwargs, use_gpu=False)
+        self.gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
+
+    def test_tau_agrees(self):
+        assert _rel_err(self.cpu['tau_1'], self.gpu['tau_1']) < TAU1_TOL
+
+    def test_the_window_reaches_the_gpu_free_tau_path(self):
+        full = fit_per_pixel(
+            stack=_synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0),
+            tcspc_res=TCSPC_RES, n_bins=N_BINS, irf_prompt=_make_irf(),
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=_global_popt_1exp(tau_ns=2.0), n_exp=1,
+            min_photons=MIN_PHOTONS, free_tau=True, use_gpu=False)
+        assert not np.allclose(np.nanmedian(full['chi2_r']),
+                               np.nanmedian(self.gpu['chi2_r']))
