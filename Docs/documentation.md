@@ -108,6 +108,10 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `xarray` | Labelled N-D arrays for FLIM signals |
 | `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
 | `PyWavelets` | Wavelet-based phasor denoising |
+| `ptufile` | PicoQuant `.ptu`, `.bin`, `.phu` decoding |
+| `sdtfile` | Becker & Hickl `.sdt` decoding |
+| `lfdfiles` | SimFCS `.b&h`, `.bhz`, `.ref`, `.r64` and ISS `.ifli`, `.iss-tdflim` decoding |
+| `photonsfile` | Photonscore LINCam `.photons` (D7) decoding |
 | `inquirer` | Interactive terminal prompts |
 | `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
 | `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |
@@ -1319,6 +1323,12 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 **PhasorPy** - phasor computation, calibration, and cursor analysis:
 > Gohlke, C. et al. PhasorPy. Zenodo. https://doi.org/10.5281/zenodo.13862586
 
+**ptufile / sdtfile / lfdfiles / tifffile** - instrument file decoding for PicoQuant `.ptu`, Becker & Hickl `.sdt`, the SimFCS and ISS formats, and TIFF:
+> Gohlke, C. https://github.com/cgohlke/ptufile, https://github.com/cgohlke/sdtfile, https://github.com/cgohlke/lfdfiles, https://github.com/cgohlke/tifffile
+
+**photonsfile** - Photonscore LINCam `.photons` (D7) decoding:
+> Hunt, A. and A. Akram. photonsfile. Zenodo. https://doi.org/10.5281/zenodo.21360199
+
 **Tile stitching** - phase-correlation registration algorithm:
 > Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463-1465. https://doi.org/10.1093/bioinformatics/btp184
 
@@ -1330,6 +1340,8 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 ## Acknowledgements
 
 FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
 ---
 
