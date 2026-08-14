@@ -6,6 +6,10 @@ authors:
     given-names: Alexander
     affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
     orcid: "https://orcid.org/0009-0006-2990-649X"
+  - family-names: Yeo
+    given-names: Zhen Yuan
+    affiliation: "Department of Statistics and Data Science, National University of Singapore, Singapore"
+    orcid: "https://orcid.org/0000-0003-2766-6972"
   - family-names: Russell
     given-names: Ava
     affiliation: "Centre for Inflammation Research, Institute for Regeneration and Repair, University of Edinburgh, Edinburgh, UK"
@@ -24,7 +28,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-4605-1682"
 type: software
 license: MIT
-version: 0.10.0
+version: 0.10.1
 repository-code: "https://github.com/FLIMKit/FLIMKit"
 keywords:
   - FLIM
