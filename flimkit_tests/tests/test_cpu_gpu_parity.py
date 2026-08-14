@@ -362,9 +362,9 @@ class TestCPUGPUParityDivergenceReport:
             + self._report(3, cpu, gpu))
 
 
-# Free-τ GPU parity tests
-# Adam (GPU) vs LM/TRF (CPU): same forward model, different optimiser.
-# We expect agreement within looser tolerances than fixed-tau.
+# Free-τ backend parity tests
+# One-component fits use the same lifetime grid scan on every path.
+# Multi-component fits use the shared SciPy solver.
 FREE_TAU_TOL     = 0.08
 FREE_TAU_CHI2_MULT = 3.0
 
@@ -390,15 +390,18 @@ def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
 
 
 class TestCPUGPUParityFreeTau:
-    """
-    Free-τ per-pixel: GPU Adam vs CPU Levenberg-Marquardt.
-    Different optimisers reaching the same basin - tested with looser
-    tolerances than the fixed-τ NNLS paths.
-    """
+    """Free-tau per-pixel fitting agrees across backend selection."""
 
     @pytest.fixture(autouse=True)
     def setup(self, gpu_backend):
         self.gpu_backend = gpu_backend
+
+    def test_1exp_free_tau_agrees(self):
+        stack = _synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0)
+        cpu, gpu = _fit_both_free_tau(
+            stack, 1, _global_popt_1exp(), self.gpu_backend)
+        np.testing.assert_allclose(cpu['tau_1'], gpu['tau_1'], rtol=1e-6)
+        np.testing.assert_allclose(cpu['chi2_r'], gpu['chi2_r'], rtol=1e-4)
 
     # 2-exp free-tau
 
@@ -607,9 +610,14 @@ class TestCPUGPUParityWindowedFreeTau:
         self.gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
 
     def test_tau_agrees(self):
-        assert _rel_err(self.cpu['tau_1'], self.gpu['tau_1']) < TAU1_TOL
+        np.testing.assert_allclose(
+            self.cpu['tau_1'], self.gpu['tau_1'], rtol=1e-6)
 
-    def test_the_window_reaches_the_gpu_free_tau_path(self):
+    def test_chi2_agrees(self):
+        np.testing.assert_allclose(
+            self.cpu['chi2_r'], self.gpu['chi2_r'], rtol=1e-4)
+
+    def test_the_window_changes_the_answer(self):
         full = fit_per_pixel(
             stack=_synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0),
             tcspc_res=TCSPC_RES, n_bins=N_BINS, irf_prompt=_make_irf(),
