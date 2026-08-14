@@ -86,7 +86,9 @@ Format support has been developed in direct collaboration with the instrument ve
 
 # AI usage disclosure
 
-Anthropic's Claude was used as an assistant for parts of the graphical user interface implementation, the add-on system, compiled-application packaging, Docker and TrueNAS deployment scripting, and code debugging, under the direction of the lead author (A.H.). All scientific design, comprising the fitting models, IRF handling, phasor methods, validation approach, and overall software architecture, is the authors' own work. AI-assisted code was reviewed and tested by the authors, including through the automated test suite, the installation validation script, and CPU/GPU numerical parity tests, before being merged. No AI tool was used to generate or to verify the scientific or statistical methods described in this paper.
+Anthropic’s Claude and OpenAI’s GPT-5.6 Sol, accessed through Hermes Agent, were used as assistants during the development of FLIMKit. Claude was used under the direction of A.H. for parts of the graphical user interface, add-on system, application packaging, Docker and TrueNAS deployment scripts, and code debugging. GPT-5.6 Sol and Hermes Agent were used under the direction of Z.Y.Y. for code review, debugging, test design, documentation review, and GitHub development workflows.
+
+All scientific and statistical decisions, including the fitting models, instrument-response-function handling, phasor methods, validation criteria, and overall software architecture, were made by the authors. AI-assisted code and suggestions were reviewed and tested by the authors using the automated test suite, installation validation, numerical parity tests, and independent review before being merged. AI systems were used as tools and are not authors of the software or this paper.
 
 # Acknowledgements
 
