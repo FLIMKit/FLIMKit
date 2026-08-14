@@ -29,6 +29,12 @@ authors:
 type: software
 license: MIT
 version: 0.10.1
+date-released: 2026-08-14
+doi: 10.5281/zenodo.21931131
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21931132
+    description: "Archived release v0.10.1"
 repository-code: "https://github.com/FLIMKit/FLIMKit"
 keywords:
   - FLIM
