@@ -3,6 +3,7 @@
 [![tests](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml)
 [![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://github.com/FLIMKit/FLIMKit#installation)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
+[![DOI](https://zenodo.org/badge/1168642847.svg)](https://doi.org/10.5281/zenodo.21931131)
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
