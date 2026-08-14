@@ -646,7 +646,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
         )
         if _backend is not None:
-            if not free_tau:
+            if not free_tau or n_exp == 1:
                 if stack.nbytes > _GPU_MAX_STACK_BYTES:
                     print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
                           f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
