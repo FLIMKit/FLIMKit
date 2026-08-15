@@ -93,6 +93,27 @@ def test_get_current_images_omits_unavailable_images():
     assert set(images) == {'intensity'}
 
 
+def test_get_current_images_sums_trailing_intensity_axes():
+    intensity = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    lifetime = np.ones((2, 3), dtype=np.float32)
+    app = _App(_FovPreview(intensity, lifetime))
+
+    images = get_current_images(app)
+
+    assert images['intensity'].shape == (2, 3)
+    np.testing.assert_array_equal(images['intensity'], intensity.sum(axis=2))
+    assert images['lifetime'].shape == (2, 3)
+
+
+def test_get_current_images_rejects_non_2d_lifetime():
+    intensity = np.ones((2, 3), dtype=np.float32)
+    lifetime = np.ones((2, 3, 2), dtype=np.float32)
+    app = _App(_FovPreview(intensity, lifetime))
+
+    with pytest.raises(RuntimeError, match='lifetime image must be 2D'):
+        get_current_images(app)
+
+
 def test_get_current_images_requires_fov_preview():
     with pytest.raises(RuntimeError, match='FOV preview is not available'):
         get_current_images(_App())

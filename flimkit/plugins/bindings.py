@@ -57,8 +57,17 @@ def get_current_images(app) -> Dict[str, Any]:
             ('lifetime', '_lifetime_map'),
         ):
             image = getattr(preview, attribute, None)
-            if image is not None:
-                images[name] = np.array(image, copy=True)
+            if image is None:
+                continue
+            array = np.asarray(image)
+            if array.ndim < 2:
+                raise RuntimeError(f'{name} image must have at least two dimensions')
+            if name == 'intensity' and array.ndim > 2:
+                trailing_axes = tuple(range(2, array.ndim))
+                array = array.sum(axis=trailing_axes)
+            elif name == 'lifetime' and array.ndim != 2:
+                raise RuntimeError('lifetime image must be 2D')
+            images[name] = np.array(array, copy=True)
         return images
 
     return _run_on_ui_thread(app, snapshot)

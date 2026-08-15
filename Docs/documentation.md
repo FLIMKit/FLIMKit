@@ -1140,7 +1140,7 @@ def open_bridge(app):
     imported_ids = import_rois_geojson(app, rois, mode='append')
 ```
 
-`get_current_images(app)` returns a dictionary containing copies of the available `intensity` and `lifetime` arrays. An image that has not been calculated is omitted. Changing a returned array does not change the image held by FLIMKit.
+`get_current_images(app)` returns a dictionary containing 2D copies of the available `intensity` and `lifetime` arrays. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted. Changing a returned array does not change the image held by FLIMKit.
 
 `export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order with the origin at the top-left. Fractional coordinates are preserved. Rectangles and ellipses include their exact FLIMKit bounds in the feature properties; ellipse geometry is also represented by a 64-point polygon for other programs.
 
