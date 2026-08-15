@@ -157,34 +157,44 @@ def test_roi_bindings_require_roi_manager():
         import_rois_geojson(app, _polygon_payload())
 
 
-def test_timed_out_import_cannot_run_later(monkeypatch):
+def test_background_import_waits_for_ui_callback(monkeypatch):
     manager = RoiManager()
     preview = _FovPreview(roi_manager=manager)
     root = _QueuedRoot()
     app = _App(preview, root=root)
     errors = []
-    monkeypatch.setattr(plugin_bindings, '_UI_TIMEOUT_SECONDS', 0.01)
+    region_ids = []
+    monkeypatch.setattr(
+        plugin_bindings,
+        '_UI_TIMEOUT_SECONDS',
+        0.01,
+        raising=False,
+    )
 
     def import_in_background():
         try:
-            import_rois_geojson(app, _polygon_payload())
+            region_ids.extend(import_rois_geojson(app, _polygon_payload()))
         except BaseException as error:
             errors.append(error)
 
     worker = threading.Thread(target=import_in_background)
     worker.start()
-    worker.join(timeout=1)
+    callback = root.callbacks.get(timeout=2)
+    worker.join(timeout=0.05)
+
+    assert worker.is_alive()
+    assert errors == []
+    assert manager.get_all_regions() == []
+
+    callback()
+    worker.join(timeout=2)
 
     assert not worker.is_alive()
-    assert len(errors) == 1
-    assert isinstance(errors[0], TimeoutError)
-    assert manager.get_all_regions() == []
-
-    root.callbacks.get_nowait()()
-
-    assert manager.get_all_regions() == []
-    assert preview.redraw_count == 0
-    assert preview.save_count == 0
+    assert errors == []
+    assert len(region_ids) == 1
+    assert manager.get_region(region_ids[0]) is not None
+    assert preview.redraw_count == 1
+    assert preview.save_count == 1
 
 
 def test_import_refreshes_panel_attached_to_active_preview():

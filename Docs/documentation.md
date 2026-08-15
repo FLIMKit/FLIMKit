@@ -1146,7 +1146,7 @@ def open_bridge(app):
 
 `import_rois_geojson(app, payload, mode='append')` accepts a GeoJSON `Feature` or `FeatureCollection` and returns the new FLIMKit region IDs. A plain GeoJSON polygon without FLIMKit properties becomes a polygon ROI, which is the normal path for data from Fiji. `mode='replace'` validates the whole payload before clearing existing regions. Invalid or unsupported geometry raises `ValueError` without partly importing the payload.
 
-These functions may be called from a plugin's background thread. FLIMKit moves access to its GUI thread and waits for completion. A call raises `TimeoutError` if the GUI does not respond within ten seconds.
+These functions may be called from a plugin's background thread. FLIMKit moves access to its GUI thread and blocks the calling thread until the GUI operation completes or raises an error. Plugin callers that need cancellation should manage it outside these synchronous bindings.
 
 Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
 

@@ -2,7 +2,6 @@ import threading
 from typing import Any, Callable, Dict, List, TypeVar, cast
 
 
-_UI_TIMEOUT_SECONDS = 10.0
 _T = TypeVar('_T')
 
 
@@ -29,16 +28,9 @@ def _run_on_ui_thread(app, callback: Callable[[], _T]) -> _T:
         raise RuntimeError('FLIMKit UI is not available')
 
     done = threading.Event()
-    state_lock = threading.Lock()
     outcome = {}
-    state = {'started': False, 'cancelled': False}
 
     def run():
-        with state_lock:
-            if state['cancelled']:
-                done.set()
-                return
-            state['started'] = True
         try:
             outcome['value'] = callback()
         except BaseException as error:
@@ -47,12 +39,7 @@ def _run_on_ui_thread(app, callback: Callable[[], _T]) -> _T:
             done.set()
 
     root.after(0, run)
-    if not done.wait(_UI_TIMEOUT_SECONDS):
-        with state_lock:
-            if not state['started']:
-                state['cancelled'] = True
-                raise TimeoutError('Timed out waiting for the FLIMKit UI thread')
-        done.wait()
+    done.wait()
     if 'error' in outcome:
         raise outcome['error']
     return cast(_T, outcome.get('value'))
