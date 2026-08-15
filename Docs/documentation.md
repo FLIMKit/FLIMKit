@@ -1312,28 +1312,20 @@ A plugin is ordinary Python. It runs inside FLIMKit with your account's access t
 
 ---
 
-## QuPath and Fiji Bridges
+## QuPath Bridge
 
-ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The bridges remove that step: FLIMKit serves its images and ROIs over a loopback HTTP connection, and the other program reads and writes them directly.
+ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The [QuPath bridge](https://github.com/FLIMKit/flimkit-qupath-bridge) removes that step: FLIMKit serves its images and ROIs over a loopback HTTP connection, and QuPath reads and writes them directly.
 
-Two exist, sharing one wire protocol, so a client written against either works against the other.
+It runs inside a live QuPath session rather than as a script, so it works with the image you have open and the annotations you have drawn.
 
-| | [flimkit-qupath-bridge](https://github.com/FLIMKit/flimkit-qupath-bridge) | [flimkit-fiji-bridge](https://github.com/FLIMKit/flimkit-fiji-bridge) |
-|---|---|---|
-| Runs inside a live session | yes, as an extension | no, headless script |
-| FLIMKit to the other program | intensity and lifetime | intensity and lifetime |
-| ROIs back to FLIMKit | yes | yes |
-| FLIMKit ROIs into the other program | yes | not yet |
-| Adds images to the open project | yes | not applicable |
+### Installing
 
-### Installing the QuPath bridge
-
-Two halves, one on each side. Both are attached to the release.
+Two halves, one on each side. Both are attached to the bridge's release.
 
 1. Install `flimkit_qupath_bridge-*.whl` into the environment FLIMKit runs in, or drop it in `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
 
-QuPath 0.7.0 or newer is required. The add-on needs a FLIMKit with the plugin bindings and the startup hook, so 0.11.0 or newer.
+QuPath 0.7.0 or newer is required, and FLIMKit 0.11.0 or newer for the plugin bindings and the startup hook.
 
 ### Using it
 
@@ -1341,7 +1333,7 @@ The bridge starts with FLIMKit. There is nothing to launch and no port to config
 
 From QuPath:
 
-- **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield image in the viewer grid.
+- **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
 - **Send annotations to FLIMKit** posts the annotations on the current image.
 - **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
 
