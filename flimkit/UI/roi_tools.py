@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 import numpy as np
 
 
@@ -150,6 +150,190 @@ class RoiManager:
             # Gracefully handle corrupted JSON
             pass
         return manager
+
+    @staticmethod
+    def _geojson_coordinates(values: Any, minimum: int) -> List[List[float]]:
+        if not isinstance(values, list):
+            raise ValueError('GeoJSON coordinates must be a list')
+        coords = []
+        for point in values:
+            if not isinstance(point, (list, tuple)) or len(point) < 2:
+                raise ValueError('GeoJSON coordinates must contain [x, y] points')
+            x, y = float(point[0]), float(point[1])
+            if not np.isfinite(x) or not np.isfinite(y):
+                raise ValueError('GeoJSON coordinates must be finite')
+            coords.append([x, y])
+        if len(coords) < minimum:
+            raise ValueError(f'GeoJSON geometry requires at least {minimum} points')
+        return coords
+
+    @staticmethod
+    def _region_feature(region: Dict) -> Dict:
+        tool = region['tool']
+        coords = [[float(x), float(y)] for x, y in region['coords']]
+        properties = {
+            'id': region.get('id'),
+            'name': region.get('name', ''),
+            'tool_type': tool,
+            'color_idx': region.get('color_idx', 0),
+        }
+        statistic_keys = (
+            'tau_median', 'tau_stdev', 'photon_count', 'photon_stdev',
+        )
+        statistics = {
+            key: region.get('statistics', {}).get(key)
+            for key in statistic_keys
+            if region.get('statistics', {}).get(key) is not None
+        }
+        properties['statistics'] = statistics
+        properties.update(statistics)
+
+        if tool == 'rect':
+            if len(coords) != 2:
+                raise ValueError('Rectangle regions require two corner points')
+            (x1, y1), (x2, y2) = coords
+            ring = [
+                [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1],
+            ]
+            properties['bounds'] = coords
+        elif tool == 'ellipse':
+            if len(coords) != 2:
+                raise ValueError('Ellipse regions require two corner points')
+            (x1, y1), (x2, y2) = coords
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+            rx, ry = abs(x2 - x1) / 2, abs(y2 - y1) / 2
+            angles = np.linspace(0.0, 2.0 * np.pi, 64, endpoint=False)
+            ring = [
+                [float(cx + rx * np.cos(angle)),
+                 float(cy + ry * np.sin(angle))]
+                for angle in angles
+            ]
+            ring.append(ring[0].copy())
+            properties['bounds'] = coords
+        elif tool in ('polygon', 'freehand'):
+            if len(coords) < 3:
+                raise ValueError(f'{tool.capitalize()} regions require at least three points')
+            ring = coords.copy()
+            if ring[-1] != ring[0]:
+                ring.append(ring[0].copy())
+        else:
+            raise ValueError(f'Unsupported ROI tool: {tool}')
+
+        return {
+            'type': 'Feature',
+            'properties': properties,
+            'geometry': {'type': 'Polygon', 'coordinates': [ring]},
+        }
+
+    def to_geojson(self, region_ids: Optional[List[int]] = None) -> Dict:
+        """Return regions as a GeoJSON FeatureCollection in image-pixel coordinates."""
+        if region_ids is None:
+            regions = self.regions
+        else:
+            wanted = set(region_ids)
+            regions = [region for region in self.regions if region['id'] in wanted]
+            found = {region['id'] for region in regions}
+            missing = wanted - found
+            if missing:
+                raise ValueError(f'Region IDs not found: {sorted(missing)}')
+        return {
+            'type': 'FeatureCollection',
+            'features': [self._region_feature(region) for region in regions],
+            'flimkit': {
+                'coordinate_system': 'image-pixel',
+                'axis_order': 'xy',
+                'origin': 'top-left',
+            },
+        }
+
+    @classmethod
+    def _region_from_feature(cls, feature: Dict) -> Dict:
+        if not isinstance(feature, dict) or feature.get('type') != 'Feature':
+            raise ValueError('GeoJSON entries must be Features')
+        properties = feature.get('properties') or {}
+        geometry = feature.get('geometry') or {}
+        if not isinstance(properties, dict) or not isinstance(geometry, dict):
+            raise ValueError('GeoJSON Feature properties and geometry must be objects')
+
+        geometry_type = geometry.get('type')
+        raw_coordinates = geometry.get('coordinates')
+        tool = properties.get('tool_type')
+        if tool is None:
+            if geometry_type == 'Polygon':
+                tool = 'polygon'
+            elif geometry_type == 'LineString':
+                tool = 'freehand'
+        if tool not in ('rect', 'ellipse', 'polygon', 'freehand'):
+            raise ValueError(f'Unsupported GeoJSON geometry: {geometry_type}')
+
+        if geometry_type == 'Polygon':
+            if not isinstance(raw_coordinates, list) or not raw_coordinates:
+                raise ValueError('GeoJSON Polygon must contain an outer ring')
+            ring = cls._geojson_coordinates(raw_coordinates[0], 4)
+            if ring[0] == ring[-1]:
+                ring = ring[:-1]
+            if tool in ('rect', 'ellipse'):
+                bounds = properties.get('bounds')
+                if bounds is not None:
+                    coords = cls._geojson_coordinates(bounds, 2)
+                    if len(coords) != 2:
+                        raise ValueError('GeoJSON ROI bounds require two corner points')
+                else:
+                    xs = [point[0] for point in ring]
+                    ys = [point[1] for point in ring]
+                    coords = [[min(xs), min(ys)], [max(xs), max(ys)]]
+            else:
+                coords = cls._geojson_coordinates(ring, 3)
+        elif geometry_type == 'LineString' and tool in ('polygon', 'freehand'):
+            coords = cls._geojson_coordinates(raw_coordinates, 3)
+        else:
+            raise ValueError(f'Unsupported GeoJSON geometry: {geometry_type}')
+
+        statistics = properties.get('statistics')
+        if not isinstance(statistics, dict):
+            statistics = {}
+        for key in ('tau_median', 'tau_stdev', 'photon_count', 'photon_stdev'):
+            if key not in statistics and properties.get(key) is not None:
+                statistics[key] = properties[key]
+
+        color_idx = properties.get('color_idx')
+        return {
+            'name': str(properties.get('name', 'imported-region')),
+            'tool': tool,
+            'coords': coords,
+            'color_idx': int(color_idx) if color_idx is not None else None,
+            'statistics': statistics,
+        }
+
+    def add_geojson(self, payload: Dict, mode: str = 'append') -> List[int]:
+        """Validate and import a GeoJSON Feature or FeatureCollection."""
+        if mode not in ('append', 'replace'):
+            raise ValueError("mode must be 'append' or 'replace'")
+        if not isinstance(payload, dict):
+            raise ValueError('GeoJSON payload must be an object')
+        if payload.get('type') == 'FeatureCollection':
+            features = payload.get('features')
+            if not isinstance(features, list):
+                raise ValueError('GeoJSON FeatureCollection features must be a list')
+        elif payload.get('type') == 'Feature':
+            features = [payload]
+        else:
+            raise ValueError('GeoJSON must be a Feature or FeatureCollection')
+
+        pending = [self._region_from_feature(feature) for feature in features]
+        if mode == 'replace':
+            self.clear_all()
+
+        added = []
+        for item in pending:
+            region_id = self.add_region(
+                item['name'], item['tool'], item['coords'], item['color_idx'],
+            )
+            region = self.get_region(region_id)
+            if region is not None and item['statistics']:
+                region['statistics'] = item['statistics']
+            added.append(region_id)
+        return added
     
     def compute_region_mask(self, region_id: int, image_shape: Tuple[int, int]) -> Optional[np.ndarray]:
         """
@@ -699,67 +883,8 @@ class RoiAnalysisPanel:
             return
         
         try:
-            name = region.get('name', '')
-            tool = region.get('tool', '')
-            coords = region.get('coords', [])
-            stats = region.get('statistics', {})
-            
-            # Convert coordinates to GeoJSON geometry based on tool type
-            if tool == 'ellipse' and len(coords) >= 2:
-                # For ellipse, create a polygon from the two corner points
-                x1, y1 = coords[0]
-                x2, y2 = coords[1]
-                # Approximate ellipse as polygon
-                geometry = {
-                    'type': 'Polygon',
-                    'coordinates': [[
-                        [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
-                    ]]
-                }
-            elif tool == 'rect' and len(coords) >= 2:
-                # Rectangle from corner points
-                x1, y1 = coords[0]
-                x2, y2 = coords[1]
-                geometry = {
-                    'type': 'Polygon',
-                    'coordinates': [[
-                        [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
-                    ]]
-                }
-            elif tool == 'freehand' and len(coords) > 0:
-                # Freehand as LineString or Polygon
-                coords_2d = [[c[0], c[1]] for c in coords]
-                if len(coords) > 2:
-                    # Close the polygon if it's a closed shape
-                    if coords[0] == coords[-1]:
-                        geometry = {'type': 'Polygon', 'coordinates': [coords_2d]}
-                    else:
-                        geometry = {'type': 'LineString', 'coordinates': coords_2d}
-                else:
-                    geometry = {'type': 'LineString', 'coordinates': coords_2d}
-            elif tool == 'point' and len(coords) == 1:
-                geometry = {'type': 'Point', 'coordinates': coords[0]}
-            else:
-                # Fallback: if many points, make LineString
-                coords_2d = [[c[0], c[1]] for c in coords]
-                geometry = {'type': 'LineString', 'coordinates': coords_2d}
-            
-            # Build GeoJSON Feature
-            feature = {
-                'type': 'Feature',
-                'properties': {
-                    'id': region.get('id'),
-                    'name': name,
-                    'tool_type': tool,
-                    'tau_median': stats.get('tau_median', None),
-                    'tau_stdev': stats.get('tau_stdev', None),
-                    'photon_count': stats.get('photon_count', None),
-                    'photon_stdev': stats.get('photon_stdev', None)
-                },
-                'geometry': geometry
-            }
-            
-            # Write GeoJSON
+            payload = self.fov_preview._roi_manager.to_geojson([region_id])
+            feature = payload['features'][0]
             with open(geojson_file, 'w', encoding='utf-8') as f:
                 json.dump(feature, f, indent=2)
             
@@ -875,79 +1000,14 @@ class RoiAnalysisPanel:
             return
         
         try:
-            regions = self.fov_preview._roi_manager.get_all_regions()
-            features = []
-            
-            for region in regions:
-                region_id = region.get('id', '')
-                name = region.get('name', '')
-                tool = region.get('tool', '')
-                coords = region.get('coords', [])
-                stats = region.get('statistics', {})
-                
-                # Convert coordinates to GeoJSON geometry based on tool type
-                if tool == 'ellipse' and len(coords) >= 2:
-                    x1, y1 = coords[0]
-                    x2, y2 = coords[1]
-                    geometry = {
-                        'type': 'Polygon',
-                        'coordinates': [[
-                            [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
-                        ]]
-                    }
-                elif tool == 'rect' and len(coords) >= 2:
-                    x1, y1 = coords[0]
-                    x2, y2 = coords[1]
-                    geometry = {
-                        'type': 'Polygon',
-                        'coordinates': [[
-                            [x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]
-                        ]]
-                    }
-                elif tool == 'freehand' and len(coords) > 0:
-                    coords_2d = [[c[0], c[1]] for c in coords]
-                    if len(coords) > 2:
-                        if coords[0] == coords[-1]:
-                            geometry = {'type': 'Polygon', 'coordinates': [coords_2d]}
-                        else:
-                            geometry = {'type': 'LineString', 'coordinates': coords_2d}
-                    else:
-                        geometry = {'type': 'LineString', 'coordinates': coords_2d}
-                elif tool == 'point' and len(coords) == 1:
-                    geometry = {'type': 'Point', 'coordinates': coords[0]}
-                else:
-                    coords_2d = [[c[0], c[1]] for c in coords]
-                    geometry = {'type': 'LineString', 'coordinates': coords_2d}
-                
-                # Build feature
-                feature = {
-                    'type': 'Feature',
-                    'properties': {
-                        'id': region_id,
-                        'name': name,
-                        'tool_type': tool,
-                        'tau_median': stats.get('tau_median'),
-                        'tau_stdev': stats.get('tau_stdev'),
-                        'photon_count': stats.get('photon_count'),
-                        'photon_stdev': stats.get('photon_stdev')
-                    },
-                    'geometry': geometry
-                }
-                features.append(feature)
-            
+            payload = self.fov_preview._roi_manager.to_geojson()
+            features = payload['features']
             if not features:
                 messagebox.showwarning('No Data', 'No regions to export.')
                 return
             
-            # Build FeatureCollection
-            feature_collection = {
-                'type': 'FeatureCollection',
-                'features': features
-            }
-            
-            # Write GeoJSON
             with open(geojson_file, 'w', encoding='utf-8') as f:
-                json.dump(feature_collection, f, indent=2)
+                json.dump(payload, f, indent=2)
             
             messagebox.showinfo('Export Success', f"ROI data exported to:\n{Path(geojson_file).name}\n({len(features)} regions)")
             print(f"[Export] ROI GeoJSON: {geojson_file}")
@@ -974,92 +1034,14 @@ class RoiAnalysisPanel:
         try:
             with open(geojson_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
-            # Handle both single Feature and FeatureCollection
-            features = []
-            if data.get('type') == 'FeatureCollection':
-                features = data.get('features', [])
-            elif data.get('type') == 'Feature':
-                features = [data]
-            else:
-                messagebox.showerror('Invalid GeoJSON', 'File must contain Feature or FeatureCollection')
-                return
-            
-            if not features:
-                messagebox.showwarning('No Data', 'No features found in GeoJSON file')
-                return
-            
-            imported_count = 0
-            for feature in features:
-                try:
-                    props = feature.get('properties', {})
-                    geom = feature.get('geometry', {})
-                    
-                    name = props.get('name', 'imported-region')
-                    tool_type = props.get('tool_type', 'freehand')
-                    geom_type = geom.get('type', '')
-                    coords_raw = geom.get('coordinates', [])
-                    
-                    # Fallback: guess tool_type from geometry if not in properties
-                    if tool_type == 'freehand' and geom_type in ['Polygon', 'LineString']:
-                        tool_type = 'freehand' if geom_type == 'LineString' else 'freehand'
-                    elif geom_type == 'Point':
-                        tool_type = 'point'
-                    
-                    # Convert geometry coordinates to region coordinates
-                    coords = []
-                    if geom_type == 'Point':
-                        coords = [coords_raw]
-                    elif geom_type == 'LineString':
-                        coords = coords_raw
-                    elif geom_type == 'Polygon':
-                        # For polygons, use first ring (outer boundary)
-                        if coords_raw and len(coords_raw[0]) > 0:
-                            coords = coords_raw[0][:-1]
-                    elif geom_type == 'MultiPoint':
-                        coords = coords_raw
-                    else:
-                        print(f"[Import] Unsupported geometry type: {geom_type}")
-                        continue
-                    
-                    if not coords:
-                        print(f"[Import] Skipping {name}: no valid coordinates")
-                        continue
-                    
-                    # Add region to manager
-                    region_id = self.fov_preview._roi_manager.add_region(name, tool_type, coords)
-                    
-                    # Restore statistics if available
-                    regions = self.fov_preview._roi_manager.get_all_regions()
-                    region = next((r for r in regions if r.get('id') == region_id), None)
-                    if region:
-                        tau_med = props.get('tau_median')
-                        tau_std = props.get('tau_stdev')
-                        photon_cnt = props.get('photon_count')
-                        photon_std = props.get('photon_stdev')
-                        
-                        if tau_med is not None or tau_std is not None or photon_cnt is not None or photon_std is not None:
-                            region['statistics'] = {
-                                'tau_median': tau_med,
-                                'tau_stdev': tau_std,
-                                'photon_count': photon_cnt,
-                                'photon_stdev': photon_std
-                            }
-                    
-                    imported_count += 1
-                    print(f"[Import] Imported region: {name} ({tool_type})")
-                
-                except Exception as e:
-                    print(f"[Import] Error importing feature: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
+            imported_ids = self.fov_preview._roi_manager.add_geojson(data)
+            imported_count = len(imported_ids)
             
             if imported_count > 0:
                 self.fov_preview._redraw_region_overlays()
                 self.fov_preview._save_regions_update()
                 self._refresh_region_list()
-                messagebox.showinfo('Import Success', f"Imported {imported_count} region(s) from {json.loads(open(geojson_file).read()).get('type', 'GeoJSON file')}")
+                messagebox.showinfo('Import Success', f"Imported {imported_count} region(s) from {data.get('type', 'GeoJSON file')}")
             else:
                 messagebox.showwarning('Import Failed', 'No regions could be imported')
         
