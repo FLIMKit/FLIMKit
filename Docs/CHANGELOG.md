@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.11.0] - 2026-08-15
+
+### Added
+- Plugins can run code at startup. `@startup(id, order)` registers a callback that runs with the app once the window is built, so an add-on that has to be doing something from launch, such as a server, no longer has to wait for someone to pick a menu item. A startup that raises is reported on the console and the rest still run, so one broken add-on cannot stop FLIMKit opening. Callbacks run on the UI thread, so anything long-lived belongs on a thread the callback starts and returns from.
+- Plugins can add buttons to the ROI panel. `@panel_button(id, label, panel, order)` puts a button in the panel's action grid, for actions that belong beside the ROI controls rather than in a menu. `panel` accepts `roi`, and an unknown panel is refused at registration rather than ignored. The callback receives the same app object a `@tool` callback does.
+- Bridges to QuPath and Fiji, documented under QuPath and Fiji Bridges. FLIMKit serves its intensity and lifetime images and its ROIs over a loopback HTTP connection, and the other program reads and writes them directly instead of going through exported files. The QuPath bridge runs inside a live QuPath session and can put the FLIMKit images into the open project, so they sit beside a brightfield image in the viewer.
+
+### Fixed
+- Freehand ROIs whose outline crosses itself no longer export as self-intersecting GeoJSON polygons. RFC 7946 does not allow a ring to cross itself, so anything backed by JTS or GEOS refused them; QuPath rejected an entire FeatureCollection because one region in it was invalid. Such a ring is now repaired to its outer boundary and the feature carries `repaired: self-intersecting`. Rings that were already valid are exported unchanged. Three of five hand-drawn regions in a real session were affected. This needed a geometry library, so `shapely` is a new dependency.
+
 ## [0.10.1] - 2026-08-14
 
 ### Added
