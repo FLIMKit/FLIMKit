@@ -1201,6 +1201,38 @@ def mine(real, imag, sigma=1.0):
 
 The filter is then usable anywhere the `gaussian`, `median` and `wavelet` methods are, and `flimkit.phasor.filters.phasor_filter_methods()` lists it. Only the keyword arguments your function declares get passed to it. The three built-in methods cannot be overridden.
 
+### Running at startup
+
+A plugin that needs to be doing something from the moment FLIMKit opens, rather than waiting for a menu click, registers a startup callback:
+
+```python
+from flimkit.plugins import startup
+
+@startup('my_server', order=200)
+def start(app):
+    ...
+```
+
+The callback runs once, with the GUI object, after the window is built. `order` sorts them low first. A startup that raises is reported on the console and the remaining ones still run, so a broken plugin cannot stop FLIMKit opening.
+
+Do not block in a startup callback. It runs on the UI thread before the window is handed to the user, so anything long-lived belongs on a daemon thread that the callback starts and returns from.
+
+### Buttons in the ROI panel
+
+Some actions belong beside the controls they relate to rather than in a menu. A plugin can add a button to the ROI panel's action grid:
+
+```python
+from flimkit.plugins import panel_button
+
+@panel_button('send_somewhere', 'Send to Somewhere', panel='roi', order=200)
+def send(app):
+    ...
+```
+
+`panel` currently accepts `'roi'` only, and an unknown panel is refused at registration rather than ignored. Buttons appear under FLIMKit's own, three to a row, sorted by `order` then label. The callback receives the same GUI object a `@tool` callback does.
+
+`id` has to be unique across everything loaded, the same as tools. Registering an id twice is refused, and the error names the plugin that got there first.
+
 ### Installing a plugin
 
 Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.
