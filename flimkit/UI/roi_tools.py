@@ -187,7 +187,6 @@ class RoiManager:
             if region.get('statistics', {}).get(key) is not None
         }
         properties['statistics'] = statistics
-        properties.update(statistics)
 
         if tool == 'rect':
             if len(coords) != 2:

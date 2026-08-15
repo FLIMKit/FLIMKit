@@ -78,6 +78,13 @@ class TestRoiManager:
         expected_mask = manager.compute_region_mask(region_id, (16, 16))
 
         payload = manager.to_geojson()
+        properties = payload['features'][0]['properties']
+        assert properties['statistics'] == {
+            'tau_median': 2.75,
+            'photon_count': 1234,
+        }
+        assert 'tau_median' not in properties
+        assert 'photon_count' not in properties
         restored = RoiManager()
         restored_ids = restored.add_geojson(payload)
 
@@ -119,6 +126,31 @@ class TestRoiManager:
         assert region['name'] == 'Fiji ROI'
         assert region['tool'] == 'polygon'
         assert region['coords'] == [[1.25, 2.5], [8.5, 2.5], [4.0, 9.75]]
+
+    def test_geojson_import_accepts_legacy_flat_statistics(self, manager):
+        payload = {
+            'type': 'Feature',
+            'properties': {
+                'name': 'Legacy ROI',
+                'tau_median': 2.5,
+                'photon_count': 800,
+            },
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [[
+                    [1.0, 1.0], [5.0, 1.0], [3.0, 4.0], [1.0, 1.0],
+                ]],
+            },
+        }
+
+        region_ids = manager.add_geojson(payload)
+
+        region = manager.get_region(region_ids[0])
+        assert region is not None
+        assert region['statistics'] == {
+            'tau_median': 2.5,
+            'photon_count': 800,
+        }
 
     def test_geojson_replace_is_transactional(self, manager):
         manager.add_region('Existing', 'rect', [[0, 0], [2, 2]])
