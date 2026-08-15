@@ -7,6 +7,8 @@ _tools = {}
 _formats = {}
 _sniffers = []
 _phasor_filters = {}
+_panel_buttons = {}
+_startups = {}
 _version = 0
 _current_source = None
 MODALITIES = ('time', 'frequency', 'intensity')
@@ -32,6 +34,32 @@ class Tool:
 
     def __repr__(self):
         return f'<Tool {self.id} menu={self.menu!r} source={self.source!r}>'
+
+
+class PanelButton:
+
+    def __init__(self, id, label, callback, panel, order, source):
+        self.id = id
+        self.label = label
+        self.callback = callback
+        self.panel = panel
+        self.order = order
+        self.source = source
+
+    def __repr__(self):
+        return f'<PanelButton {self.id} panel={self.panel!r} source={self.source!r}>'
+
+
+class Startup:
+
+    def __init__(self, id, callback, order, source):
+        self.id = id
+        self.callback = callback
+        self.order = order
+        self.source = source
+
+    def __repr__(self):
+        return f'<Startup {self.id} source={self.source!r}>'
 
 
 class Format:
@@ -88,7 +116,8 @@ def version():
 
 def count():
     with _lock:
-        return len(_tools) + len(_formats) + len(_sniffers) + len(_phasor_filters)
+        return (len(_tools) + len(_formats) + len(_sniffers)
+                + len(_phasor_filters) + len(_panel_buttons) + len(_startups))
 
 
 def register_tool(id, label, callback, menu='Tools', order=100, source=None):
@@ -127,6 +156,89 @@ def tools(menu=None):
 def get_tool(id):
     with _lock:
         return _tools.get(id)
+
+
+PANELS = ('roi',)
+
+
+def register_panel_button(id, label, callback, panel='roi', order=100, source=None):
+    if not id or not isinstance(id, str):
+        raise PluginError(f'panel button id must be a non-empty string, got {id!r}')
+    if not callable(callback):
+        raise PluginError(f'panel button {id!r} callback is not callable: {callback!r}')
+    if panel not in PANELS:
+        raise PluginError(f'unknown panel {panel!r}, expected one of {PANELS}')
+    with _lock:
+        existing = _panel_buttons.get(id)
+        if existing is not None:
+            raise PluginError(
+                f'panel button id {id!r} already registered by {existing.source!r}, '
+                f'refused from {source or _source()!r}')
+        _panel_buttons[id] = PanelButton(
+            id, label, callback, panel, order, source or _source())
+        _bump()
+    return _panel_buttons[id]
+
+
+def panel_button(id, label, panel='roi', order=100):
+    def decorate(fn):
+        register_panel_button(id, label, fn, panel=panel, order=order)
+        return fn
+    return decorate
+
+
+def panel_buttons(panel=None):
+    with _lock:
+        found = list(_panel_buttons.values())
+    if panel is not None:
+        found = [b for b in found if b.panel == panel]
+    found.sort(key=lambda b: (b.order, b.label, b.id))
+    return found
+
+
+def get_panel_button(id):
+    with _lock:
+        return _panel_buttons.get(id)
+
+
+def register_startup(id, callback, order=100, source=None):
+    if not id or not isinstance(id, str):
+        raise PluginError(f'startup id must be a non-empty string, got {id!r}')
+    if not callable(callback):
+        raise PluginError(f'startup {id!r} callback is not callable: {callback!r}')
+    with _lock:
+        existing = _startups.get(id)
+        if existing is not None:
+            raise PluginError(
+                f'startup id {id!r} already registered by {existing.source!r}, '
+                f'refused from {source or _source()!r}')
+        _startups[id] = Startup(id, callback, order, source or _source())
+        _bump()
+    return _startups[id]
+
+
+def startup(id, order=100):
+    def decorate(fn):
+        register_startup(id, fn, order=order)
+        return fn
+    return decorate
+
+
+def startups():
+    with _lock:
+        found = list(_startups.values())
+    found.sort(key=lambda s: (s.order, s.id))
+    return found
+
+
+def run_startups(app):
+    failures = []
+    for entry in startups():
+        try:
+            entry.callback(app)
+        except Exception as exc:
+            failures.append((entry, exc))
+    return failures
 
 
 def register_format(id, label, exts=(), modality='time', reader=None, source=None):
@@ -289,4 +401,6 @@ def clear():
         _formats.clear()
         _sniffers.clear()
         _phasor_filters.clear()
+        _panel_buttons.clear()
+        _startups.clear()
         _bump()

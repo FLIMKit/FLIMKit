@@ -197,6 +197,13 @@ class _UIBuilder:
                 sys.stderr = orig_stderr
         threading.Thread(target=worker, daemon=True).start()
 
+    def _run_plugin_startups(self):
+        from flimkit import plugins
+        plugins.ensure_loaded()
+        for entry, exc in plugins.run_startups(self):
+            print(f'[Plugin] startup {entry.id} ({entry.source}) raised '
+                  f'{type(exc).__name__}: {exc}')
+
     def _build_plugin_menu(self, menu, path):
         from flimkit import plugins
         items = []
@@ -982,6 +989,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         roi_frame.columnconfigure(0, weight=1)
         roi_frame.rowconfigure(0, weight=1)
         self._roi_analysis_panel = RoiAnalysisPanel(roi_frame)
+        self._roi_analysis_panel.app = self
         self._roi_analysis_panel.grid(row=0, column=0, sticky='nsew')
         self._roi_analysis_frame = roi_frame
         self._stitch_tabs = ttk.Notebook(form_wrapper)
@@ -3872,6 +3880,7 @@ if HAS_TKMT:
             self.root = self.master
             self.root.minsize(760, 700)
             self._init_ui()
+            self._run_plugin_startups()
             self.run(cleanresize=False)
 
 class FLIMKitGUIFallback(_UIBuilder):
@@ -3880,6 +3889,7 @@ class FLIMKitGUIFallback(_UIBuilder):
         self.root.title('FLIMkit Analysis GUI')
         self.root.minsize(760, 700)
         self._init_ui()
+        self._run_plugin_startups()
         self.root.mainloop()
 
 def launch_gui():

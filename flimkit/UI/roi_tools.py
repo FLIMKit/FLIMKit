@@ -690,6 +690,7 @@ class RoiAnalysisPanel:
         self.frame.rowconfigure(2, weight=1)
         
         self.fov_preview = fov_preview
+        self.app = None
         self._current_mode = tk.StringVar(value='select')
         self._region_counter = 0
         # Maps tuple(sorted(region_ids)) → last fit result dict for that selection
@@ -790,12 +791,40 @@ class RoiAnalysisPanel:
         ttk.Button(actions_frame, text='View Fit', width=12,
                    command=self._view_last_fit_result).grid(row=2, column=2,
                    sticky='ew', padx=2, pady=(6, 2))
+        self._add_plugin_buttons(actions_frame, start_row=3)
 
         # Status label
         self._status = tk.StringVar(value='Ready - Select drawing mode or click regions to add')
         ttk.Label(self.frame, textvariable=self._status, foreground='grey', 
                   font=('Courier', 8)).grid(row=3, column=0, sticky='w', padx=2, pady=2)
     
+    def _add_plugin_buttons(self, parent, start_row):
+        try:
+            from flimkit import plugins
+            buttons = plugins.panel_buttons('roi')
+        except Exception:
+            return
+        for index, spec in enumerate(buttons):
+            row = start_row + index // 3
+            column = index % 3
+            ttk.Button(parent, text=spec.label, width=18,
+                       command=lambda spec=spec: self._run_plugin_button(spec)).grid(
+                           row=row, column=column, sticky='ew', padx=2, pady=2)
+
+    def _run_plugin_button(self, spec):
+        from tkinter import messagebox
+        if self.app is None:
+            messagebox.showerror(
+                spec.label,
+                f'{spec.label} is not connected to the FLIMKit window yet.')
+            return
+        try:
+            spec.callback(self.app)
+        except Exception as exc:
+            messagebox.showerror(
+                spec.label,
+                f'{spec.label} ({spec.source}) raised {type(exc).__name__}: {exc}')
+
     def _set_mode(self, mode: str):
         self._current_mode.set(mode)
         # Sync with FOVPreviewPanel's drawing mode for event handlers

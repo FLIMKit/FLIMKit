@@ -54,6 +54,7 @@ class ModeController:
 
                 if not hasattr(self.b, '_stitch_roi_panel'):
                     self.b._stitch_roi_panel = RoiAnalysisPanel(self.b._stitch_roi_analysis_frame)
+                    self.b._stitch_roi_panel.app = self.b
                     self.b._stitch_roi_panel.grid(row=0, column=0, sticky='nsew')
                     self.b._stitch_roi_panel.fov_preview = self.b._fov_preview
                     self.b._fov_preview._roi_analysis_panel = self.b._stitch_roi_panel
