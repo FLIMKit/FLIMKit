@@ -1,3 +1,4 @@
+import copy
 import json
 from typing import Any, List, Dict, Optional, Tuple
 import numpy as np
@@ -290,7 +291,9 @@ class RoiManager:
             raise ValueError(f'Unsupported GeoJSON geometry: {geometry_type}')
 
         statistics = properties.get('statistics')
-        if not isinstance(statistics, dict):
+        if isinstance(statistics, dict):
+            statistics = copy.deepcopy(statistics)
+        else:
             statistics = {}
         for key in ('tau_median', 'tau_stdev', 'photon_count', 'photon_stdev'):
             if key not in statistics and properties.get(key) is not None:

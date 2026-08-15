@@ -31,9 +31,16 @@ def _run_on_ui_thread(app, callback: Callable[[], _T]) -> _T:
         raise RuntimeError('FLIMKit UI is not available')
 
     done = threading.Event()
+    state_lock = threading.Lock()
     outcome = {}
+    state = {'started': False, 'cancelled': False}
 
     def run():
+        with state_lock:
+            if state['cancelled']:
+                done.set()
+                return
+            state['started'] = True
         try:
             outcome['value'] = callback()
         except BaseException as error:
@@ -43,7 +50,11 @@ def _run_on_ui_thread(app, callback: Callable[[], _T]) -> _T:
 
     root.after(0, run)
     if not done.wait(_UI_TIMEOUT_SECONDS):
-        raise TimeoutError('Timed out waiting for the FLIMKit UI thread')
+        with state_lock:
+            if not state['started']:
+                state['cancelled'] = True
+                raise TimeoutError('Timed out waiting for the FLIMKit UI thread')
+        done.wait()
     if 'error' in outcome:
         raise outcome['error']
     return cast(_T, outcome.get('value'))
@@ -88,7 +99,9 @@ def import_rois_geojson(app, payload: Dict, mode: str = 'append') -> List[int]:
             save = getattr(preview, '_save_regions_update', None)
             if callable(save):
                 save()
-            panel = getattr(app, '_roi_analysis_panel', None)
+            panel = getattr(preview, '_roi_analysis_panel', None)
+            if panel is None:
+                panel = getattr(app, '_roi_analysis_panel', None)
             refresh = getattr(panel, '_refresh_region_list', None)
             if callable(refresh):
                 refresh()

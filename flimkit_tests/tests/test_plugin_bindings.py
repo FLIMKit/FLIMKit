@@ -1,8 +1,11 @@
+import copy
 import threading
 from queue import Queue
 
 import numpy as np
 import pytest
+
+import flimkit.plugins.bindings as plugin_bindings
 
 from flimkit.plugins import (
     export_rois_geojson,
@@ -13,10 +16,11 @@ from flimkit.UI.roi_tools import RoiManager
 
 
 class _FovPreview:
-    def __init__(self, intensity=None, lifetime=None, roi_manager=None):
+    def __init__(self, intensity=None, lifetime=None, roi_manager=None, roi_panel=None):
         self._intensity_map = intensity
         self._lifetime_map = lifetime
         self._roi_manager = roi_manager
+        self._roi_analysis_panel = roi_panel
         self.redraw_count = 0
         self.save_count = 0
 
@@ -151,3 +155,74 @@ def test_roi_bindings_require_roi_manager():
         export_rois_geojson(app)
     with pytest.raises(RuntimeError, match='ROI manager is not available'):
         import_rois_geojson(app, _polygon_payload())
+
+
+def test_timed_out_import_cannot_run_later(monkeypatch):
+    manager = RoiManager()
+    preview = _FovPreview(roi_manager=manager)
+    root = _QueuedRoot()
+    app = _App(preview, root=root)
+    errors = []
+    monkeypatch.setattr(plugin_bindings, '_UI_TIMEOUT_SECONDS', 0.01)
+
+    def import_in_background():
+        try:
+            import_rois_geojson(app, _polygon_payload())
+        except BaseException as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=import_in_background)
+    worker.start()
+    worker.join(timeout=1)
+
+    assert not worker.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], TimeoutError)
+    assert manager.get_all_regions() == []
+
+    root.callbacks.get_nowait()()
+
+    assert manager.get_all_regions() == []
+    assert preview.redraw_count == 0
+    assert preview.save_count == 0
+
+
+def test_import_refreshes_panel_attached_to_active_preview():
+    manager = RoiManager()
+    active_panel = _Panel()
+    preview = _FovPreview(roi_manager=manager, roi_panel=active_panel)
+    hidden_panel = _Panel()
+    app = _App(preview, roi_panel=hidden_panel)
+
+    import_rois_geojson(app, _polygon_payload())
+
+    assert active_panel.refresh_count == 1
+    assert hidden_panel.refresh_count == 0
+
+
+def test_import_copies_statistics_without_mutating_payload():
+    manager = RoiManager()
+    app = _App(_FovPreview(roi_manager=manager))
+    payload = _polygon_payload()
+    properties = payload['features'][0]['properties']
+    properties['statistics'] = {'nested': {'value': 1}}
+    properties['tau_median'] = 2.5
+    original = copy.deepcopy(payload)
+
+    region_ids = import_rois_geojson(app, payload)
+
+    assert payload == original
+    region = manager.get_region(region_ids[0])
+    assert region is not None
+    assert region['statistics'] == {
+        'nested': {'value': 1},
+        'tau_median': 2.5,
+    }
+
+    properties['statistics']['nested']['value'] = 99
+    properties['statistics']['new'] = 'changed later'
+
+    assert region['statistics'] == {
+        'nested': {'value': 1},
+        'tau_median': 2.5,
+    }
