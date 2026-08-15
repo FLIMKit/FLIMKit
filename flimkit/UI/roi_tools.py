@@ -311,7 +311,7 @@ class RoiManager:
     def add_geojson(self, payload: Dict, mode: str = 'append') -> List[int]:
         """Validate and import a GeoJSON Feature or FeatureCollection."""
         if mode not in ('append', 'replace'):
-            raise ValueError("mode must be 'append' or 'replace'")
+            raise ValueError('mode must be append or replace')
         if not isinstance(payload, dict):
             raise ValueError('GeoJSON payload must be an object')
         if payload.get('type') == 'FeatureCollection':

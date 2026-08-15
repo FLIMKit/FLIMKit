@@ -1,8 +1,6 @@
 import threading
 from typing import Any, Callable, Dict, List, TypeVar, cast
 
-import numpy as np
-
 
 _UI_TIMEOUT_SECONDS = 10.0
 _T = TypeVar('_T')
@@ -60,8 +58,10 @@ def _run_on_ui_thread(app, callback: Callable[[], _T]) -> _T:
     return cast(_T, outcome.get('value'))
 
 
-def get_current_images(app) -> Dict[str, np.ndarray]:
+def get_current_images(app) -> Dict[str, Any]:
     """Return copies of the intensity and lifetime images currently shown."""
+    import numpy as np
+
     def snapshot():
         preview = _fov_preview(app)
         images = {}
