@@ -269,7 +269,13 @@ class RoiManager:
         if geometry_type == 'Polygon':
             if not isinstance(raw_coordinates, list) or not raw_coordinates:
                 raise ValueError('GeoJSON Polygon must contain an outer ring')
-            ring = cls._geojson_coordinates(raw_coordinates[0], 4)
+            outer_ring = raw_coordinates[0]
+            if isinstance(outer_ring, list) and len(outer_ring) < 4:
+                raise ValueError(
+                    'GeoJSON Polygon outer rings require at least four '
+                    'positions, including a repeated closing position',
+                )
+            ring = cls._geojson_coordinates(outer_ring, 4)
             if ring[0] == ring[-1]:
                 ring = ring[:-1]
             if tool in ('rect', 'ellipse'):

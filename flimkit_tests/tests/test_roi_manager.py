@@ -152,6 +152,30 @@ class TestRoiManager:
             'photon_count': 800,
         }
 
+    @pytest.mark.parametrize('ring', [
+        [[0, 0], [2, 0], [0, 0]],
+        [[0, 0], [2, 0], [1, 2]],
+    ])
+    def test_geojson_short_polygon_ring_explains_closing_position(
+        self,
+        manager,
+        ring,
+    ):
+        payload = {
+            'type': 'Feature',
+            'properties': {'name': 'Short ring'},
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [ring],
+            },
+        }
+
+        with pytest.raises(
+            ValueError,
+            match='at least four positions, including a repeated closing position',
+        ):
+            manager.add_geojson(payload)
+
     def test_geojson_replace_is_transactional(self, manager):
         manager.add_region('Existing', 'rect', [[0, 0], [2, 2]])
         invalid = {
