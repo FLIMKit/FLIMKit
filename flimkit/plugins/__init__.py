@@ -1,3 +1,4 @@
+from flimkit.plugins.bindings import get_current_images
 from flimkit.plugins.registry import (
     API_VERSION,
     Format,
@@ -77,6 +78,7 @@ __all__ = [
     'file_format',
     'format_sniffer',
     'formats',
+    'get_current_images',
     'get_format',
     'get_phasor_filter',
     'get_tool',
