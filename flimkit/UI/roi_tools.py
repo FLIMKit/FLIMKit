@@ -169,6 +169,26 @@ class RoiManager:
         return coords
 
     @staticmethod
+    def _outer_boundary(ring: List[List[float]]) -> Optional[List[List[float]]]:
+        from shapely.geometry import MultiPolygon, Polygon
+        polygon = Polygon(ring)
+        if polygon.is_valid:
+            return None
+        repaired = polygon.buffer(0)
+        if isinstance(repaired, MultiPolygon):
+            if not repaired.geoms:
+                return None
+            repaired = max(repaired.geoms, key=lambda part: part.area)
+        if repaired.is_empty or repaired.geom_type != 'Polygon':
+            return None
+        out = [[float(x), float(y)] for x, y in repaired.exterior.coords]
+        if len(out) < 4:
+            return None
+        if out[-1] != out[0]:
+            out.append(out[0][:])
+        return out
+
+    @staticmethod
     def _region_feature(region: Dict) -> Dict:
         tool = region['tool']
         coords = [[float(x), float(y)] for x, y in region['coords']]
@@ -216,6 +236,10 @@ class RoiManager:
             ring = coords.copy()
             if ring[-1] != ring[0]:
                 ring.append(ring[0].copy())
+            outer = RoiManager._outer_boundary(ring)
+            if outer is not None:
+                ring = outer
+                properties['repaired'] = 'self-intersecting'
         else:
             raise ValueError(f'Unsupported ROI tool: {tool}')
 

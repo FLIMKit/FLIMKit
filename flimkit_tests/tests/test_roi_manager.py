@@ -191,3 +191,27 @@ class TestRoiManager:
             manager.add_geojson(invalid, mode='replace')
 
         assert [region['name'] for region in manager.get_all_regions()] == ['Existing']
+
+    def test_geojson_repairs_self_intersecting_freehand(self, manager):
+        shapely = pytest.importorskip('shapely.geometry')
+        bowtie = [[0, 0], [10, 10], [10, 0], [0, 10]]
+        manager.add_region('Bowtie', 'freehand', bowtie)
+
+        feature = manager.to_geojson()['features'][0]
+        ring = feature['geometry']['coordinates'][0]
+
+        assert feature['properties']['repaired'] == 'self-intersecting'
+        assert shapely.Polygon(ring).is_valid
+        assert ring[0] == ring[-1]
+
+    def test_geojson_leaves_simple_freehand_untouched(self, manager):
+        shapely = pytest.importorskip('shapely.geometry')
+        square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+        manager.add_region('Square', 'freehand', square)
+
+        feature = manager.to_geojson()['features'][0]
+        ring = feature['geometry']['coordinates'][0]
+
+        assert 'repaired' not in feature['properties']
+        assert ring == [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+        assert shapely.Polygon(ring).is_valid
