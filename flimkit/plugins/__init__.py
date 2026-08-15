@@ -1,3 +1,8 @@
+from flimkit.plugins.bindings import (
+    export_rois_geojson,
+    get_current_images,
+    import_rois_geojson,
+)
 from flimkit.plugins.registry import (
     API_VERSION,
     Format,
@@ -72,14 +77,17 @@ __all__ = [
     'disabled_plugins',
     'ensure_loaded',
     'entry_points',
+    'export_rois_geojson',
     'extra_dirs',
     'failures',
     'file_format',
     'format_sniffer',
     'formats',
+    'get_current_images',
     'get_format',
     'get_phasor_filter',
     'get_tool',
+    'import_rois_geojson',
     'load_module',
     'load_path',
     'load_report',

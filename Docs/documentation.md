@@ -1118,6 +1118,39 @@ Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch 
 
 The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
 
+### Current images and ROIs
+
+Plugins can exchange the images and regions currently shown by FLIMKit without reading private GUI fields:
+
+```python
+from flimkit.plugins import (
+    export_rois_geojson,
+    get_current_images,
+    import_rois_geojson,
+    tool,
+)
+
+@tool(id='bridge_example', label='Bridge Example...', menu='Tools', order=900)
+def open_bridge(app):
+    current = get_current_images(app)
+    intensity = current['images'].get('intensity')
+    lifetime = current['images'].get('lifetime')
+    lifetime_unit = current['units'].get('lifetime')
+
+    rois = export_rois_geojson(app)
+    imported_ids = import_rois_geojson(app, rois, mode='append')
+```
+
+`get_current_images(app)` returns separate `images` and `units` dictionaries so metadata cannot collide with an image name. The available image names are `intensity` and `lifetime`; their units are `photons` and `ns`, respectively. Arrays are 2D copies. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted from both dictionaries. Changing a returned array does not change the image held by FLIMKit.
+
+This binding is limited to fitted lifetime and photon-count intensity images. Raw per-pixel decay histograms are not included. They require a separate transfer and metadata contract for the time-bin width, repetition rate and instrument response function.
+
+`export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order with the origin at the top-left. Fractional coordinates are preserved. ROI measurements are stored once under each feature's `statistics` property; import also accepts older payloads with flattened statistic fields. Rectangles and ellipses include their exact FLIMKit bounds in the feature properties; ellipse geometry is also represented by a 64-point polygon for other programs.
+
+`import_rois_geojson(app, payload, mode='append')` accepts a GeoJSON `Feature` or `FeatureCollection` and returns the new FLIMKit region IDs. A plain GeoJSON polygon without FLIMKit properties becomes a polygon ROI, which is the normal path for data from Fiji. `mode='replace'` validates the whole payload before clearing existing regions. Invalid or unsupported geometry raises `ValueError` without partly importing the payload.
+
+These functions may be called from a plugin's background thread. FLIMKit moves access to its GUI thread and blocks the calling thread until the GUI operation completes or raises an error. Plugin callers that need cancellation should manage it outside these synchronous bindings.
+
 Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
 
 Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
