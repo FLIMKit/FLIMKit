@@ -68,7 +68,17 @@ def get_current_images(app) -> Dict[str, Any]:
             elif name == 'lifetime' and array.ndim != 2:
                 raise RuntimeError('lifetime image must be 2D')
             images[name] = np.array(array, copy=True)
-        return images
+        units = {
+            'intensity': 'photons',
+            'lifetime': 'ns',
+        }
+        return {
+            'images': images,
+            'units': {
+                name: units[name]
+                for name in images
+            },
+        }
 
     return _run_on_ui_thread(app, snapshot)
 

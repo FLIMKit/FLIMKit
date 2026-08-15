@@ -70,27 +70,34 @@ def _polygon_payload():
     }
 
 
-def test_get_current_images_returns_named_copies():
+def test_get_current_images_returns_named_copies_and_units():
     intensity = np.arange(12, dtype=np.float32).reshape(3, 4)
     lifetime = intensity / 10.0
     app = _App(_FovPreview(intensity, lifetime))
 
-    images = get_current_images(app)
+    result = get_current_images(app)
+    images = result['images']
 
+    assert set(result) == {'images', 'units'}
     assert set(images) == {'intensity', 'lifetime'}
+    assert result['units'] == {
+        'intensity': 'photons',
+        'lifetime': 'ns',
+    }
     np.testing.assert_array_equal(images['intensity'], intensity)
     np.testing.assert_array_equal(images['lifetime'], lifetime)
     assert images['intensity'] is not intensity
     assert images['lifetime'] is not lifetime
 
 
-def test_get_current_images_omits_unavailable_images():
+def test_get_current_images_omits_unavailable_images_and_units():
     intensity = np.ones((2, 3), dtype=np.float32)
     app = _App(_FovPreview(intensity=intensity))
 
-    images = get_current_images(app)
+    result = get_current_images(app)
 
-    assert set(images) == {'intensity'}
+    assert set(result['images']) == {'intensity'}
+    assert result['units'] == {'intensity': 'photons'}
 
 
 def test_get_current_images_sums_trailing_intensity_axes():
@@ -98,7 +105,8 @@ def test_get_current_images_sums_trailing_intensity_axes():
     lifetime = np.ones((2, 3), dtype=np.float32)
     app = _App(_FovPreview(intensity, lifetime))
 
-    images = get_current_images(app)
+    result = get_current_images(app)
+    images = result['images']
 
     assert images['intensity'].shape == (2, 3)
     np.testing.assert_array_equal(images['intensity'], intensity.sum(axis=2))
@@ -136,7 +144,8 @@ def test_get_current_images_marshals_background_calls_to_ui_thread():
     worker.join(timeout=2)
 
     assert not worker.is_alive()
-    np.testing.assert_array_equal(result['intensity'], intensity)
+    np.testing.assert_array_equal(result['images']['intensity'], intensity)
+    assert result['units'] == {'intensity': 'photons'}
 
 
 def test_export_rois_geojson_uses_current_roi_manager():

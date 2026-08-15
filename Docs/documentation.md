@@ -1132,15 +1132,18 @@ from flimkit.plugins import (
 
 @tool(id='bridge_example', label='Bridge Example...', menu='Tools', order=900)
 def open_bridge(app):
-    images = get_current_images(app)
-    intensity = images.get('intensity')
-    lifetime = images.get('lifetime')
+    current = get_current_images(app)
+    intensity = current['images'].get('intensity')
+    lifetime = current['images'].get('lifetime')
+    lifetime_unit = current['units'].get('lifetime')
 
     rois = export_rois_geojson(app)
     imported_ids = import_rois_geojson(app, rois, mode='append')
 ```
 
-`get_current_images(app)` returns a dictionary containing 2D copies of the available `intensity` and `lifetime` arrays. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted. Changing a returned array does not change the image held by FLIMKit.
+`get_current_images(app)` returns separate `images` and `units` dictionaries so metadata cannot collide with an image name. The available image names are `intensity` and `lifetime`; their units are `photons` and `ns`, respectively. Arrays are 2D copies. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted from both dictionaries. Changing a returned array does not change the image held by FLIMKit.
+
+This binding is limited to fitted lifetime and photon-count intensity images. Raw per-pixel decay histograms are not included. They require a separate transfer and metadata contract for the time-bin width, repetition rate and instrument response function.
 
 `export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order with the origin at the top-left. Fractional coordinates are preserved. ROI measurements are stored once under each feature's `statistics` property; import also accepts older payloads with flattened statistic fields. Rectangles and ellipses include their exact FLIMKit bounds in the feature properties; ellipse geometry is also represented by a 64-point polygon for other programs.
 
