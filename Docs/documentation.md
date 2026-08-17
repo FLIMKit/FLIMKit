@@ -1312,6 +1312,60 @@ A plugin is ordinary Python. It runs inside FLIMKit with your account's access t
 
 ---
 
+## QuPath Bridge
+
+ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The [QuPath bridge](https://github.com/FLIMKit/flimkit-qupath-bridge) removes that step: FLIMKit serves its images and ROIs over a loopback HTTP connection, and QuPath reads and writes them directly.
+
+It runs inside a live QuPath session rather than as a script, so it works with the image you have open and the annotations you have drawn.
+
+### Installing
+
+Two halves, one on each side. Both are attached to the bridge's release.
+
+1. Install `flimkit_qupath_bridge-*.whl` into the environment FLIMKit runs in, or drop it in `~/.flimkit/plugins/`.
+2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
+
+QuPath 0.7.0 or newer is required, and FLIMKit 0.11.0 or newer for the plugin bindings and the startup hook.
+
+### Using it
+
+The bridge starts with FLIMKit. There is nothing to launch and no port to configure. FLIMKit writes its address and a generated token to `~/.flimkit/qupath-bridge.json`, and QuPath reads that file, so `Extensions > FLIMKit bridge > Connect` needs nothing typed in. If port 8765 is busy an ephemeral one is used and recorded in the same file.
+
+From QuPath:
+
+- **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
+- **Send annotations to FLIMKit** posts the annotations on the current image.
+- **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
+
+From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
+
+### Co-registration
+
+FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on another image has to be transformed into that space first. That happens on the QuPath side.
+
+This needs QuPath's [alignment extension](https://github.com/qupath/qupath-extension-align), which QuPath does not ship and which has to be installed separately. The bridge deliberately contains no alignment code of its own.
+
+The alignment extension does not accept 32-bit float images, and the bridge serves both the intensity and the lifetime map as 32-bit float so that real photon counts and real nanoseconds survive. Align on a 16-bit intensity image of the same field of view instead. The transform is valid for the FLIM images as well, since every image of that field shares one pixel grid, and intensity is the better registration target anyway because it carries the structure a lifetime map often lacks.
+
+1. Open the brightfield or mIF image and add the FLIMKit images to the same project.
+2. Add a 16-bit intensity image of the same field of view.
+3. Align the brightfield against it and transfer the annotations onto it.
+4. Send the annotations on the aligned image to FLIMKit.
+
+Without the alignment extension you can still exchange images and ROIs, but only between images that already share a coordinate system.
+
+### Security
+
+The bridge listens on `127.0.0.1` only, and refuses any request whose `Host` header is not localhost, which stops a web page reaching it by resolving its own hostname to your machine. Every endpoint except the status check requires the token.
+
+Both programs therefore have to be on the same machine. If they are not, forward the port over SSH rather than exposing it:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 you@the-flimkit-machine
+```
+
+---
+
 ## Testing
 
 ```bash
