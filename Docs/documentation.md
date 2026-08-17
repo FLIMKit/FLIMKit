@@ -1345,9 +1345,12 @@ FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on anoth
 
 This needs QuPath's [alignment extension](https://github.com/qupath/qupath-extension-align), which QuPath does not ship and which has to be installed separately. The bridge deliberately contains no alignment code of its own.
 
+The alignment extension does not accept 32-bit float images, and the bridge serves both the intensity and the lifetime map as 32-bit float so that real photon counts and real nanoseconds survive. Align on a 16-bit intensity image of the same field of view instead. The transform is valid for the FLIM images as well, since every image of that field shares one pixel grid, and intensity is the better registration target anyway because it carries the structure a lifetime map often lacks.
+
 1. Open the brightfield or mIF image and add the FLIMKit images to the same project.
-2. Align them with the alignment extension and transfer the annotations onto the FLIM image.
-3. Send the annotations on the FLIM image to FLIMKit.
+2. Add a 16-bit intensity image of the same field of view.
+3. Align the brightfield against it and transfer the annotations onto it.
+4. Send the annotations on the aligned image to FLIMKit.
 
 Without the alignment extension you can still exchange images and ROIs, but only between images that already share a coordinate system.
 
