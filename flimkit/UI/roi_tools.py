@@ -799,6 +799,7 @@ class RoiAnalysisPanel:
                   font=('Courier', 8)).grid(row=3, column=0, sticky='w', padx=2, pady=2)
     
     def _add_plugin_buttons(self, parent, start_row):
+        from tkinter import ttk
         try:
             from flimkit import plugins
             buttons = plugins.panel_buttons('roi')
