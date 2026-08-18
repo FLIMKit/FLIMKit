@@ -12,7 +12,7 @@ from flimkit.plugins import (
     get_current_images,
     import_rois_geojson,
 )
-from flimkit.UI.roi_tools import RoiManager
+from flimkit.utils.roi import RoiManager
 
 
 class _FovPreview:

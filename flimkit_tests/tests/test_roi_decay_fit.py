@@ -13,7 +13,7 @@ All tests use MockPTUFile so no real PTU file is needed.
 import numpy as np
 import pytest
 
-from flimkit.UI.roi_tools import RoiManager
+from flimkit.utils.roi import RoiManager
 from flimkit.FLIM.fitters import fit_summed
 from flimkit.FLIM.irf_tools import gaussian_irf
 from mock_data import (

@@ -916,10 +916,8 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 - **`FOVPreviewPanel`** - right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active. Caches the last fitted IRF prompt (`_irf_prompt`) so per-ROI fits can reuse it.
 
 #### `roi_tools.py`
-- **`RoiManager`** - stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence.
-  - `.add_region(name, tool, coords)` - register a new region, returns its integer ID
-  - `.compute_region_mask(region_id, image_shape)` - boolean (H×W) mask for a region
-  - `.to_json()` / `.from_json(json_str)` - serialise/deserialise for session files
+The region model itself lives in `flimkit/utils/roi.py` so that headless and web use can reach it without Tkinter. `roi_tools` re-exports `RoiManager` and the patch helpers, so existing imports keep working.
+
 - **`RoiAnalysisPanel`** - tab panel for region drawing, statistics display, and per-ROI fitting.
   - Drawing modes: Select, Rectangle, Ellipse, Polygon, Freehand
   - Per-region stats: τ_mean, τ_median, τ_stdev, photon count (all from the loaded lifetime/intensity maps)
@@ -947,6 +945,30 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 ---
 
 ### `flimkit.utils` - Shared Utilities
+
+#### `roi.py`
+- **`RoiManager`** - stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence. No GUI toolkit, so headless scripts and either frontend can use it.
+  - `.add_region(name, tool, coords)` - register a new region, returns its integer ID
+  - `.compute_region_mask(region_id, image_shape)` - boolean (H×W) mask for a region
+  - `.to_json()` / `.from_json(json_str)` - serialise/deserialise for session files
+  - `.to_geojson(region_ids=None)` / `.add_geojson(payload, mode='append')` - GeoJSON export and import, with self-intersecting polygon repair
+- **`get_rectangle_patch(...)`** / **`get_ellipse_patch(...)`** / **`get_polygon_patch(...)`** - matplotlib patches from region coordinates
+
+#### `display.py`
+- **`load_zstack_display_slices(group_dir, ptu_dir=None, region=None)`** - per-slice pixel maps, decays and reference fit for a z-stack output directory
+- **`compute_weighted_lifetime(pixel_maps, intensity, n_exp=2, weighting='amplitude')`** - amplitude- or intensity-weighted mean lifetime map
+- **`apply_color_scale(image, vmin=None, vmax=None, gamma=1.0, percentile_auto=(2, 98))`** - normalise a map for display, with percentile autoscaling
+- **`get_colormap(name='viridis')`** - colormap lookup against the `COLORMAPS` table
+- **`compute_region_stats(lifetime_map, intensity_map, region_mask, full_stats=False)`** - τ and photon statistics inside a mask
+- **`mask_to_rgba(mask, color=(1.0, 1.0, 1.0), alpha=0.3)`** - boolean mask as an RGBA overlay
+
+#### `config_snapshot.py`
+- **`_C()`** - cached dict snapshot of `configs.py`, read by both frontends when building fit arguments
+
+#### `session.py`
+- **`_reconstruct_dict_from_session(session_data, key)`** - rebuild a nested dict from the flattened `*_json` and `*_arr_*` keys in a session NPZ
+- **`_safe_array_from_json(value)`** - coerce a session value back to a NumPy array
+- **`_parse_summary(captured_log)`** - `name = value unit` lines from captured fit output as table rows
 
 #### `plotting.py`
 - **`plot_summed(...)`** - main summed-fit figure: log-scale decay + model overlay, weighted residuals, parameter table
@@ -990,7 +1012,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │   │
 │   ├── UI/
 │   │   ├── gui.py                 # Tkinter desktop GUI
-│   │   ├── roi_tools.py           # ROI drawing panel, RoiManager, per-ROI decay fitting
+│   │   ├── roi_tools.py           # ROI drawing panel, per-ROI decay fitting
 │   │   └── phasor_panel.py        # Embedded phasor view panel
 │   │
 │   ├── synth.py                   # Synthetic known-truth data generation
@@ -1029,6 +1051,10 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │   │   └── tools.py               # Intensity images, cell masking
 │   │
 │   └── utils/
+│       ├── roi.py                 # RoiManager - region geometry, masks, GeoJSON
+│       ├── display.py             # Display scaling, colormaps, region stats
+│       ├── config_snapshot.py     # Cached snapshot of configs.py
+│       ├── session.py             # Session NPZ dict/array helpers
 │       ├── plotting.py            # Decay + pixel map plots
 │       ├── enhanced_outputs.py    # TIFF exports, summary text
 │       ├── lifetime_image.py      # Colourised lifetime images

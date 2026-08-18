@@ -13,8 +13,9 @@ import matplotlib
 import matplotlib.image as mpimg
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from flimkit.UI import flim_display
-from flimkit.UI.roi_tools import RoiManager, RoiAnalysisPanel
+from flimkit.utils import display
+from flimkit.utils.roi import RoiManager
+from flimkit.UI.roi_tools import RoiAnalysisPanel
 
 class FOVPreviewPanel:
     def __init__(self, parent):
@@ -84,7 +85,7 @@ class FOVPreviewPanel:
         self._cmap_combo = ttk.Combobox(ctrl_frame, textvariable=self._sv_cmap, 
                                  state='readonly', width=10)
         self._cmap_combo.grid(row=1, column=4, sticky='w', padx=2)
-        self._cmap_combo['values'] = list(flim_display.COLORMAPS.keys())
+        self._cmap_combo['values'] = list(display.COLORMAPS.keys())
         ttk.Button(ctrl_frame, text='Update', width=8, command=self._update_flim_display).grid(row=1, column=5, sticky='w', padx=2)
         self._bv_show_decay = tk.BooleanVar(value=True)
         ttk.Checkbutton(ctrl_frame, text='Show Decay Plot',
@@ -233,7 +234,7 @@ class FOVPreviewPanel:
                     intensity = stack.sum(axis=2)
             if intensity is None:
                 intensity = np.ones((512, 512), dtype=np.float32)
-            from flimkit.UI.flim_display import compute_weighted_lifetime
+            from flimkit.utils.display import compute_weighted_lifetime
             pixel_maps = fit_result.get('pixel_maps')
             if pixel_maps is None and canvas is not None:
                 pixel_maps = {k: v for k, v in canvas.items() 
@@ -280,13 +281,13 @@ class FOVPreviewPanel:
             self._strip_image_axes(self._ax_img)
             self._ax_flim.clear()
             if self._lifetime_map is not None and np.any(~np.isnan(self._lifetime_map)):
-                scaled = flim_display.apply_color_scale(
+                scaled = display.apply_color_scale(
                     self._lifetime_map,
                     vmin=self._flim_color_scale['vmin'],
                     vmax=self._flim_color_scale['vmax'],
                     gamma=self._flim_color_scale['gamma'],
                 )
-                cmap = flim_display.get_colormap(self._flim_color_scale['cmap'])
+                cmap = display.get_colormap(self._flim_color_scale['cmap'])
                 cmap.set_bad(color='black')
                 im = self._ax_flim.imshow(scaled, cmap=cmap, origin='upper', vmin=0, vmax=1)
                 self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold', color='white')
@@ -574,7 +575,7 @@ class FOVPreviewPanel:
         import numpy as np
         if self._pixel_maps is None or self._intensity_map is None:
             return
-        from flimkit.UI.flim_display import compute_weighted_lifetime
+        from flimkit.utils.display import compute_weighted_lifetime
         try:
             lifetime_map = compute_weighted_lifetime(
                 self._pixel_maps, self._intensity_map, n_exp=self._n_exp,
@@ -630,13 +631,13 @@ class FOVPreviewPanel:
             self._flim_color_scale['gamma'] = gamma
             self._flim_color_scale['cmap'] = cmap_name
             self._save_color_scale_update()
-            scaled = flim_display.apply_color_scale(
+            scaled = display.apply_color_scale(
                 self._lifetime_map, vmin=vmin, vmax=vmax, gamma=gamma
             )
             self._ax_flim.clear()
             self._ax_cbar.clear()
             self._flim_cbar = None
-            cmap = flim_display.get_colormap(cmap_name)
+            cmap = display.get_colormap(cmap_name)
             cmap.set_bad(color='black')
             im = self._ax_flim.imshow(scaled, cmap=cmap, origin='upper', vmin=0, vmax=1)
             self._ax_flim.set_title('FLIM Lifetime (ns)', fontsize=9, fontweight='bold', color='white')
@@ -722,7 +723,7 @@ class FOVPreviewPanel:
             print(f"[ROI Manager] Could not load regions: {e}")
     def _redraw_region_overlays(self):
         import matplotlib.patches as mpatches
-        from flimkit.UI.roi_tools import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
+        from flimkit.utils.roi import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
         target_axes = [ax for ax in (self._ax_flim, self._ax_img) if ax.get_visible()]
         for patches in self._roi_patches.values():
             for patch in (patches if isinstance(patches, list) else [patches]):
@@ -937,13 +938,13 @@ class FOVPreviewPanel:
         if self._ax_flim.get_visible():
             if self._lifetime_map is not None:
                 import numpy as np
-                scaled = flim_display.apply_color_scale(
+                scaled = display.apply_color_scale(
                     self._lifetime_map,
                     vmin=self._flim_color_scale['vmin'],
                     vmax=self._flim_color_scale['vmax'],
                     gamma=self._flim_color_scale['gamma'],
                 )
-                cmap = flim_display.get_colormap(self._flim_color_scale['cmap'])
+                cmap = display.get_colormap(self._flim_color_scale['cmap'])
                 cmap.set_bad(color='black')
                 im = self._ax_flim.imshow(scaled, cmap=cmap, origin='upper',
                                            vmin=0, vmax=1)

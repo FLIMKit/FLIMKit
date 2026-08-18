@@ -11,18 +11,6 @@ _ICON_XLIF = 'T'
 _ICON_ZSTACK = 'Z'
 
 class ProjectBrowserPanel:
-    """
-    Left-sidebar scan browser.
-
-    Shows one row per scan:
-        ● R_2   (tiled, session exists)
-        ○ FOV1  (single FOV, no session)
-
-    Clicking a row:
-      - switches the active mode panel (Single FOV / Tile Stitch)
-      - populates every relevant StringVar in FLIMKitApp
-      - triggers auto-load of the session .npz if one exists
-    """
 
     def __init__(self, parent, app, width=170):
         self._app = app
@@ -78,17 +66,6 @@ class ProjectBrowserPanel:
         output_prefix=None,
         ptu_dir=None,
     ):
-        """
-        Call this after a fit completes so the project file is updated and
-        the session indicator refreshes.
-
-        Parameters
-        ----------
-        stem          : scan stem (no extension)
-        out_st        : base output dir used by the stitch/tile pipeline
-        output_prefix : output prefix used by the FOV pipeline
-        ptu_dir       : PTU tile dir (pass if it changed during the run)
-        """
         if self._project is None:
             return
         self._project.update_after_fit(
@@ -181,7 +158,7 @@ class ProjectBrowserPanel:
                 type_tag = _ICON_ZSTACK
             else:
                 type_tag = _ICON_FOV
-            label = f"{session_dot} {type_tag} {stem}"
+            label = f'{session_dot} {type_tag} {stem}'
             self._lb.insert(tk.END, label)
             self._stems.append(stem)
         n = len(self._stems)
@@ -261,7 +238,7 @@ class ProjectBrowserPanel:
                 app.sv_out_fov.set(rec.stem)
             if rec.session_path and hasattr(app, '_fov_preview'):
                 try:
-                    from flimkit.UI.flim_display import load_zstack_display_slices
+                    from flimkit.utils.display import load_zstack_display_slices
                     group_dir = Path(rec.session_path).parent
                     slices = load_zstack_display_slices(
                         group_dir, ptu_dir=rec.ptu_dir, region=rec.stem)

@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Optional
 import numpy as np
 from flimkit.UI.fit_help import help_button
+from flimkit.utils.config_snapshot import _C
+from flimkit.utils.session import (
+    _reconstruct_dict_from_session,
+    _safe_array_from_json,
+    _parse_summary,
+)
 try:
     from tkinterdnd2 import DND_FILES, DND_TEXT
     HAS_DND = True
@@ -23,87 +29,6 @@ def _enable_dnd(root):
         return True
     except Exception:
         return False
-
-_cfg: dict = {}
-
-def _C() -> dict:
-    if not _cfg:
-        from flimkit.configs import (
-            n_exp, Tau_min, Tau_max, D_mode, binning_factor,
-            MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population,
-            de_maxiter, n_workers, OUT_NAME, IRF_BINS, IRF_FIT_WIDTH,
-            IRF_FWHM, channels, TAU_DISPLAY_MIN, TAU_DISPLAY_MAX,
-            INTENSITY_DISPLAY_MIN, INTENSITY_DISPLAY_MAX,
-            MACHINE_IRF_DIR, MACHINE_IRF_DEFAULT_PATH,
-            MACHINE_IRF_ALIGN_ANCHOR, MACHINE_IRF_REDUCER,
-        )
-        _cfg.update(
-            n_exp=n_exp, Tau_min=Tau_min, Tau_max=Tau_max, D_mode=D_mode,
-            binning_factor=binning_factor, MIN_PHOTONS_PERPIX=MIN_PHOTONS_PERPIX,
-            Optimizer=Optimizer, lm_restarts=lm_restarts,
-            de_population=de_population, de_maxiter=de_maxiter,
-            n_workers=n_workers, OUT_NAME=OUT_NAME,
-            IRF_BINS=IRF_BINS, IRF_FIT_WIDTH=IRF_FIT_WIDTH, IRF_FWHM=IRF_FWHM,
-            channels=channels,
-            TAU_DISPLAY_MIN=TAU_DISPLAY_MIN, TAU_DISPLAY_MAX=TAU_DISPLAY_MAX,
-            INTENSITY_DISPLAY_MIN=INTENSITY_DISPLAY_MIN,
-            INTENSITY_DISPLAY_MAX=INTENSITY_DISPLAY_MAX,
-            MACHINE_IRF_DIR=MACHINE_IRF_DIR,
-            MACHINE_IRF_DEFAULT_PATH=MACHINE_IRF_DEFAULT_PATH,
-            MACHINE_IRF_ALIGN_ANCHOR=MACHINE_IRF_ALIGN_ANCHOR,
-            MACHINE_IRF_REDUCER=MACHINE_IRF_REDUCER,
-        )
-    return _cfg
-
-def _reconstruct_dict_from_session(session_data: dict, key: str) -> dict:
-    import json
-    result = {}
-    json_str = session_data.get(f'{key}_json')
-    if json_str:
-        if isinstance(json_str, (bytes, np.ndarray)):
-            json_str = json_str.item() if hasattr(json_str, 'item') else json_str.decode()
-        try:
-            result = json.loads(json_str)
-        except Exception:
-            pass
-    prefix = f'{key}_arr_'
-    for skey, sval in session_data.items():
-        if skey.startswith(prefix) and isinstance(sval, np.ndarray):
-            result[skey[len(prefix):]] = sval
-    return result
-
-def _safe_array_from_json(value) -> np.ndarray:
-    if isinstance(value, np.ndarray):
-        return value
-    if isinstance(value, (bytes, np.ndarray)):
-        if hasattr(value, 'item'):
-            value = value.item()
-        else:
-            value = value.decode() if isinstance(value, bytes) else str(value)
-    if isinstance(value, str):
-        try:
-            import re
-            value = re.sub(r'\s+', ' ', value.strip())
-            value = value.replace('e+', 'e+').replace('e-', 'e-')
-            return np.fromstring(value.strip('[]'), sep=' ')
-        except Exception:
-            pass
-    return np.asarray(value)
-
-def _parse_summary(captured_log: str) -> list:
-    rows = []
-    for line in captured_log.splitlines():
-        if 'tau' in line.lower() and '=' in line:
-            parts = line.split('=', 1)
-            if len(parts) == 2:
-                param = parts[0].strip()
-                rest = parts[1].strip()
-                val_unit = rest.split()
-                if len(val_unit) >= 2:
-                    rows.append((param, val_unit[0], val_unit[1]))
-                else:
-                    rows.append((param, rest, ''))
-    return rows
 
 class _Redirect:
 
