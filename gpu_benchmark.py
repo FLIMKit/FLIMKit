@@ -387,6 +387,9 @@ def main():
         print(f'  {"also_available":16s} {torch_name}, '
               'the path CUDA and ROCm take')
 
+    needs_primary = bool({'grid', 'kernels', 'blocks'} - skip)
+    if not needs_primary and sides:
+        side = min(sides)
     banner(f'Building a {side}x{side}x{args.bins} field')
     stack, irf = synthetic_field(side, args.bins)
     print(f'  {stack.nbytes / 1e9:.2f} GB as {stack.dtype}, '
@@ -482,11 +485,22 @@ def main():
             if wide == side:
                 field = stack
             else:
-                field, _ = synthetic_field(wide, args.bins)
+                try:
+                    field, _ = synthetic_field(wide, args.bins)
+                except MemoryError:
+                    print(f'  {f"{wide}x{wide}":>11} not enough memory to build the field')
+                    continue
             working = wide * wide * args.bins * 4
             row = {'gigabytes_float32': round(working / 1e9, 3)}
-            row['gpu'], _ = run_per_pixel(fitters, field, irf, popt, (lo, hi),
-                                          args.bins, 1, True, True, backend)
+            try:
+                row['gpu'], _ = run_per_pixel(fitters, field, irf, popt, (lo, hi),
+                                              args.bins, 1, True, True, backend)
+            except Exception as problem:
+                print(f'  {f"{wide}x{wide}":>11} {working / 1e9:>11.2f}GB  GPU run '
+                      f'failed: {type(problem).__name__}: {problem}')
+                if field is not stack:
+                    del field
+                continue
             if not args.no_cpu:
                 row['cpu'], _ = run_per_pixel(fitters, field, irf, popt, (lo, hi),
                                               args.bins, 1, True, False, None)
@@ -504,8 +518,8 @@ def main():
     blocks = {}
     if 'blocks' not in skip and backend is not None:
         banner('Block budget, same fit, 1600 points')
-        print(f'  {"budget":>9} {"blocks":>7} {"seconds":>9} '
-              f'{"agrees with the largest budget":>31}')
+        print(f'  {"budget":>9} {"blocks":>7} {"seconds":>9} {"pixels that differ":>19} '
+              f'{"worst gap":>12}')
         fitters = load_fitters(SCALING_GRID)
         run_per_pixel(fitters, stack[:64, :64], irf, popt, (lo, hi), args.bins,
                       1, True, True, backend)
@@ -522,21 +536,26 @@ def main():
                 entry['blocks'] = int(np.ceil(pixels / per_block))
                 if reference is None:
                     reference = tau
-                    entry['identical_to_largest_budget'] = True
+                    entry['pixels_differing'] = 0
+                    entry['worst_gap_ns'] = 0.0
                 else:
                     both = np.isfinite(tau) & np.isfinite(reference)
-                    entry['identical_to_largest_budget'] = bool(
-                        np.array_equal(tau[both], reference[both]))
+                    gap = np.abs(tau[both] - reference[both])
+                    entry['pixels_differing'] = int((gap > 0).sum())
+                    entry['worst_gap_ns'] = float(gap.max()) if gap.size else 0.0
+                entry['identical_to_largest_budget'] = entry['pixels_differing'] == 0
                 blocks[megabytes] = entry
+                differing = f'{entry["pixels_differing"]:,} of {pixels:,}'
                 print(f'  {f"{megabytes} MB":>9} {entry["blocks"]:>7} '
-                      f'{entry["seconds"]:>8.2f}s '
-                      f'{str(entry["identical_to_largest_budget"]):>31}')
+                      f'{entry["seconds"]:>8.2f}s {differing:>19} '
+                      f'{entry["worst_gap_ns"]:>10.2e}ns')
         finally:
             if previous is None:
                 os.environ.pop('FLIMKIT_GPU_BLOCK_BYTES', None)
             else:
                 os.environ['FLIMKIT_GPU_BLOCK_BYTES'] = previous
-        print('  a smaller budget should only cost time, never change an answer')
+        print('  the grid step at 2 ns is about 0.011 ns, so a gap that size is one '
+              'grid point, not a different answer')
     results['blocks'] = {str(k): v for k, v in blocks.items()}
 
     torch_fits = {}

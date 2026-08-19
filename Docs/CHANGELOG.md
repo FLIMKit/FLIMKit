@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- `gpu_benchmark.py` covers every per-pixel GPU kernel rather than the one-exponential grid scan alone. It times `batch_fixed_tau`, `batch_free_tau_fit` and `batch_dist_scan_unimodal` against the CPU and reports the worst disagreement between the two paths, sweeps the field from 256 to 1024 square so the 1.93 GB case that used to be refused is actually measured, and sweeps `FLIMKIT_GPU_BLOCK_BYTES` to show that a smaller block budget costs time and does not change an answer. `--sides` and `--skip` pick what runs.
+- `gpu_benchmark.py` covers every per-pixel GPU kernel rather than the one-exponential grid scan alone. It times `batch_fixed_tau`, `batch_free_tau_fit` and `batch_dist_scan_unimodal` against the CPU and reports the worst disagreement between the two paths, sweeps the field from 256 to 1024 square so the 1.93 GB case that used to be refused is actually measured, and sweeps `FLIMKIT_GPU_BLOCK_BYTES` and reports how many pixels the budget changed and by how much. `--sides` and `--skip` pick what runs, a size the GPU cannot take is reported and skipped rather than ending the run, and the primary field is not built when nothing needs it.
 - The publish workflow no longer has a TestPyPI job. The pending publisher for it was never set up on test.pypi.org, so every dry run failed on `invalid-publisher`.
 
 ## [0.12.0] - 2026-08-19
