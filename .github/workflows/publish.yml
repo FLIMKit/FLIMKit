@@ -4,13 +4,6 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      target:
-        description: Where to publish
-        required: true
-        default: testpypi
-        type: choice
-        options: [testpypi, pypi]
 
 jobs:
   build:
@@ -39,26 +32,8 @@ jobs:
           name: dist
           path: dist/
 
-  testpypi:
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
-    runs-on: ubuntu-latest
-    environment: testpypi
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-
   pypi:
     needs: build
-    if: github.event_name == 'release' || inputs.target == 'pypi'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
