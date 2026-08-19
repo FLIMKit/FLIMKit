@@ -59,6 +59,9 @@ notebook = [
 segmentation = [
     'cellpose>=3.0',
 ]
+cellpose = [
+    'flimkit[segmentation]',
+]
 mlx = [
     'mlx',
 ]

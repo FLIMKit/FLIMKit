@@ -7,6 +7,7 @@
 - A warning when the output drive cannot make sparse files. exFAT and FAT cannot, so the whole cube is physically written before the first tile is read: 57.2 GB at 0.57 GB/s on a USB drive here, against 0.75s on APFS where the file is sparse. The check writes a 64 MB probe and reads `st_blocks`, so it costs nothing.
 
 ### Changed
+- `flimkit[cellpose]` installs Cellpose. The extra was only called `segmentation`, so asking for it by the package's own name got a pip warning and no Cellpose. Both names work now.
 - The QuPath bridge documentation names `flimkit-bridge`. The section said the bridge starts with FLIMKit and that it can also run without the window, without ever giving the command, so the only documented route was through the desktop app. `flimkit` opens a window and `flimkit-bridge` does not, which is now said in as many words.
 
 ## [0.13.0] - 2026-08-21

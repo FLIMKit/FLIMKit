@@ -145,7 +145,7 @@ Extras combine, so ask for whichever apply:
 | `pip install "flimkit[gui]"` | 54 | The desktop window as well. |
 | `pip install "flimkit[torch]"` | 62 | Headless with GPU fitting. |
 | `pip install "flimkit[gui,torch]"` | 64 | Desktop and GPU. |
-| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. |
+| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. `flimkit[cellpose]` is the same thing under the package's own name. |
 | `pip install "flimkit[notebook]"` | 71 | The Jupyter phasor cursor tool. |
 | `pip install "flimkit[all]"` | 91 | `gui`, `notebook` and `segmentation` together, and GPU by way of Cellpose. |
 | `pip install "flimkit[test]"` | 56 | pytest, for running the suite against an installed copy. |
