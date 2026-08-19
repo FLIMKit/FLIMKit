@@ -1367,40 +1367,7 @@ From QuPath:
 
 From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
 
-### Without the desktop GUI
-
-The bridge does not need the FLIMKit window. `flimkit-bridge` starts the same server on its own, writes the same discovery file, and serves everything except the routes that read the open session:
-
-```bash
-flimkit-bridge                 # 127.0.0.1:8765, or an ephemeral port if that is busy
-flimkit-bridge --port 9000
-flimkit-bridge --no-announce   # do not write the discovery file, print the token instead
-```
-
-It refuses to start if another bridge is already serving, since both would write the same discovery file and QuPath would pair with whichever wrote last. Pass `--force` to take it over.
-
-What the desktop bridge adds is the live session: the images and ROIs currently on screen. Everything else, opening files, fitting regions, phasor plots and stitching, works the same either way.
-
-### Stitching and fitting from QuPath
-
-FLIMKit's own tile pipelines are reachable over the bridge, so a mosaic can be stitched and fitted without touching the FLIMKit window. Point it at the `.lif` or `.xlif` that carries the tile positions:
-
-```
-POST /v1/pipeline   {"container": "/path/R 2.xlif", "params": {"n_exp": 2}}
-GET  /v1/pipeline/defaults
-```
-
-The tiles do not have to sit beside the container. The bridge looks in the directory you name, then beside the container, then in the directories next to it, which is where Leica puts them.
-
-`pipeline` chooses between `stitch_fit`, which stitches the canvas and fits it, and `tile_fit`, which fits each tile after a global summed fit and assembles the maps. Both run as jobs, so `GET /v1/jobs/{id}` reports progress and `DELETE` cancels. Cancelling stops the run at the next tile, or at the next stage boundary once fitting is done.
-
-Outputs are written to disk, and the output directory can be reopened as a dataset:
-
-```
-POST /v1/datasets   {"path": "/path/R_2_flimkit"}
-```
-
-A region drawn on that canvas is then fitted from the photons in the stitched cube, not from the displayed image.
+The bridge can also run without the FLIMKit window, and the same HTTP API drives stitching and fitting from QuPath. The bridge's README documents both.
 
 ### Co-registration
 

@@ -20,7 +20,54 @@ classifiers = [
     'Topic :: Scientific/Engineering :: Bio-Informatics',
     'Topic :: Scientific/Engineering :: Image Processing',
 ]
-dynamic = ['version', 'dependencies']
+dynamic = ['version']
+
+dependencies = [
+    'colorama==0.4.6',
+    'inquirer==3.4.1',
+    'lfdfiles',
+    'lz4>=4.0',
+    'matplotlib==3.10.8',
+    'numba',
+    'numpy==2.4.2',
+    'opencv-python-headless==4.13.0.90',
+    'openpyxl==3.1.5',
+    'pandas==3.0.1',
+    'Pillow>=10.0.0',
+    'psutil',
+    'phasorpy==0.12',
+    'photonsfile',
+    'ptufile',
+    'PyWavelets>=1.4.0',
+    'scipy==1.17.1',
+    'sdtfile',
+    'shapely==2.1.2',
+    'tifffile',
+    'tqdm==4.67.3',
+    'xarray==2026.1.0',
+]
+
+[project.optional-dependencies]
+gui = [
+    'tkinterdnd2==0.4.3',
+    'TKinterModernThemes',
+]
+notebook = [
+    'ipython==9.10.0',
+    'ipywidgets==8.1.8',
+]
+segmentation = [
+    'cellpose>=3.0',
+]
+test = [
+    'pytest==9.0.2',
+]
+all = [
+    'flimkit[gui,notebook,segmentation]',
+]
+
+[project.scripts]
+flimkit = 'flimkit.cli:run'
 
 [project.urls]
 Homepage = 'https://github.com/FLIMKit/FLIMKit'
@@ -31,7 +78,6 @@ Issues = 'https://github.com/FLIMKit/FLIMKit/issues'
 
 [tool.setuptools.dynamic]
 version = {attr = 'flimkit._version.__version__'}
-dependencies = {file = ['requirements.txt']}
 
 [tool.setuptools.packages.find]
 include = ['flimkit*']

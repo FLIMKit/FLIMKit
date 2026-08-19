@@ -1,5 +1,8 @@
 import argparse
+import contextlib
+import io
 import json
+import os
 import platform
 import sys
 import time
@@ -49,10 +52,35 @@ def describe_machine():
     return found
 
 
+@contextlib.contextmanager
+def quiet():
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        yield
+
+
 def pick_backend():
     from flimkit.FLIM.fitters import _init_gpu_backend
     backend = _init_gpu_backend()
     return backend, (type(backend).__name__ if backend is not None else None)
+
+
+def torch_backend_if_any():
+    try:
+        import torch
+        from flimkit.GPU.torch_backend import TorchBackend
+    except Exception:
+        return None, None
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+        device = 'mps'
+    else:
+        return None, None
+    try:
+        return TorchBackend(device=device), f'TorchBackend({device})'
+    except Exception:
+        return None, None
 
 
 def synthetic_field(side, n_bins, seed=3):
@@ -78,15 +106,15 @@ def prepare_fit(stack, irf, n_bins):
     from flimkit.FLIM.fitters import fit_summed
     from flimkit.configs import Tau_min, Tau_max
     decay = stack.reshape(-1, n_bins).sum(axis=0).astype(float)
-    popt, _ = fit_summed(decay, TCSPC_RES, n_bins, irf, False, True, False, 1,
-                         Tau_min, Tau_max, cost_function='poisson')
+    with quiet():
+        popt, _ = fit_summed(decay, TCSPC_RES, n_bins, irf, False, True, False, 1,
+                             Tau_min, Tau_max, cost_function='poisson')
     return popt, Tau_min, Tau_max
 
 
 def time_per_pixel(stack, irf, popt, bounds, n_bins, points, use_gpu, backend,
                    repeats=1):
     import importlib
-    import os
     os.environ['FLIMKIT_TAU_GRID_POINTS'] = str(points)
     from flimkit.FLIM import fitters
     importlib.reload(fitters)
@@ -94,13 +122,14 @@ def time_per_pixel(stack, irf, popt, bounds, n_bins, points, use_gpu, backend,
     best = None
     maps = None
     for _ in range(repeats):
-        started = time.time()
-        maps = fitters.fit_per_pixel(
-            stack, TCSPC_RES, n_bins, irf, has_tail=False, fit_bg=True,
-            fit_sigma=False, global_popt=popt, n_exp=1, min_photons=50,
-            free_tau=True, tau_min_ns=lo, tau_max_ns=hi,
-            use_gpu=use_gpu, gpu_backend=backend if use_gpu else None)
-        taken = time.time() - started
+        with quiet():
+            started = time.time()
+            maps = fitters.fit_per_pixel(
+                stack, TCSPC_RES, n_bins, irf, has_tail=False, fit_bg=True,
+                fit_sigma=False, global_popt=popt, n_exp=1, min_photons=50,
+                free_tau=True, tau_min_ns=lo, tau_max_ns=hi,
+                use_gpu=use_gpu, gpu_backend=backend if use_gpu else None)
+            taken = time.time() - started
         best = taken if best is None else min(best, taken)
     tau = np.asarray(maps['tau_mean_amp'])
     good = np.isfinite(tau)
@@ -216,13 +245,22 @@ def main():
                         help='fewer grid sizes and a smaller field')
     parser.add_argument('--json', default='',
                         help='also write the results to this file')
+    parser.add_argument('--no-cpu', action='store_true',
+                        help='skip the CPU timings, which dominate the runtime')
     args = parser.parse_args()
 
+    machine = describe_machine()
     side = 256 if args.quick else args.side
     grids = (200, 1600) if args.quick else GRIDS
     sizes = (20_000,) if args.quick else CHI2_SIZES
-
-    machine = describe_machine()
+    ram = machine.get('ram_gb') or 8.0
+    if not args.quick and ram < 12:
+        sizes = (20_000, 65_536)
+        print(f'note: {ram} GB of memory, so the large chi-squared case is '
+              'reduced to 65,536 pixels')
+    if not args.quick and side > 512 and ram < 12:
+        side = 512
+        print('note: field reduced to 512 square to fit in memory')
     banner('Machine')
     for key, value in machine.items():
         print(f'  {key:16s} {value}')
@@ -233,35 +271,61 @@ def main():
         print(f'\ncould not reach a GPU backend: {problem}')
         backend, backend_name = None, None
     print(f'  {"flimkit_backend":16s} {backend_name or "none, CPU only"}')
+    torch_backend, torch_name = torch_backend_if_any()
+    if torch_name and torch_name != backend_name:
+        print(f'  {"also_available":16s} {torch_name}, '
+              'the path CUDA and ROCm take')
 
     banner(f'Building a {side}x{side}x{args.bins} field')
     stack, irf = synthetic_field(side, args.bins)
     print(f'  {stack.nbytes / 1e9:.2f} GB as {stack.dtype}, '
           f'{PHOTONS_PER_PIXEL} photons per pixel, true tau {TRUE_TAU_NS} ns')
+    print('  the lifetime is known, so the last column says how close the fit gets')
     popt, lo, hi = prepare_fit(stack, irf, args.bins)
     print(f'  summed fit gives {popt[0] * 1e9:.4f} ns, grid spans {lo} to {hi} ns')
 
     banner('Per-pixel fit, seconds')
-    print(f'  {"grid":>6} {"step at 2ns":>12} {"GPU":>9} {"CPU":>9} {"speedup":>8} '
-          f'{"levels":>7} {"median tau":>11}')
+    print(f'  {"grid":>6} {"step at 2ns":>12} {"GPU":>8} {"CPU":>8} {"speedup":>8} '
+          f'{"levels":>7} {"median tau":>11} {"vs truth":>10}')
     fits = {}
     for points in grids:
         row = {}
         if backend is not None:
             row['gpu'] = time_per_pixel(stack, irf, popt, (lo, hi), args.bins,
                                         points, True, backend)
-        row['cpu'] = time_per_pixel(stack, irf, popt, (lo, hi), args.bins,
-                                    points, False, None)
+        if args.no_cpu and backend is not None:
+            row['cpu'] = dict(row['gpu'], seconds=float('nan'))
+        else:
+            row['cpu'] = time_per_pixel(stack, irf, popt, (lo, hi), args.bins,
+                                        points, False, None)
         fits[points] = row
         step = 2.0 * ((hi / lo) ** (1.0 / (points - 1)) - 1.0)
         gpu_s = row['gpu']['seconds'] if 'gpu' in row else None
         cpu_s = row['cpu']['seconds']
-        speed = f'{cpu_s / gpu_s:.2f}x' if gpu_s else 'n/a'
+        speed = (f'{cpu_s / gpu_s:.2f}x'
+                 if gpu_s and cpu_s == cpu_s else 'n/a')
+        median = row['cpu']['median_tau_ns']
+        error = median - TRUE_TAU_NS
+        row['error_vs_truth_ns'] = round(error, 5)
         print(f'  {points:>6} {step:>11.4f}ns '
-              f'{(f"{gpu_s:.2f}" if gpu_s else "-"):>9} {cpu_s:>8.2f}s {speed:>8} '
-              f'{row["cpu"]["levels"]:>7} {row["cpu"]["median_tau_ns"]:>10.4f}ns')
+              f'{(f"{gpu_s:.2f}s" if gpu_s else "-"):>8} '
+              f'{(f"{cpu_s:.2f}s" if cpu_s == cpu_s else "-"):>8} {speed:>8} '
+              f'{row["cpu"]["levels"]:>7} {median:>10.4f}ns {error:>+9.4f}ns')
     print(f'  fitted {fits[grids[0]]["cpu"]["pixels"]:,} pixels, '
           f'peak memory {peak_memory_gb()} GB')
+
+    torch_fits = {}
+    if torch_backend is not None and torch_name != backend_name:
+        banner(f'Same fit through {torch_name}')
+        print(f'  {"grid":>6} {"seconds":>9} {"levels":>7} {"median tau":>11} '
+              f'{"vs truth":>10}')
+        for points in grids:
+            row = time_per_pixel(stack, irf, popt, (lo, hi), args.bins, points,
+                                 True, torch_backend)
+            torch_fits[points] = row
+            error = row['median_tau_ns'] - TRUE_TAU_NS
+            print(f'  {points:>6} {row["seconds"]:>8.2f}s {row["levels"]:>7} '
+                  f'{row["median_tau_ns"]:>10.4f}ns {error:>+9.4f}ns')
 
     banner('Chi-squared kernel, milliseconds')
     chi2 = {}
@@ -276,6 +340,8 @@ def main():
                'field': {'side': side, 'bins': args.bins,
                          'gigabytes': round(stack.nbytes / 1e9, 3)},
                'per_pixel': {str(k): v for k, v in fits.items()},
+               'torch_backend': torch_name,
+               'per_pixel_torch': {str(k): v for k, v in torch_fits.items()},
                'chi2': {str(k): v for k, v in chi2.items()},
                'peak_memory_gb': peak_memory_gb()}
 
