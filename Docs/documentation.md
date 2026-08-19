@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.9.17** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.12.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -106,16 +106,19 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `scipy` | Optimisers (Levenberg-Marquardt, Differential Evolution), signal processing |
 | `matplotlib` | Plotting (decay curves, lifetime maps, phasor plots) |
 | `xarray` | Labelled N-D arrays for FLIM signals |
-| `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
+| `phasorpy` (0.12) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
 | `PyWavelets` | Wavelet-based phasor denoising |
 | `ptufile` | PicoQuant `.ptu`, `.bin`, `.phu` decoding |
 | `sdtfile` | Becker & Hickl `.sdt` decoding |
 | `lfdfiles` | SimFCS `.b&h`, `.bhz`, `.ref`, `.r64` and ISS `.ifli`, `.iss-tdflim` decoding |
 | `photonsfile` | Photonscore LINCam `.photons` (D7) decoding |
 | `inquirer` | Interactive terminal prompts |
-| `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
-| `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |
-| `opencv-python` | Image I/O, resizing, and general image processing |
+| `numba` | Speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `shapely` | Repairs self-intersecting ROI rings on GeoJSON export |
+| `lz4` | LZ4-compressed Becker & Hickl `.sdt` blocks |
+| `ipywidgets` | Jupyter notebook interactive support, optional |
+| `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking, optional |
+| `opencv-python-headless` | Image I/O, resizing, and general image processing |
 | `openpyxl` | Excel XLSX parsing for FLIM microscope software IRF extraction |
 | `pandas` | Excel/XLSX IRF file parsing |
 | `tifffile` | TIFF image I/O |
@@ -123,13 +126,58 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 
 ### Installation
 
+From PyPI, for analysis in scripts, notebooks and the terminal:
+
+```bash
+pip install flimkit                 # readers, fitting, phasors, stitching, the CLI
+pip install "flimkit[gui]"          # adds the desktop window
+```
+
+This is the right route for a server, a container, or anywhere you only want
+the library. It installs no Tkinter packages, so it works on a machine with no
+display and no `python3-tk`.
+
+Extras combine, so ask for whichever apply:
+
+| Command | Packages | What you get |
+|---|---|---|
+| `pip install flimkit` | 52 | Readers, fitting, phasors, stitching and the terminal CLI. No desktop, no GPU. |
+| `pip install "flimkit[gui]"` | 54 | The desktop window as well. |
+| `pip install "flimkit[torch]"` | 62 | Headless with GPU fitting. |
+| `pip install "flimkit[gui,torch]"` | 64 | Desktop and GPU. |
+| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. |
+| `pip install "flimkit[notebook]"` | 71 | The Jupyter phasor cursor tool. |
+| `pip install "flimkit[all]"` | 91 | `gui`, `notebook` and `segmentation` together, and GPU by way of Cellpose. |
+| `pip install "flimkit[test]"` | 56 | pytest, for running the suite against an installed copy. |
+
+Counts are from a resolve on macOS and will differ a little by platform,
+mostly in how much PyTorch brings with it.
+
+A pip install fits on the CPU. GPU acceleration needs a backend, and what pip
+can give you depends on the platform:
+
+| Platform | Command | What you get |
+|---|---|---|
+| Apple Silicon | `pip install "flimkit[mlx]"` | MLX on Metal, the fastest path on a Mac |
+| Apple Silicon or Intel Mac | `pip install "flimkit[torch]"` | PyTorch MPS |
+| Linux, NVIDIA | `pip install "flimkit[torch]"` | CUDA. PyPI's Linux wheel pulls the CUDA runtime itself |
+| Windows, NVIDIA | see below | pip alone gives CPU only |
+| AMD, ROCm | see below | not on PyPI at all |
+
+Windows and ROCm need a wheel from PyTorch's own index rather than PyPI, which
+package metadata cannot ask for. That is what `install.py` is for:
+
 ```bash
 git clone https://github.com/FLIMKit/FLIMKit.git
 cd FLIMKit
 python install.py
 ```
 
-`install.py` installs core requirements, then auto-detects and installs the right GPU backend (MLX on Apple Silicon, CUDA on NVIDIA, ROCm on AMD, CPU-only fallback). No flags needed for a standard install.
+`install.py` installs the requirements, then detects the hardware and installs
+the matching GPU backend (MLX on Apple Silicon, CUDA on NVIDIA, ROCm on AMD,
+CPU-only otherwise). No flags needed for a standard install. Clone it too if
+you want the terminal CLIs at the repository root, `fit_cli.py`,
+`phasor_cli.py` and `synth_cli.py`, which are not part of the package.
 
 ```bash
 python install.py --dev      # also installs PyInstaller and test requirements

@@ -59,6 +59,12 @@ notebook = [
 segmentation = [
     'cellpose>=3.0',
 ]
+mlx = [
+    'mlx',
+]
+torch = [
+    'torch',
+]
 test = [
     'pytest==9.0.2',
 ]

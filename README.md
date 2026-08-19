@@ -27,6 +27,19 @@ Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed d
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
 
+From PyPI, for analysis in scripts, notebooks and the terminal:
+
+```bash
+pip install flimkit            # readers, fitting, phasors, stitching, the CLI
+pip install "flimkit[gui]"     # adds the desktop window
+```
+
+That install fits on the CPU. `pip install "flimkit[mlx]"` adds the GPU on
+Apple Silicon, and `pip install "flimkit[torch]"` adds CUDA on Linux and MPS on
+a Mac. Windows CUDA and AMD ROCm need a wheel from PyTorch's own index, which
+pip metadata cannot ask for, so clone it for those, and for the terminal CLIs
+at the repository root:
+
 ```bash
 git clone https://github.com/FLIMKit/FLIMKit.git
 cd FLIMKit
