@@ -88,16 +88,61 @@ def get_pixel_size_from_lif(lif_path: Path, ptu_basename: str) -> Tuple[float, i
         return length_m / n_pixels, n_pixels
     return 1.5377e-4 / 512, 512
 
+def list_xlef_references(xlef_path: Path) -> List[Dict[str, Any]]:
+    from urllib.parse import unquote
+    xlef_path = Path(xlef_path)
+    root = ET.parse(xlef_path).getroot()
+    found = []
+    for reference in root.iter('Reference'):
+        raw = reference.attrib.get('File')
+        if not raw:
+            continue
+        relative = unquote(raw).replace('\\', '/')
+        target = (xlef_path.parent / relative).resolve()
+        if target.suffix.lower() != '.xlif':
+            continue
+        found.append({'name': target.stem, 'path': target})
+    return found
+
+def _matches_basename(name: str, ptu_basename: str) -> bool:
+    def flatten(value):
+        return value.lower().replace(' ', '').replace('_', '').replace('-', '')
+    return flatten(name) == flatten(ptu_basename)
+
+def resolve_xlef(xlef_path: Path, ptu_basename: str = None) -> Path:
+    xlef_path = Path(xlef_path)
+    references = list_xlef_references(xlef_path)
+    present = [entry for entry in references if entry['path'].exists()]
+    if not present:
+        raise RuntimeError(
+            f'{xlef_path.name} names {len(references)} acquisitions but none of the '
+            f'.xlif files are in {xlef_path.parent}')
+    if ptu_basename:
+        for entry in present:
+            if _matches_basename(entry['name'], ptu_basename):
+                return entry['path']
+    if len(present) == 1:
+        return present[0]['path']
+    names = ', '.join(entry['name'] for entry in present)
+    raise RuntimeError(
+        f'{xlef_path.name} holds {len(present)} acquisitions and '
+        f'{ptu_basename!r} is not one of them; choose from {names}')
+
 def parse_tile_positions(metadata_path: Path, ptu_basename: str) -> List[Dict[str, Any]]:
     metadata_path = Path(metadata_path)
     if metadata_path.suffix.lower() == '.lif':
         return parse_lif_tile_positions(metadata_path, ptu_basename)
+    if metadata_path.suffix.lower() == '.xlef':
+        return parse_xlif_tile_positions(
+            resolve_xlef(metadata_path, ptu_basename), ptu_basename)
     return parse_xlif_tile_positions(metadata_path, ptu_basename)
 
 def get_pixel_size(metadata_path: Path, ptu_basename: str = None) -> Tuple[float, int]:
     metadata_path = Path(metadata_path)
     if metadata_path.suffix.lower() == '.lif':
         return get_pixel_size_from_lif(metadata_path, ptu_basename)
+    if metadata_path.suffix.lower() == '.xlef':
+        return get_pixel_size_from_xlif(resolve_xlef(metadata_path, ptu_basename))
     return get_pixel_size_from_xlif(metadata_path)
 
 def get_pixel_size_from_xlif(xlif_path: Path) -> Tuple[float, int]:

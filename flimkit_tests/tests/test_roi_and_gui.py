@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from unittest.mock import MagicMock, patch, PropertyMock
-from flimkit.UI.roi_tools import (
+from flimkit.utils.roi import (
     RoiManager,
     get_rectangle_patch,
     get_ellipse_patch,

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.12.0] - 2026-08-19
+
+### Added
+- FLIMKit is on PyPI. `pip install flimkit` gets the readers, the fitting, phasors, stitching and the terminal CLI, and installs no Tkinter packages, so it works on a server or in a container with no display. The desktop window is `flimkit[gui]`, GPU fitting is `flimkit[torch]` or `flimkit[mlx]`, and the rest are `notebook`, `segmentation`, `test` and `all`. Extras combine, and the combinations are listed under Installation. On Linux the PyPI PyTorch wheel brings the CUDA runtime with it, so `flimkit[torch]` is all an NVIDIA machine needs; Windows CUDA and AMD ROCm still want `install.py`, because a wheel from PyTorch's own index is not something pip metadata can ask for.
+- `flimkit` as a command, from `flimkit/cli.py`. A pip install previously had no entry point at all, since `main.py` sits at the repository root and is not part of the package.
+- Leica `.xlef` projects are read for tile positions. An `.xlef` carries none of its own, it indexes the `.xlif` files that do, so it now resolves to the acquisition you name and hands off to the existing parser. Naming an acquisition that is not in the project lists the ones that are.
+- `gpu_benchmark.py`, which reports per-pixel timings, lifetime resolution and the chi-squared kernel on whatever machine it is run on, including CUDA and ROCm.
+
+### Changed
+- Per-pixel fitting on the GPU works in pixel blocks. Both backends built three float32 copies of the whole stack before fitting, so anything over a gigabyte was refused and sent to the CPU with a warning. A 1024 square field at 529 bins is 1.11 GB, so a full frame never reached the GPU; it now runs there in 7.8s against 25.2s on the CPU, at about 3 GB peak. CUDA, ROCm and MPS are subclasses of the PyTorch backend and are carried along by the same change.
+- The per-pixel tau grid goes from 200 points to 1600. When no bounds are given the grid spans tau/20 to tau times 20 capped at 45 ns, a 354-fold range, so 200 points put the steps at 3% and biased the answer rather than only coarsening it. Against six known-truth synthetic files the mean error falls from 0.021 ns to 0.008 ns, and the median converges by 1600. Per-pixel lifetimes will differ slightly from earlier versions, which is why `fitter_version` moves to 19. `FLIMKIT_TAU_GRID_POINTS` overrides it.
+- Per-pixel fitting is roughly twice as fast beyond the GPU change. The background estimate was a Python loop calling `estimate_bg` once per pixel and is now one vectorised median per distinct pre-peak length, 3.11s to 0.12s on 262,144 pixels. The scatter computed the chi-squared numerator and then had `calibrated_chi2` compute the same numerator again over two full copies; both variants now share it.
+- `pytest` is no longer a runtime dependency. Installing FLIMKit installed pytest 9.
+
+### Fixed
+- A format registered by a plugin was invisible outside the GUI. `ensure_loaded()` ran from `UI/gui.py` and `main.py` and nowhere else, so `fit_cli.py`, `phasor_cli.py` and any script using FLIMKit as a library never saw it. The format lookup loads plugins now, which is the one place that reads the registry.
+- Cancelling a tile fit stopped working the moment the fitting finished. `stitch.py` checked the cancel event in eleven places and `assemble.py` in none, so a cancel sent during canvas assembly or saving was ignored and the job ran to completion.
+
 ## [0.11.0] - 2026-08-15
 
 ### Added

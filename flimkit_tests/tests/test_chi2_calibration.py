@@ -339,7 +339,7 @@ def test_assembled_canvas_keeps_calibrated_map():
 
 def test_zstack_display_restores_calibrated_summed_values(tmp_path):
     import json
-    from flimkit.UI.flim_display import load_zstack_display_slices
+    from flimkit.utils.display import load_zstack_display_slices
 
     reference = {
         'taus_ns': [2.0],

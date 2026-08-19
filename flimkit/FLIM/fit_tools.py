@@ -8,7 +8,7 @@ def distribution_dof(n_fit, n_components=1, fit_tvb=False):
     return max(int(n_fit) - n_params, 1)
 
 
-def calibrated_chi2(data, model, axis=None):
+def chi2_terms(data, model, axis=None):
     data_arr, model_arr = np.broadcast_arrays(
         np.asarray(data, dtype=float), np.asarray(model, dtype=float))
     valid = np.all(
@@ -19,12 +19,24 @@ def calibrated_chi2(data, model, axis=None):
         numerator = np.sum(
             (data_arr - model_arr) ** 2 / np.maximum(model_arr, 1.0), axis=axis)
         expected = np.sum(np.minimum(model_arr, 1.0), axis=axis)
+    return numerator, expected, valid
+
+
+def calibrated_from_terms(numerator, expected, valid):
     if np.ndim(expected) == 0:
-        return float(numerator / expected) if valid and expected > 0 else np.nan
+        return (float(numerator / expected)
+                if valid and expected > 0 else np.nan)
     result = np.full(np.shape(expected), np.nan, dtype=float)
     return np.divide(
         numerator, expected, out=result,
         where=valid & (expected > 0) & np.isfinite(numerator))
+
+
+def calibrated_chi2(data, model, axis=None):
+    numerator, expected, valid = chi2_terms(data, model, axis=axis)
+    if np.ndim(expected) == 0:
+        return float(numerator / expected) if valid and expected > 0 else np.nan
+    return calibrated_from_terms(numerator, expected, valid)
 
 
 def coates_pileup_correction(decay: np.ndarray, n_sync: int):

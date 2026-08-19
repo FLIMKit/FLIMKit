@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from flimkit.UI.roi_tools import RoiManager
+from flimkit.utils.roi import RoiManager
 
 
 class TestRoiManager:

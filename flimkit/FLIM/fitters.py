@@ -23,8 +23,18 @@ from ..configs import MIN_PHOTONS_PERPIX
 
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
-_GPU_MAX_STACK_BYTES = 1_000_000_000
+_GPU_MAX_DIST_STACK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
+_TAU_GRID_POINTS = 1600
+
+def tau_grid_points():
+    override = os.environ.get('FLIMKIT_TAU_GRID_POINTS')
+    if override:
+        try:
+            return max(2, int(override))
+        except ValueError:
+            pass
+    return _TAU_GRID_POINTS
 
 def _init_gpu_backend():
     global _gpu_backend_cache
@@ -647,15 +657,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         )
         if _backend is not None:
             if not free_tau or n_exp == 1:
-                if stack.nbytes > _GPU_MAX_STACK_BYTES:
-                    print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
-                          f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
-                elif n_exp == 1:
+                if n_exp == 1:
                     _lo = (tau_min_ns if tau_min_ns is not None
                            else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
                     _hi = (tau_max_ns if tau_max_ns is not None
                            else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
-                    _N_GRID = 200
+                    _N_GRID = tau_grid_points()
                     _tau_grid = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
                     _basis_grid = _basis_rows(_tau_grid, t_axis, tcspc_res, n_bins,
                                               _tail, irf_fft=irf_fft, t0=t0_px)
@@ -716,7 +723,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
         _hi = (tau_max_ns if tau_max_ns is not None
                else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
-        _N_GRID = 200
+        _N_GRID = tau_grid_points()
         tau_grid = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
         basis_grid = _basis_rows(tau_grid, t_axis, tcspc_res, n_bins, _tail,
                                  irf_fft=irf_fft, t0=t0_px)
@@ -1292,9 +1299,9 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             backend = gpu_backend if gpu_backend is not None else (
                 None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
             )
-        if backend is not None and stack.nbytes > _GPU_MAX_STACK_BYTES:
+        if backend is not None and stack.nbytes > _GPU_MAX_DIST_STACK_BYTES:
             print(f'  [per-pixel] {stack.nbytes/1e9:.1f} GB cube exceeds GPU limit '
-                  f'({_GPU_MAX_STACK_BYTES/1e9:.1f} GB); using memory-safe CPU path')
+                  f'({_GPU_MAX_DIST_STACK_BYTES/1e9:.1f} GB); the distribution scan is not blocked, using the CPU path')
             backend = None
         if backend is not None:
             return backend.batch_dist_scan_unimodal(

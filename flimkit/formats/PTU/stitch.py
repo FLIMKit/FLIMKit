@@ -13,11 +13,6 @@ from ...utils.xml_utils import (
 )
 from .decode import get_flim_histogram_from_ptufile, create_time_axis
 
-try:
-    from ...UI.gui import GUI_MODE
-except (ImportError, AttributeError):
-    GUI_MODE = False
-
 def stitch_flim_tiles(
     xlif_path,
     ptu_dir,

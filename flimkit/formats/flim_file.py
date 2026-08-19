@@ -40,8 +40,9 @@ _FORMATS = [
 _cache = {'version': None, 'formats': None, 'ext_to_id': None, 'modality_by_id': None}
 
 def _registry():
-    from flimkit.plugins import registry
-    return registry
+    from flimkit import plugins
+    plugins.ensure_loaded()
+    return plugins.registry
 
 def _all_formats():
     reg = _registry()

@@ -3,7 +3,7 @@ import numpy as np
 import json
 import tempfile
 from pathlib import Path
-from flimkit.UI.roi_tools import RoiManager
+from flimkit.utils.roi import RoiManager
 
 
 class TestOMETIFFExport:

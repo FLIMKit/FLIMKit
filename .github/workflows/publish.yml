@@ -1,0 +1,73 @@
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip build twine
+      - name: Check the tag matches flimkit/_version.py
+        if: github.event_name == 'release'
+        run: |
+          version=$(python -c "import re,pathlib; print(re.search(r\"__version__\s*=\s*'([^']+)'\", pathlib.Path('flimkit/_version.py').read_text()).group(1))")
+          tag=${GITHUB_REF_NAME#v}
+          echo "tag $tag, package $version"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::release tag $tag does not match __version__ $version"
+            exit 1
+          fi
+      - run: python -m build
+      - name: Check the metadata and the README render
+        run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  pypi:
+    needs: build
+    if: github.event_name == 'release' || inputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
