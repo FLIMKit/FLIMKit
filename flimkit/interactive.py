@@ -30,6 +30,13 @@ from .utils.enhanced_outputs import (
 from .utils.lifetime_image import make_lifetime_image
 from .image.tools import make_intensity_image, make_cell_mask, apply_intensity_threshold, pick_intensity_threshold
 from ._version import fitter_version
+
+def _cancelled(cancel_event):
+    if cancel_event is not None and cancel_event.is_set():
+        print('\nCancelled.')
+        return True
+    return False
+
 def _make_operation_progress_callback(operation_name, progress_window_manager):
     if progress_window_manager is None:
         return None
@@ -327,6 +334,8 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         raise RuntimeError('No tiles were successfully stitched!')
     print(f"\nStitching complete: {stitch_result['tiles_processed']} tiles processed")
     roi_name = args.ptu_basename.replace(' ', '_')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 2: LOADING STITCHED DATA')
     print(f"{'='*60}")
@@ -433,6 +442,8 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             r1 = min(r0 + CHUNK_ROWS, ny)
             decay += stack[r0:r1].astype(np.float64).sum(axis=(0, 1))
         print(f'  Total photons (full canvas): {decay.sum():,.0f}')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 3: FLIM FITTING')
     print(f"{'='*60}")
@@ -587,7 +598,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             irf_prompt=irf_prompt
         )
     pixel_maps = None
-    if args.mode in ('perPixel', 'both'):
+    if args.mode in ('perPixel', 'both') and not _cancelled(cancel_event):
         print(f'\nBuilding pixel stack (binning={args.binning}×{args.binning})...')
         pixel_stack = ptu.pixel_stack(channel=None, binning=args.binning)
         if tissue_mask is not None:
@@ -1401,6 +1412,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         canvas_height = canvas_height,
         canvas_width = canvas_width,
         n_exp = args.nexp,
+        cancel_event = cancel_event,
     )
     _binning = getattr(args, 'binning', 1)
     if _binning > 1:
@@ -1444,6 +1456,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f'  τ σ (pixel distribution)     = {tau_std:.4f} ns')
     print(f'  n pixels fitted              = {n_px}')
     print(f'  Optimizer: per-pixel (per-tile fit)')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 4: SAVING OUTPUTS')
     print(f"{'='*60}")
@@ -1458,6 +1472,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
     )
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 5: LIFETIME IMAGE')
     print(f"{'='*60}")

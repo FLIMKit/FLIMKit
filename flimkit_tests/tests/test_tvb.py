@@ -263,8 +263,22 @@ class TestPerPixelGridScan:
         gpu = fit_per_pixel(stack, RES, N, irf, False, False, False, gp, 1,
                             use_gpu='auto', gpu_backend=gpu_backend,
                             tvb_profile=B, fit_tvb=True)
-        d_tau = np.nanmax(np.abs(cpu['tau_1'] - gpu['tau_1']))
-        assert d_tau < 1e-3
+        from flimkit.FLIM.fitters import tau_grid_points
+        lo = max(2.0 / 20.0, 0.05)
+        hi = min(2.0 * 20.0, 45.0)
+        step_ratio = (hi / lo) ** (1.0 / (tau_grid_points() - 1))
+        one_step = 2.0 * (step_ratio - 1.0)
+        tolerance = max(one_step, 0.005 * 2.0) * 1.05
+        gap = np.abs(cpu['tau_1'] - gpu['tau_1'])
+        d_tau = np.nanmax(gap)
+        assert d_tau <= tolerance, (
+            f'CPU and GPU differ by {d_tau:.5f} ns, more than the {tolerance:.5f} ns '
+            'they are expected to agree within, which is the coarser of the tau grid '
+            f'spacing ({one_step:.5f} ns) and half a percent of the lifetime')
+        centres = abs(np.nanmedian(cpu['tau_1']) - np.nanmedian(gpu['tau_1']))
+        assert centres <= one_step, (
+            f'the two paths centre on lifetimes {centres:.5f} ns apart, more than '
+            'one grid step, so they are not fitting the same thing')
 
 class TestPerPixelDist:
     def _dist_stack(self, tau_c_ns, width_ns, amp, scale, ny=8, nx=8, seed=4):

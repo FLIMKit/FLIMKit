@@ -25,6 +25,16 @@ _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
 _GPU_MAX_STACK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
+_TAU_GRID_POINTS = 1600
+
+def tau_grid_points():
+    override = os.environ.get('FLIMKIT_TAU_GRID_POINTS')
+    if override:
+        try:
+            return max(2, int(override))
+        except ValueError:
+            pass
+    return _TAU_GRID_POINTS
 
 def _init_gpu_backend():
     global _gpu_backend_cache
@@ -655,7 +665,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                            else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
                     _hi = (tau_max_ns if tau_max_ns is not None
                            else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
-                    _N_GRID = 200
+                    _N_GRID = tau_grid_points()
                     _tau_grid = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
                     _basis_grid = _basis_rows(_tau_grid, t_axis, tcspc_res, n_bins,
                                               _tail, irf_fft=irf_fft, t0=t0_px)
@@ -716,7 +726,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                else max(taus_fixed[0] * 1e9 / 20.0, 0.05)) * 1e-9
         _hi = (tau_max_ns if tau_max_ns is not None
                else min(taus_fixed[0] * 1e9 * 20.0, 45.0)) * 1e-9
-        _N_GRID = 200
+        _N_GRID = tau_grid_points()
         tau_grid = np.logspace(np.log10(_lo), np.log10(_hi), _N_GRID)
         basis_grid = _basis_rows(tau_grid, t_axis, tcspc_res, n_bins, _tail,
                                  irf_fft=irf_fft, t0=t0_px)

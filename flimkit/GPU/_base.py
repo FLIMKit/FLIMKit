@@ -2,7 +2,7 @@ import multiprocessing
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import least_squares
-from ..FLIM.fit_tools import calibrated_chi2
+from ..FLIM.fit_tools import calibrated_chi2, calibrated_from_terms, chi2_terms
 from ..FLIM.models import reconvolution_model
 
 def fit_window(fit_idx, n_bins):
@@ -21,6 +21,25 @@ def fit_window(fit_idx, n_bins):
     if np.array_equal(idx, np.arange(n_bins)):
         return None
     return idx
+
+
+GPU_BLOCK_BYTES = 256 * 1024 * 1024
+
+def gpu_block_bytes():
+    import os
+    override = os.environ.get('FLIMKIT_GPU_BLOCK_BYTES')
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    return GPU_BLOCK_BYTES
+
+def pixel_blocks(n_pixels, bytes_per_pixel, budget=None):
+    budget = gpu_block_bytes() if budget is None else budget
+    step = max(1, int(budget // max(int(bytes_per_pixel), 1)))
+    for start in range(0, n_pixels, step):
+        yield start, min(start + step, n_pixels)
 
 
 class GPUBackend:
@@ -89,6 +108,23 @@ class GPUBackend:
         raise NotImplementedError
 
 class _BackendMixin:
+
+    @staticmethod
+    def _estimate_bg_batch(flat, valid_mask, pre_gap=5):
+        n_pix, n_bins = flat.shape
+        bg = np.zeros(n_pix, dtype=np.float32)
+        wanted = np.asarray(valid_mask, dtype=bool)
+        if not wanted.any():
+            return bg
+        ends = np.maximum(flat.argmax(axis=1) - pre_gap, 0)
+        for end in np.unique(ends[wanted]):
+            rows = np.flatnonzero(wanted & (ends == end))
+            if end >= 5:
+                region = flat[rows, :end]
+            else:
+                region = flat[rows, -30:]
+            bg[rows] = np.maximum(np.median(region, axis=1), 0.0)
+        return bg
     @staticmethod
     def _init_maps(ny, nx, n_exp, intensity, taus_fixed_ns, free_tau):
         maps = dict(
@@ -130,15 +166,12 @@ class _BackendMixin:
         tau_amp = (fracs * taus_ns[None, :]).sum(axis=1)
         denom = (amps * taus_ns[None, :]).sum(axis=1)
         tau_int = np.where(denom > 0,(amps * taus_ns2[None, :]).sum(axis=1) / np.maximum(denom, 1e-30), np.nan)
-        model = decay_valid.copy()
-        for j in range(n_exp):
-            model = amps[:, j:j+1] * A[:, j][None, :]
-        # model = amps @ A.T + bg
         model = amps @ A.T + bg[:, None]
         if tvb is not None and tvb_profile is not None:
             model = model + tvb[:, None] * tvb_profile[None, :]
-        resid = decay_valid - model
-        chi2 = (resid ** 2 / np.maximum(model, 1.0)).sum(axis=1)
+        numerator, expected, row_ok = chi2_terms(decay_valid, model, axis=1)
+        chi2 = numerator
+        calibrated = calibrated_from_terms(numerator, expected, row_ok)
         dof = max(n_bins - n_exp, 1)
 
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
@@ -146,8 +179,7 @@ class _BackendMixin:
         maps['tau_mean_amp'][yi_arr[good], xi_arr[good]] = tau_amp[good]
         maps['tau_mean_int'][yi_arr[good], xi_arr[good]] = tau_int[good]
         maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good] / dof
-        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
-            decay_valid[good], model[good], axis=1)
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated[good]
         for i in range(n_exp):
             maps[f"alpha_{i+1}"][yi_arr[good], xi_arr[good]] = amps[good, i]
             maps[f"frac_{i+1}"][yi_arr[good], xi_arr[good]]  = fracs[good, i]
@@ -186,8 +218,9 @@ class _BackendMixin:
         model  = amp_v[:, None] * basis_best + bg_v[:, None]
         if tvb is not None and tvb_profile is not None:
             model = model + tvb[:, None] * tvb_profile[None, :]
-        resid  = decay_valid - model
-        chi2   = (resid ** 2 / np.maximum(model, 1.0)).sum(axis=1) / max(n_bins - 2, 1)
+        numerator, expected, row_ok = chi2_terms(decay_valid, model, axis=1)
+        chi2 = numerator / max(n_bins - 2, 1)
+        calibrated = calibrated_from_terms(numerator, expected, row_ok)
 
         yi_arr, xi_arr = np.unravel_index(valid_idx, (ny, nx))
         maps['tau_1'][yi_arr[good], xi_arr[good]]        = tau_ns[good]
@@ -196,8 +229,7 @@ class _BackendMixin:
         maps['alpha_1'][yi_arr[good], xi_arr[good]]      = amp_v[good]
         maps['frac_1'][yi_arr[good], xi_arr[good]]       = 1.0
         maps['chi2_r'][yi_arr[good], xi_arr[good]]       = chi2[good]
-        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated_chi2(
-            decay_valid[good], model[good], axis=1)
+        maps['calibrated_chi2_r'][yi_arr[good], xi_arr[good]] = calibrated[good]
         if tvb is not None:
             maps.setdefault('tvb_scale', np.full((ny, nx), np.nan))
             maps['tvb_scale'][yi_arr[good], xi_arr[good]] = tvb[good]

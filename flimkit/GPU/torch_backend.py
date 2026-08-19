@@ -203,15 +203,6 @@ class TorchBackend(_BackendMixin):
         )
         return maps
 
-    @staticmethod
-    def _estimate_bg_batch(flat, valid_mask):
-        n_pix, n_bins = flat.shape
-        bg = np.zeros(n_pix, dtype=np.float32)
-        peak_bins = flat.argmax(axis=1)
-        for i in np.where(valid_mask)[0]:
-            bg[i] = estimate_bg(flat[i], int(peak_bins[i]))
-        return bg
-
     def batch_free_tau_fit(
         self,
         stack,

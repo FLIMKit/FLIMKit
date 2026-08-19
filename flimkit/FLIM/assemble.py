@@ -4,11 +4,15 @@ from typing import List, Dict, Any, Optional
 import tifffile
 
 
+class Cancelled(Exception):
+    pass
+
 def assemble_tile_maps(
     tile_results: List[Dict[str, Any]],
     canvas_height: int,
     canvas_width: int,
     n_exp: int,
+    cancel_event=None,
 ) -> Dict[str, np.ndarray]:
     H, W = canvas_height, canvas_width
 
@@ -25,6 +29,8 @@ def assemble_tile_maps(
     owner     = np.full((H, W), -1,     dtype=np.int32)
 
     for ti, tr in enumerate(tile_results):
+        if cancel_event is not None and cancel_event.is_set():
+            raise Cancelled('cancelled while mapping tile ownership')
         if tr.get('pixel_maps') is None:
             continue
         y0, x0 = tr['pixel_y'], tr['pixel_x']
@@ -52,6 +58,8 @@ def assemble_tile_maps(
     coverage         = np.zeros((H, W), dtype=np.uint16)
 
     for ti, tr in enumerate(tile_results):
+        if cancel_event is not None and cancel_event.is_set():
+            raise Cancelled('cancelled while assembling the canvas')
         pm = tr.get('pixel_maps')
         if pm is None:
             continue
