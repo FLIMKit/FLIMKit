@@ -1430,6 +1430,8 @@ It writes the same `~/.flimkit/qupath-bridge.json`, so `Extensions > FLIMKit bri
 
 QuPath drives everything in this mode, stitching and fitting included, over the same HTTP API. `Extensions > FLIMKit bridge > Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side.
 
+The **Pipeline** setting in that dialog picks how. `tile_fit`, the default, fits each tile after a global summed fit and assembles the maps. `stitch_fit` stitches the raw photons into one canvas and fits that, which means writing the whole photon cube to disk first: 124 tiles at 512 square make a 5581 square canvas, which is 57 GB at 459 bins. Pick `stitch_fit` when you want the stitched photon cube itself, and `tile_fit` otherwise.
+
 ### Co-registration
 
 FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on another image has to be transformed into that space first. That happens on the QuPath side.
