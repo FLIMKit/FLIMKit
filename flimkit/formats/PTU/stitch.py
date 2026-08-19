@@ -1,4 +1,6 @@
 import json
+import os
+import time
 import numpy as np
 import tifffile
 from pathlib import Path
@@ -12,6 +14,20 @@ from ...utils.xml_utils import (
     compute_tile_pixel_positions,
 )
 from .decode import get_flim_histogram_from_ptufile, create_time_axis
+
+def sparse_files_supported(directory):
+    probe = Path(directory) / '.flimkit_sparse_probe'
+    try:
+        with open(probe, 'wb') as handle:
+            handle.truncate(64 * 1024 * 1024)
+        return os.stat(probe).st_blocks * 512 < 32 * 1024 * 1024
+    except Exception:
+        return True
+    finally:
+        try:
+            probe.unlink()
+        except Exception:
+            pass
 
 def stitch_flim_tiles(
     xlif_path,
@@ -74,16 +90,24 @@ def stitch_flim_tiles(
     else:
         canvas_width = max(t['pixel_x'] for t in tile_positions) + tile_x
         canvas_height = max(t['pixel_y'] for t in tile_positions) + tile_y
+    cube_gb = canvas_height * canvas_width * n_time_bins * 4 / 1e9
     if verbose:
         print(f"  Canvas: {canvas_height} × {canvas_width} pixels")
         print()
-        print('Allocating arrays...')
+        print(f'Allocating a {cube_gb:.1f} GB photon cube at {output_flim}')
+        if not sparse_files_supported(Path(output_flim).parent):
+            print(f'  {Path(output_flim).parent} cannot make sparse files, so all '
+                  f'{cube_gb:.1f} GB is written out before the first tile is read. '
+                  f'A drive formatted APFS, HFS+, NTFS or ext4 does this instantly')
+    allocation_started = time.time()
     intensity_canvas = np.zeros((canvas_height, canvas_width), dtype=np.float64)
     flim_canvas = np.memmap(
         str(output_flim), dtype=np.uint32, mode='w+',
         shape=(canvas_height, canvas_width, n_time_bins))
     _owner = np.full((canvas_height, canvas_width), -1,     dtype=np.int32)
     _min_dist2 = np.full((canvas_height, canvas_width), np.inf, dtype=np.float64)
+    if verbose:
+        print(f'  Allocated in {time.time() - allocation_started:.1f}s')
     _hists = []
     if verbose:
         print(f"Stitching {len(tile_positions)} tiles...")

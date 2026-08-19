@@ -1396,7 +1396,7 @@ It runs inside a live QuPath session rather than as a script, so it works with t
 
 Two halves, one on each side.
 
-1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
+1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
 
 QuPath 0.7.0 or newer is required, and FLIMKit 0.12.0 or newer, which pip pulls in.
@@ -1415,7 +1415,20 @@ From QuPath:
 
 From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
 
-The bridge can also run without the FLIMKit window, and the same HTTP API drives stitching and fitting from QuPath. The bridge's README documents both.
+### Without the FLIMKit window
+
+QuPath does not need the FLIMKit desktop app. `flimkit-bridge` starts the same server on its own, with no window and no display, which is what you want on a headless machine or when QuPath is the only front end you use.
+
+```bash
+pip install flimkit-qupath-bridge
+flimkit-bridge
+```
+
+Note that `flimkit` is the desktop app and always opens a window. `flimkit-bridge` is the headless one.
+
+It writes the same `~/.flimkit/qupath-bridge.json`, so `Extensions > FLIMKit bridge > Connect` finds it exactly as it finds a running FLIMKit. `--port` and `--token` are there if you need them, `--force` takes over the discovery file from a bridge that has been left running, and `--no-announce` serves alongside one instead.
+
+QuPath drives everything in this mode, stitching and fitting included, over the same HTTP API. `Extensions > FLIMKit bridge > Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side.
 
 ### Co-registration
 

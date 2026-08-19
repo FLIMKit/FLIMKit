@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.1] - 2026-08-21
+
+### Added
+- Stitching says how big the photon cube is, where it is going and how long the allocation took. A 124 tile mosaic at 512 square comes to a 5581 square canvas, which is 57.2 GB at 459 bins, and the line before it was `Allocating arrays...` with nothing after it until every tile had been read.
+- A warning when the output drive cannot make sparse files. exFAT and FAT cannot, so the whole cube is physically written before the first tile is read: 57.2 GB at 0.57 GB/s on a USB drive here, against 0.75s on APFS where the file is sparse. The check writes a 64 MB probe and reads `st_blocks`, so it costs nothing.
+
+### Changed
+- The QuPath bridge documentation names `flimkit-bridge`. The section said the bridge starts with FLIMKit and that it can also run without the window, without ever giving the command, so the only documented route was through the desktop app. `flimkit` opens a window and `flimkit-bridge` does not, which is now said in as many words.
+
 ## [0.13.0] - 2026-08-21
 
 ### Added
@@ -21,6 +30,7 @@
 
 ### Security
 - The `test` extra asked for `pytest==9.0.2`, which CVE-2025-71176 covers. It now asks for 9.1.0 or newer. A hard pin in an extra was wrong regardless, since it fights whatever the environment already has.
+
 
 ## [0.12.0] - 2026-08-19
 
