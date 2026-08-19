@@ -1394,12 +1394,12 @@ It runs inside a live QuPath session rather than as a script, so it works with t
 
 ### Installing
 
-Two halves, one on each side. Both are attached to the bridge's release.
+Two halves, one on each side.
 
-1. Install `flimkit_qupath_bridge-*.whl` into the environment FLIMKit runs in, or drop it in `~/.flimkit/plugins/`.
+1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
 
-QuPath 0.7.0 or newer is required, and FLIMKit 0.11.0 or newer for the plugin bindings and the startup hook.
+QuPath 0.7.0 or newer is required, and FLIMKit 0.12.0 or newer, which pip pulls in.
 
 ### Using it
 
