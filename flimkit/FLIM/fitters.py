@@ -6,7 +6,7 @@ tqdm.disable = True
 from scipy.optimize import least_squares, differential_evolution, nnls
 from scipy.stats.distributions import chi2 as chi2_dist
 from ..FLIM.irf_tools import build_full_irf
-from ..FLIM.fit_tools import (estimate_bg, find_fit_start, find_fit_end, _build_bounds,
+from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
                               calibrated_chi2, distribution_dof)
@@ -870,9 +870,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         tau_max_s = (tau_max_ns if tau_max_ns is not None
                      else taus_fixed.max() * 1e9 * 10.0) * 1e-9
         amp_hi = float(stack.max()) * 10.0
-        lo_px = np.array([tau_min_s] * n_exp + [0.0] * n_exp)
-        hi_px = np.array([tau_max_s] * n_exp + [amp_hi]   * n_exp)
-        p0_px = np.concatenate([taus_fixed, np.full(n_exp, float(stack.max()) / n_exp)])
+        lo_px = np.array([tau_min_s / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi_px = np.array([tau_max_s / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
+        p0_px = np.concatenate([taus_fixed / TAU_FIT_UNIT_S,
+                                np.full(n_exp, float(stack.max()) / n_exp)])
         if tvb_on:
             tvb_hi = float(stack.sum(axis=2).max())
             lo_px = np.concatenate([lo_px, [0.0]])
@@ -891,7 +892,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     fit_px = coates_pileup_correction(decay_px, _n_sync_px)
                 bg_px = estimate_bg(fit_px, int(np.argmax(fit_px)))
                 def _make_full(p_px):
-                    taus_p = p_px[:n_exp]
+                    taus_p = p_px[:n_exp] * TAU_FIT_UNIT_S
                     amps_p = p_px[n_exp:2 * n_exp]
                     if _tail:
                         full = list(taus_p) + list(amps_p)
@@ -938,7 +939,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 except Exception:
                     skipped += 1
                     continue
-                taus_sol = p_sol[:n_exp]
+                taus_sol = p_sol[:n_exp] * TAU_FIT_UNIT_S
                 amps_sol = p_sol[n_exp:2 * n_exp]
                 amp_sum = amps_sol.sum()
                 if amp_sum <= 0:

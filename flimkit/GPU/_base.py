@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import least_squares
-from ..FLIM.fit_tools import calibrated_chi2, calibrated_from_terms, chi2_terms
+from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, calibrated_chi2,
+                             calibrated_from_terms, chi2_terms)
 from ..FLIM.models import reconvolution_model
 
 def fit_window(fit_idx, n_bins):
@@ -301,8 +302,8 @@ class _BackendMixin:
         amp0    = float(raw_valid.max()) / n_exp
         # Use the same bounds as the CPU free-tau path in fit_per_pixel
         amp_hi  = float(raw_valid.max()) * 10.0
-        lo_px   = np.array([float(tau_min_s)] * n_exp + [0.0]      * n_exp)
-        hi_px   = np.array([float(tau_max_s)] * n_exp + [amp_hi]   * n_exp)
+        lo_px = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi_px = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
         if fit_tvb:
             tvb_hi = float(raw_valid.sum(axis=1).max())
             lo_px  = np.concatenate([lo_px, [0.0]])
@@ -312,20 +313,22 @@ class _BackendMixin:
             decay_b = raw_valid[b].astype(np.float64)
             bg_b    = float(bg_valid[b])
             wt = np.sqrt(np.maximum(weights[b].astype(np.float64), 1.0))
-            p0      = np.concatenate([taus_init,
-                                      np.full(n_exp, amp0)])
+            p0 = np.concatenate([taus_init / TAU_FIT_UNIT_S,
+                                 np.full(n_exp, amp0)])
             if fit_tvb:
                 p0 = np.concatenate([p0, [bg_b * n_bins]])
 
             def _resid(p):
                 if fit_tvb:
-                    full_p = np.concatenate([p[:n_exp], p[n_exp:2 * n_exp], [0.0], [p[2 * n_exp]]])
+                    full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
+                                             p[n_exp:2 * n_exp], [0.0], [p[2 * n_exp]]])
                     model  = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, 0.0, False, False, False,
                         tvb_profile=tvb_profile, fit_tvb=True)
                 else:
-                    full_p = np.concatenate([p[:n_exp], p[n_exp:], [0.0]])
+                    full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
+                                             p[n_exp:], [0.0]])
                     model  = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, bg_b, False, False, False)
@@ -354,7 +357,8 @@ class _BackendMixin:
         for b, p_sol in enumerate(solutions):
             if p_sol is None:
                 continue
-            taus_b = p_sol[:n_exp];  amps_b = p_sol[n_exp:2 * n_exp]
+            taus_b = p_sol[:n_exp] * TAU_FIT_UNIT_S
+            amps_b = p_sol[n_exp:2 * n_exp]
             if amps_b.sum() <= 0:
                 continue
             tvb_b = float(p_sol[2 * n_exp]) if fit_tvb else 0.0
