@@ -1,7 +1,8 @@
 import threading
 
 import numpy as np
-from flimkit.GPU._base import _BackendMixin, fit_window, pixel_blocks
+from flimkit.GPU._base import (_BackendMixin, fit_window, pixel_blocks,
+                               gpu_block_bytes, CUDA_BLOCK_BYTES)
 from flimkit.FLIM.fit_tools import (calibrated_chi2, distribution_dof,
                                     estimate_bg, coates_pileup_correction)
 
@@ -13,6 +14,16 @@ class TorchBackend(_BackendMixin):
         import torch
         self._torch = torch
         self.device = torch.device(device)
+
+    def block_bytes(self):
+        if self.device.type != 'cuda':
+            return gpu_block_bytes()
+        budget = gpu_block_bytes(CUDA_BLOCK_BYTES)
+        try:
+            free = int(self._torch.cuda.mem_get_info(self.device)[0])
+        except Exception:
+            return budget
+        return max(1, min(budget, free // 2))
 
     def _matmul_full_precision(self, left, right):
         if self.device.type != 'cuda':
@@ -69,7 +80,8 @@ class TorchBackend(_BackendMixin):
             A_cpu = torch.as_tensor(A, dtype=torch.float32, device='cpu')
             A_pinv = torch.linalg.pinv(A_cpu).to(self.device)
         n_fit = A.shape[0]
-        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp)):
+        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -157,7 +169,8 @@ class TorchBackend(_BackendMixin):
             basis_t = torch.as_tensor(basis_grid, dtype=torch.float32, device=self.device)
             bb_t = torch.as_tensor(bb_grid, dtype=torch.float32, device=self.device)
         per_pixel = 4 * (2 * n_bins + n_fit + N_GRID)
-        for first, last in pixel_blocks(valid_idx.size, per_pixel):
+        for first, last in pixel_blocks(valid_idx.size, per_pixel,
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:

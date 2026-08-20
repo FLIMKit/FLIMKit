@@ -24,8 +24,9 @@ def fit_window(fit_idx, n_bins):
 
 
 GPU_BLOCK_BYTES = 256 * 1024 * 1024
+CUDA_BLOCK_BYTES = 32 * 1024 * 1024
 
-def gpu_block_bytes():
+def gpu_block_bytes(default=GPU_BLOCK_BYTES):
     import os
     override = os.environ.get('FLIMKIT_GPU_BLOCK_BYTES')
     if override:
@@ -33,7 +34,7 @@ def gpu_block_bytes():
             return max(1, int(override))
         except ValueError:
             pass
-    return GPU_BLOCK_BYTES
+    return default
 
 def pixel_blocks(n_pixels, bytes_per_pixel, budget=None):
     budget = gpu_block_bytes() if budget is None else budget
@@ -108,6 +109,10 @@ class GPUBackend:
         raise NotImplementedError
 
 class _BackendMixin:
+
+    def block_bytes(self):
+        return gpu_block_bytes()
+
 
     @staticmethod
     def _estimate_bg_batch(flat, valid_mask, pre_gap=5):

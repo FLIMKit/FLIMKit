@@ -4,6 +4,7 @@
 
 ### Changed
 - `gpu_benchmark.py` covers every per-pixel GPU kernel rather than the one-exponential grid scan alone. It times `batch_fixed_tau`, `batch_free_tau_fit` and `batch_dist_scan_unimodal` against the CPU and reports the worst disagreement between the two paths, sweeps the field from 256 to 1024 square so the 1.93 GB case that used to be refused is actually measured, and sweeps `FLIMKIT_GPU_BLOCK_BYTES` and reports how many pixels the budget changed and by how much. `--sides` and `--skip` pick what runs, a size the GPU cannot take is reported and skipped rather than ending the run, and the primary field is not built when nothing needs it.
+- The GPU block budget is per backend rather than one constant, and CUDA and ROCm drop from 256 MB to 32 MB. Measured on an RTX A5000, the budget sets a cliff between 32 and 64 MB that costs a flat 2x at every field size: 15.7s against 33.5s on a 2048 square field, with peak device memory 0.09 GB against 0.63 GB. The card has 6 MB of L2, so the fast region is where the basis and a block stay resident. MLX does not share the behaviour and keeps 256 MB. The budget is now also clamped to half of free device memory, which is the ceiling a small card needs and one nothing previously provided, since no part of the GPU code queried the card at all. `FLIMKIT_GPU_BLOCK_BYTES` still overrides the default and is still clamped.
 - The publish workflow no longer has a TestPyPI job. The pending publisher for it was never set up on test.pypi.org, so every dry run failed on `invalid-publisher`.
 
 ## [0.12.0] - 2026-08-19

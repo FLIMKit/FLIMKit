@@ -53,7 +53,8 @@ class MLXBackend(_BackendMixin):
         else:
             A_pinv_mx = mx.linalg.pinv(mx.array(A.astype(np.float32)), stream=mx.cpu)
         n_fit = A.shape[0]
-        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp)):
+        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -144,7 +145,8 @@ class MLXBackend(_BackendMixin):
             basis_mx = mx.array(basis_grid.astype(np.float32))
             bb_mx = mx.array(bb_grid.astype(np.float32))
         per_pixel = 4 * (2 * n_bins + n_fit + N_GRID)
-        for first, last in pixel_blocks(valid_idx.size, per_pixel):
+        for first, last in pixel_blocks(valid_idx.size, per_pixel,
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
