@@ -27,8 +27,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from flimkit.UI.progress_window import ProgressWindow
 from flimkit.UI.phasor_panel import PhasorViewPanel
-from flimkit.UI import flim_display
-from flimkit.UI.roi_tools import RoiManager, RoiAnalysisPanel
+from flimkit.utils import display
+from flimkit.utils.roi import RoiManager
+from flimkit.UI.roi_tools import RoiAnalysisPanel
 from flimkit.UI.project_panel import ProjectBrowserPanel
 
 try:
@@ -196,6 +197,13 @@ class _UIBuilder:
                 sys.stdout = orig_stdout
                 sys.stderr = orig_stderr
         threading.Thread(target=worker, daemon=True).start()
+
+    def _run_plugin_startups(self):
+        from flimkit import plugins
+        plugins.ensure_loaded()
+        for entry, exc in plugins.run_startups(self):
+            print(f'[Plugin] startup {entry.id} ({entry.source}) raised '
+                  f'{type(exc).__name__}: {exc}')
 
     def _build_plugin_menu(self, menu, path):
         from flimkit import plugins
@@ -982,6 +990,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         roi_frame.columnconfigure(0, weight=1)
         roi_frame.rowconfigure(0, weight=1)
         self._roi_analysis_panel = RoiAnalysisPanel(roi_frame)
+        self._roi_analysis_panel.app = self
         self._roi_analysis_panel.grid(row=0, column=0, sticky='nsew')
         self._roi_analysis_frame = roi_frame
         self._stitch_tabs = ttk.Notebook(form_wrapper)
@@ -1800,7 +1809,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     self._fov_preview._n_exp = int(n_exp)
             try:
                 if self._fov_preview._lifetime_map is not None and self._fov_preview._intensity_map is not None:
-                    from flimkit.UI import flim_display
+                    from flimkit.utils import display
                     intensity = self._fov_preview._intensity_map
                     lifetime = self._fov_preview._lifetime_map
                     ax_img = self._fov_preview._ax_img
@@ -1814,13 +1823,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     ax_img.set_xlabel('X (pixels)')
                     ax_img.set_ylabel('Y (pixels)')
                     cs = self._fov_preview._flim_color_scale
-                    scaled = flim_display.apply_color_scale(
+                    scaled = display.apply_color_scale(
                         lifetime,
                         vmin=cs.get('vmin'),
                         vmax=cs.get('vmax'),
                         gamma=cs.get('gamma', 1.0),
                     )
-                    cmap_obj = flim_display.get_colormap(cs.get('cmap', 'viridis'))
+                    cmap_obj = display.get_colormap(cs.get('cmap', 'viridis'))
                     cmap_obj.set_bad(color='black')
                     ax_flim.clear()
                     ax_cbar.clear()
@@ -2088,7 +2097,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if with_scalebar:
                             self._draw_scale_bar(ax, w, h, pixel_size_um)
                         if with_annotations and self._fov_preview._roi_manager.get_all_regions():
-                            from flimkit.UI.roi_tools import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
+                            from flimkit.utils.roi import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
                             for region in self._fov_preview._roi_manager.get_all_regions():
                                 region_id = region['id']
                                 tool_type = region['tool']
@@ -2288,6 +2297,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.irf_shift_bins = ex['irf_shift_bins']
         if 'free_tau_perpixel' in ex:
             a.free_tau_perpixel = ex['free_tau_perpixel']
+        if 'pileup_in_model' in ex:
+            a.pileup_in_model = ex['pileup_in_model']
         if 'align_irf' in ex:
             a.align_irf = ex['align_irf']
         if 'fit_start_ns' in ex:
@@ -3211,7 +3222,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 f'✓  Z-stack complete - {n_stacks} stack(s), {n_slices} slices.')
             first = next(iter(result.values())) if isinstance(result, dict) and result else None
             if first is not None:
-                from flimkit.UI.flim_display import load_zstack_display_slices
+                from flimkit.utils.display import load_zstack_display_slices
                 try:
                     slices = load_zstack_display_slices(first['group_dir'], ptu_dir=ptu_dir)
                     if slices:
@@ -3872,6 +3883,7 @@ if HAS_TKMT:
             self.root = self.master
             self.root.minsize(760, 700)
             self._init_ui()
+            self._run_plugin_startups()
             self.run(cleanresize=False)
 
 class FLIMKitGUIFallback(_UIBuilder):
@@ -3880,6 +3892,7 @@ class FLIMKitGUIFallback(_UIBuilder):
         self.root.title('FLIMkit Analysis GUI')
         self.root.minsize(760, 700)
         self._init_ui()
+        self._run_plugin_startups()
         self.root.mainloop()
 
 def launch_gui():

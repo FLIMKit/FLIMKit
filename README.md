@@ -3,6 +3,7 @@
 [![tests](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml/badge.svg)](https://github.com/FLIMKit/FLIMKit/actions/workflows/test.yml)
 [![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://github.com/FLIMKit/FLIMKit#installation)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)
+[![DOI](https://zenodo.org/badge/1168642847.svg)](https://doi.org/10.5281/zenodo.21931131)
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions. API and file formats may change without deprecation.
 
@@ -25,6 +26,19 @@ Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed d
 ## Installation
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
+
+From PyPI, for analysis in scripts, notebooks and the terminal:
+
+```bash
+pip install flimkit            # readers, fitting, phasors, stitching, the CLI
+pip install "flimkit[gui]"     # adds the desktop window
+```
+
+That install fits on the CPU. `pip install "flimkit[mlx]"` adds the GPU on
+Apple Silicon, and `pip install "flimkit[torch]"` adds CUDA on Linux and MPS on
+a Mac. Windows CUDA and AMD ROCm need a wheel from PyTorch's own index, which
+pip metadata cannot ask for, so clone it for those, and for the terminal CLIs
+at the repository root:
 
 ```bash
 git clone https://github.com/FLIMKit/FLIMKit.git
@@ -261,7 +275,7 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 **PhasorPy**: Gohlke, C. et al. Zenodo. https://doi.org/10.5281/zenodo.13862586
 
-**ptufile / sdtfile** (PicoQuant `.ptu` and Becker & Hickl `.sdt` readers): Gohlke, C. https://github.com/cgohlke/ptufile, https://github.com/cgohlke/sdtfile
+**ptufile / sdtfile / lfdfiles / tifffile** (PicoQuant `.ptu`, Becker & Hickl `.sdt`, SimFCS and ISS formats, and TIFF): Gohlke, C. https://github.com/cgohlke/ptufile, https://github.com/cgohlke/sdtfile, https://github.com/cgohlke/lfdfiles, https://github.com/cgohlke/tifffile
 
 **photonsfile** (Photonscore LINCam `.photons` / D7 reader): Hunt, A. and A. Akram. Zenodo. https://doi.org/10.5281/zenodo.21360199
 
@@ -273,7 +287,9 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
-FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. FLIMKit's own `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. This assistance supported implementation, testing, and documentation. Zhen Yuan directed and reviewed the work and remains responsible for the submitted implementations.
+
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. FLIMKit's own `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
 Thank you to the users who have contributed features and reported problems: to Lin Yangchen (@linyangchen) for the request to accept LAS X calculated-IRF exports as CSV as well as XLSX, and to zhen yuan (@zhenyuan992) for implementing that support, including the delimiter and decimal-comma handling needed for locale-specific exports.
 

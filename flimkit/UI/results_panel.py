@@ -13,7 +13,7 @@ import matplotlib
 import matplotlib.image as mpimg
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from flimkit.UI import flim_display
+from flimkit.utils import display
 
 class ResultsPanel:
     def __init__(self, parent, root=None):

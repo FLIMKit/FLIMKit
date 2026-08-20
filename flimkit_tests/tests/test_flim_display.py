@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from flimkit.UI.flim_display import (
+from flimkit.utils.display import (
     compute_weighted_lifetime,
     apply_color_scale,
 )

@@ -113,6 +113,11 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--correct-pileup', action='store_true',
                     help='Apply Coates (1968) pile-up correction to the decay before '
                          'fitting. Recommended when count rate > 5%% of sync rate.')
+    ap.add_argument('--pileup-in-model', action='store_true',
+                    help='Fold pile-up into the fitted model instead of rescaling the '
+                         'decay, which keeps the data Poisson. Needs --free-tau with two '
+                         'or more components, and cannot be combined with '
+                         '--correct-pileup.')
     ap.add_argument('--free-tau', action='store_true',
                     help='Free tau per pixel: LM fit per pixel with tau as free parameters '
                          '(slower; needed to see spatial tau variation for n_exp > 1).')
@@ -352,6 +357,7 @@ def single_FOV_flim_fit_cli():
             tau_min_ns=args.tau_min,
             tau_max_ns=args.tau_max,
             correct_pileup=getattr(args, 'correct_pileup', False),
+            pileup_in_model=getattr(args, 'pileup_in_model', False),
             n_sync=getattr(ptu, 'n_sync', None),
             fit_idx=global_summary.get('fit_idx'),
             free_tau=getattr(args, 'free_tau', False),

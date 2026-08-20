@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.9.17** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.12.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -106,12 +106,19 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `scipy` | Optimisers (Levenberg-Marquardt, Differential Evolution), signal processing |
 | `matplotlib` | Plotting (decay curves, lifetime maps, phasor plots) |
 | `xarray` | Labelled N-D arrays for FLIM signals |
-| `phasorpy` (0.10) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
+| `phasorpy` (0.12) | Phasor computation, calibration, cursor masking, spatial filtering, lifetime conversion |
 | `PyWavelets` | Wavelet-based phasor denoising |
+| `ptufile` | PicoQuant `.ptu`, `.bin`, `.phu` decoding |
+| `sdtfile` | Becker & Hickl `.sdt` decoding |
+| `lfdfiles` | SimFCS `.b&h`, `.bhz`, `.ref`, `.r64` and ISS `.ifli`, `.iss-tdflim` decoding |
+| `photonsfile` | Photonscore LINCam `.photons` (D7) decoding |
 | `inquirer` | Interactive terminal prompts |
-| `ipywidgets` + `ipympl` | Jupyter notebook interactive support |
-| `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking |
-| `opencv-python` | Image I/O, resizing, and general image processing |
+| `numba` | Speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `shapely` | Repairs self-intersecting ROI rings on GeoJSON export |
+| `lz4` | LZ4-compressed Becker & Hickl `.sdt` blocks |
+| `ipywidgets` | Jupyter notebook interactive support, optional |
+| `cellpose` (≥ 3.0) | Deep-learning cell segmentation (Cellpose-SAM) for cell masking, optional |
+| `opencv-python-headless` | Image I/O, resizing, and general image processing |
 | `openpyxl` | Excel XLSX parsing for FLIM microscope software IRF extraction |
 | `pandas` | Excel/XLSX IRF file parsing |
 | `tifffile` | TIFF image I/O |
@@ -119,13 +126,58 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 
 ### Installation
 
+From PyPI, for analysis in scripts, notebooks and the terminal:
+
+```bash
+pip install flimkit                 # readers, fitting, phasors, stitching, the CLI
+pip install "flimkit[gui]"          # adds the desktop window
+```
+
+This is the right route for a server, a container, or anywhere you only want
+the library. It installs no Tkinter packages, so it works on a machine with no
+display and no `python3-tk`.
+
+Extras combine, so ask for whichever apply:
+
+| Command | Packages | What you get |
+|---|---|---|
+| `pip install flimkit` | 52 | Readers, fitting, phasors, stitching and the terminal CLI. No desktop, no GPU. |
+| `pip install "flimkit[gui]"` | 54 | The desktop window as well. |
+| `pip install "flimkit[torch]"` | 62 | Headless with GPU fitting. |
+| `pip install "flimkit[gui,torch]"` | 64 | Desktop and GPU. |
+| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. |
+| `pip install "flimkit[notebook]"` | 71 | The Jupyter phasor cursor tool. |
+| `pip install "flimkit[all]"` | 91 | `gui`, `notebook` and `segmentation` together, and GPU by way of Cellpose. |
+| `pip install "flimkit[test]"` | 56 | pytest, for running the suite against an installed copy. |
+
+Counts are from a resolve on macOS and will differ a little by platform,
+mostly in how much PyTorch brings with it.
+
+A pip install fits on the CPU. GPU acceleration needs a backend, and what pip
+can give you depends on the platform:
+
+| Platform | Command | What you get |
+|---|---|---|
+| Apple Silicon | `pip install "flimkit[mlx]"` | MLX on Metal, the fastest path on a Mac |
+| Apple Silicon or Intel Mac | `pip install "flimkit[torch]"` | PyTorch MPS |
+| Linux, NVIDIA | `pip install "flimkit[torch]"` | CUDA. PyPI's Linux wheel pulls the CUDA runtime itself |
+| Windows, NVIDIA | see below | pip alone gives CPU only |
+| AMD, ROCm | see below | not on PyPI at all |
+
+Windows and ROCm need a wheel from PyTorch's own index rather than PyPI, which
+package metadata cannot ask for. That is what `install.py` is for:
+
 ```bash
 git clone https://github.com/FLIMKit/FLIMKit.git
 cd FLIMKit
 python install.py
 ```
 
-`install.py` installs core requirements, then auto-detects and installs the right GPU backend (MLX on Apple Silicon, CUDA on NVIDIA, ROCm on AMD, CPU-only fallback). No flags needed for a standard install.
+`install.py` installs the requirements, then detects the hardware and installs
+the matching GPU backend (MLX on Apple Silicon, CUDA on NVIDIA, ROCm on AMD,
+CPU-only otherwise). No flags needed for a standard install. Clone it too if
+you want the terminal CLIs at the repository root, `fit_cli.py`,
+`phasor_cli.py` and `synth_cli.py`, which are not part of the package.
 
 ```bash
 python install.py --dev      # also installs PyInstaller and test requirements
@@ -912,10 +964,8 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 - **`FOVPreviewPanel`** - right-panel widget showing intensity image and summed decay. Switches to `PhasorViewPanel` when the Phasor tab is active. Caches the last fitted IRF prompt (`_irf_prompt`) so per-ROI fits can reuse it.
 
 #### `roi_tools.py`
-- **`RoiManager`** - stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence.
-  - `.add_region(name, tool, coords)` - register a new region, returns its integer ID
-  - `.compute_region_mask(region_id, image_shape)` - boolean (H×W) mask for a region
-  - `.to_json()` / `.from_json(json_str)` - serialise/deserialise for session files
+The region model itself lives in `flimkit/utils/roi.py` so that headless and web use can reach it without Tkinter. `roi_tools` re-exports `RoiManager` and the patch helpers, so existing imports keep working.
+
 - **`RoiAnalysisPanel`** - tab panel for region drawing, statistics display, and per-ROI fitting.
   - Drawing modes: Select, Rectangle, Ellipse, Polygon, Freehand
   - Per-region stats: τ_mean, τ_median, τ_stdev, photon count (all from the loaded lifetime/intensity maps)
@@ -943,6 +993,30 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 ---
 
 ### `flimkit.utils` - Shared Utilities
+
+#### `roi.py`
+- **`RoiManager`** - stores region geometry and per-region statistics. Serialises to/from JSON for `.roi_session.npz` persistence. No GUI toolkit, so headless scripts and either frontend can use it.
+  - `.add_region(name, tool, coords)` - register a new region, returns its integer ID
+  - `.compute_region_mask(region_id, image_shape)` - boolean (H×W) mask for a region
+  - `.to_json()` / `.from_json(json_str)` - serialise/deserialise for session files
+  - `.to_geojson(region_ids=None)` / `.add_geojson(payload, mode='append')` - GeoJSON export and import, with self-intersecting polygon repair
+- **`get_rectangle_patch(...)`** / **`get_ellipse_patch(...)`** / **`get_polygon_patch(...)`** - matplotlib patches from region coordinates
+
+#### `display.py`
+- **`load_zstack_display_slices(group_dir, ptu_dir=None, region=None)`** - per-slice pixel maps, decays and reference fit for a z-stack output directory
+- **`compute_weighted_lifetime(pixel_maps, intensity, n_exp=2, weighting='amplitude')`** - amplitude- or intensity-weighted mean lifetime map
+- **`apply_color_scale(image, vmin=None, vmax=None, gamma=1.0, percentile_auto=(2, 98))`** - normalise a map for display, with percentile autoscaling
+- **`get_colormap(name='viridis')`** - colormap lookup against the `COLORMAPS` table
+- **`compute_region_stats(lifetime_map, intensity_map, region_mask, full_stats=False)`** - τ and photon statistics inside a mask
+- **`mask_to_rgba(mask, color=(1.0, 1.0, 1.0), alpha=0.3)`** - boolean mask as an RGBA overlay
+
+#### `config_snapshot.py`
+- **`_C()`** - cached dict snapshot of `configs.py`, read by both frontends when building fit arguments
+
+#### `session.py`
+- **`_reconstruct_dict_from_session(session_data, key)`** - rebuild a nested dict from the flattened `*_json` and `*_arr_*` keys in a session NPZ
+- **`_safe_array_from_json(value)`** - coerce a session value back to a NumPy array
+- **`_parse_summary(captured_log)`** - `name = value unit` lines from captured fit output as table rows
 
 #### `plotting.py`
 - **`plot_summed(...)`** - main summed-fit figure: log-scale decay + model overlay, weighted residuals, parameter table
@@ -986,7 +1060,7 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │   │
 │   ├── UI/
 │   │   ├── gui.py                 # Tkinter desktop GUI
-│   │   ├── roi_tools.py           # ROI drawing panel, RoiManager, per-ROI decay fitting
+│   │   ├── roi_tools.py           # ROI drawing panel, per-ROI decay fitting
 │   │   └── phasor_panel.py        # Embedded phasor view panel
 │   │
 │   ├── synth.py                   # Synthetic known-truth data generation
@@ -1025,6 +1099,10 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 │   │   └── tools.py               # Intensity images, cell masking
 │   │
 │   └── utils/
+│       ├── roi.py                 # RoiManager - region geometry, masks, GeoJSON
+│       ├── display.py             # Display scaling, colormaps, region stats
+│       ├── config_snapshot.py     # Cached snapshot of configs.py
+│       ├── session.py             # Session NPZ dict/array helpers
 │       ├── plotting.py            # Decay + pixel map plots
 │       ├── enhanced_outputs.py    # TIFF exports, summary text
 │       ├── lifetime_image.py      # Colourised lifetime images
@@ -1114,6 +1192,39 @@ Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch 
 
 The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
 
+### Current images and ROIs
+
+Plugins can exchange the images and regions currently shown by FLIMKit without reading private GUI fields:
+
+```python
+from flimkit.plugins import (
+    export_rois_geojson,
+    get_current_images,
+    import_rois_geojson,
+    tool,
+)
+
+@tool(id='bridge_example', label='Bridge Example...', menu='Tools', order=900)
+def open_bridge(app):
+    current = get_current_images(app)
+    intensity = current['images'].get('intensity')
+    lifetime = current['images'].get('lifetime')
+    lifetime_unit = current['units'].get('lifetime')
+
+    rois = export_rois_geojson(app)
+    imported_ids = import_rois_geojson(app, rois, mode='append')
+```
+
+`get_current_images(app)` returns separate `images` and `units` dictionaries so metadata cannot collide with an image name. The available image names are `intensity` and `lifetime`; their units are `photons` and `ns`, respectively. Arrays are 2D copies. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted from both dictionaries. Changing a returned array does not change the image held by FLIMKit.
+
+This binding is limited to fitted lifetime and photon-count intensity images. Raw per-pixel decay histograms are not included. They require a separate transfer and metadata contract for the time-bin width, repetition rate and instrument response function.
+
+`export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order with the origin at the top-left. Fractional coordinates are preserved. ROI measurements are stored once under each feature's `statistics` property; import also accepts older payloads with flattened statistic fields. Rectangles and ellipses include their exact FLIMKit bounds in the feature properties; ellipse geometry is also represented by a 64-point polygon for other programs.
+
+`import_rois_geojson(app, payload, mode='append')` accepts a GeoJSON `Feature` or `FeatureCollection` and returns the new FLIMKit region IDs. A plain GeoJSON polygon without FLIMKit properties becomes a polygon ROI, which is the normal path for data from Fiji. `mode='replace'` validates the whole payload before clearing existing regions. Invalid or unsupported geometry raises `ValueError` without partly importing the payload.
+
+These functions may be called from a plugin's background thread. FLIMKit moves access to its GUI thread and blocks the calling thread until the GUI operation completes or raises an error. Plugin callers that need cancellation should manage it outside these synchronous bindings.
+
 Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
 
 Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
@@ -1164,6 +1275,38 @@ def mine(real, imag, sigma=1.0):
 
 The filter is then usable anywhere the `gaussian`, `median` and `wavelet` methods are, and `flimkit.phasor.filters.phasor_filter_methods()` lists it. Only the keyword arguments your function declares get passed to it. The three built-in methods cannot be overridden.
 
+### Running at startup
+
+A plugin that needs to be doing something from the moment FLIMKit opens, rather than waiting for a menu click, registers a startup callback:
+
+```python
+from flimkit.plugins import startup
+
+@startup('my_server', order=200)
+def start(app):
+    ...
+```
+
+The callback runs once, with the GUI object, after the window is built. `order` sorts them low first. A startup that raises is reported on the console and the remaining ones still run, so a broken plugin cannot stop FLIMKit opening.
+
+Do not block in a startup callback. It runs on the UI thread before the window is handed to the user, so anything long-lived belongs on a daemon thread that the callback starts and returns from.
+
+### Buttons in the ROI panel
+
+Some actions belong beside the controls they relate to rather than in a menu. A plugin can add a button to the ROI panel's action grid:
+
+```python
+from flimkit.plugins import panel_button
+
+@panel_button('send_somewhere', 'Send to Somewhere', panel='roi', order=200)
+def send(app):
+    ...
+```
+
+`panel` currently accepts `'roi'` only, and an unknown panel is refused at registration rather than ignored. Buttons appear under FLIMKit's own, three to a row, sorted by `order` then label. The callback receives the same GUI object a `@tool` callback does.
+
+`id` has to be unique across everything loaded, the same as tools. Registering an id twice is refused, and the error names the plugin that got there first.
+
 ### Installing a plugin
 
 Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.
@@ -1173,6 +1316,12 @@ FLIMKit never creates that folder and does not load from it until you say so. Op
 `Help > Plugins...` lists what loaded, what failed and why, so a plugin that raises on import can be diagnosed without going near the log files.
 
 `FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
+
+A wheel works in that folder too, which is the only way to install a packaged add-on into the compiled app, since it has no `pip`. Download the `.whl` from the add-on's releases, drop it in, and restart. FLIMKit puts it on the import path before it looks for entry points, so the add-on registers exactly as it would if it had been pip installed.
+
+Two limits on that route. The wheel has to be pure Python, tagged `py3-none-any`; one built for a specific platform cannot be imported from a zip and is refused with that reason rather than failing later. And its dependencies have to be ones FLIMKit already bundles, because there is nothing in the compiled app to fetch the rest with. `numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile` and tkinter are there.
+
+Running from source, `pip install` is the better route and this is unnecessary.
 
 ### Settings a plugin owns
 
@@ -1234,6 +1383,63 @@ python main.py --plugins /path/to/dir    # extra folder, repeatable
 ### Trust
 
 A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.
+
+---
+
+## QuPath Bridge
+
+ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The [QuPath bridge](https://github.com/FLIMKit/flimkit-qupath-bridge) removes that step: FLIMKit serves its images and ROIs over a loopback HTTP connection, and QuPath reads and writes them directly.
+
+It runs inside a live QuPath session rather than as a script, so it works with the image you have open and the annotations you have drawn.
+
+### Installing
+
+Two halves, one on each side.
+
+1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
+2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
+
+QuPath 0.7.0 or newer is required, and FLIMKit 0.12.0 or newer, which pip pulls in.
+
+### Using it
+
+The bridge starts with FLIMKit. There is nothing to launch and no port to configure. FLIMKit writes its address and a generated token to `~/.flimkit/qupath-bridge.json`, and QuPath reads that file, so `Extensions > FLIMKit bridge > Connect` needs nothing typed in. If port 8765 is busy an ephemeral one is used and recorded in the same file.
+
+QuPath also pairs itself. Opening or dropping any file makes QuPath ask the bridge whether FLIMKit recognises it, so a `.ptu` opens through FLIMKit without connecting first. Pass `-Dflimkit.bridge.imageserver=false` to QuPath to turn that off.
+
+From QuPath:
+
+- **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
+- **Send annotations to FLIMKit** posts the annotations on the current image.
+- **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
+
+From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
+
+The bridge can also run without the FLIMKit window, and the same HTTP API drives stitching and fitting from QuPath. The bridge's README documents both.
+
+### Co-registration
+
+FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on another image has to be transformed into that space first. That happens on the QuPath side.
+
+This needs QuPath's [alignment extension](https://github.com/qupath/qupath-extension-align), which QuPath does not ship and which has to be installed separately. The bridge deliberately contains no alignment code of its own.
+
+Align on the intensity image rather than the lifetime map. The alignment extension cannot render 32-bit float and throws rather than declining, and the lifetime map has to be float to carry nanoseconds. Photon counts are whole numbers, so intensity crosses as 16-bit whenever that is lossless, which the extension opens without complaint. The transform is valid for the lifetime map as well, since every image of that field shares one pixel grid, and intensity is the better registration target anyway because it carries the structure a lifetime map often lacks.
+
+1. Open the brightfield or mIF image and add the FLIMKit images to the same project.
+2. Align the brightfield against the intensity image and transfer the annotations onto it.
+3. Send the annotations on the aligned image to FLIMKit.
+
+Without the alignment extension you can still exchange images and ROIs, but only between images that already share a coordinate system.
+
+### Security
+
+The bridge listens on `127.0.0.1` only, and refuses any request whose `Host` header is not localhost, which stops a web page reaching it by resolving its own hostname to your machine. Every endpoint except the status check requires the token.
+
+Both programs therefore have to be on the same machine. If they are not, forward the port over SSH rather than exposing it:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 you@the-flimkit-machine
+```
 
 ---
 
@@ -1313,6 +1519,12 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 **PhasorPy** - phasor computation, calibration, and cursor analysis:
 > Gohlke, C. et al. PhasorPy. Zenodo. https://doi.org/10.5281/zenodo.13862586
 
+**ptufile / sdtfile / lfdfiles / tifffile** - instrument file decoding for PicoQuant `.ptu`, Becker & Hickl `.sdt`, the SimFCS and ISS formats, and TIFF:
+> Gohlke, C. https://github.com/cgohlke/ptufile, https://github.com/cgohlke/sdtfile, https://github.com/cgohlke/lfdfiles, https://github.com/cgohlke/tifffile
+
+**photonsfile** - Photonscore LINCam `.photons` (D7) decoding:
+> Hunt, A. and A. Akram. photonsfile. Zenodo. https://doi.org/10.5281/zenodo.21360199
+
 **Tile stitching** - phase-correlation registration algorithm:
 > Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463-1465. https://doi.org/10.1093/bioinformatics/btp184
 
@@ -1324,6 +1536,8 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 ## Acknowledgements
 
 FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
 ---
 

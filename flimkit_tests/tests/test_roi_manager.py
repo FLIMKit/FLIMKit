@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from flimkit.UI.roi_tools import RoiManager
+from flimkit.utils.roi import RoiManager
 
 
 class TestRoiManager:
@@ -59,3 +59,159 @@ class TestRoiManager:
         colors = manager.get_color_palette()
         assert manager.get_color(id1) == colors[0]
         assert manager.get_color(id2) == colors[1]
+
+    @pytest.mark.parametrize(('tool', 'coords'), [
+        ('rect', [[2.25, 3.5], [8.75, 9.25]]),
+        ('ellipse', [[3.0, 2.0], [11.0, 10.0]]),
+        ('polygon', [[2.0, 2.0], [10.0, 3.0], [7.0, 12.0]]),
+        ('freehand', [[3.0, 3.0], [9.0, 2.0], [11.0, 8.0], [4.0, 11.0]]),
+    ])
+    def test_geojson_round_trip_preserves_region_and_mask(self, tool, coords):
+        manager = RoiManager()
+        region_id = manager.add_region('Cell 1', tool, coords, color_idx=3)
+        region = manager.get_region(region_id)
+        assert region is not None
+        region['statistics'] = {
+            'tau_median': 2.75,
+            'photon_count': 1234,
+        }
+        expected_mask = manager.compute_region_mask(region_id, (16, 16))
+
+        payload = manager.to_geojson()
+        properties = payload['features'][0]['properties']
+        assert properties['statistics'] == {
+            'tau_median': 2.75,
+            'photon_count': 1234,
+        }
+        assert 'tau_median' not in properties
+        assert 'photon_count' not in properties
+        restored = RoiManager()
+        restored_ids = restored.add_geojson(payload)
+
+        assert len(restored_ids) == 1
+        region = restored.get_region(restored_ids[0])
+        assert region is not None
+        assert region['name'] == 'Cell 1'
+        assert region['tool'] == tool
+        assert region['coords'] == coords
+        assert region['color_idx'] == 3
+        assert region['statistics'] == {
+            'tau_median': 2.75,
+            'photon_count': 1234,
+        }
+        np.testing.assert_array_equal(
+            restored.compute_region_mask(restored_ids[0], (16, 16)),
+            expected_mask,
+        )
+
+    def test_geojson_polygon_without_flimkit_metadata_imports_as_polygon(self, manager):
+        payload = {
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'properties': {'name': 'Fiji ROI'},
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [[
+                        [1.25, 2.5], [8.5, 2.5], [4.0, 9.75], [1.25, 2.5],
+                    ]],
+                },
+            }],
+        }
+
+        restored_ids = manager.add_geojson(payload)
+
+        region = manager.get_region(restored_ids[0])
+        assert region is not None
+        assert region['name'] == 'Fiji ROI'
+        assert region['tool'] == 'polygon'
+        assert region['coords'] == [[1.25, 2.5], [8.5, 2.5], [4.0, 9.75]]
+
+    def test_geojson_import_accepts_legacy_flat_statistics(self, manager):
+        payload = {
+            'type': 'Feature',
+            'properties': {
+                'name': 'Legacy ROI',
+                'tau_median': 2.5,
+                'photon_count': 800,
+            },
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [[
+                    [1.0, 1.0], [5.0, 1.0], [3.0, 4.0], [1.0, 1.0],
+                ]],
+            },
+        }
+
+        region_ids = manager.add_geojson(payload)
+
+        region = manager.get_region(region_ids[0])
+        assert region is not None
+        assert region['statistics'] == {
+            'tau_median': 2.5,
+            'photon_count': 800,
+        }
+
+    @pytest.mark.parametrize('ring', [
+        [[0, 0], [2, 0], [0, 0]],
+        [[0, 0], [2, 0], [1, 2]],
+    ])
+    def test_geojson_short_polygon_ring_explains_closing_position(
+        self,
+        manager,
+        ring,
+    ):
+        payload = {
+            'type': 'Feature',
+            'properties': {'name': 'Short ring'},
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [ring],
+            },
+        }
+
+        with pytest.raises(
+            ValueError,
+            match='at least four positions, including a repeated closing position',
+        ):
+            manager.add_geojson(payload)
+
+    def test_geojson_replace_is_transactional(self, manager):
+        manager.add_region('Existing', 'rect', [[0, 0], [2, 2]])
+        invalid = {
+            'type': 'FeatureCollection',
+            'features': [{
+                'type': 'Feature',
+                'properties': {'name': 'Broken'},
+                'geometry': {'type': 'Point', 'coordinates': [1, 1]},
+            }],
+        }
+
+        with pytest.raises(ValueError, match='Unsupported GeoJSON geometry'):
+            manager.add_geojson(invalid, mode='replace')
+
+        assert [region['name'] for region in manager.get_all_regions()] == ['Existing']
+
+    def test_geojson_repairs_self_intersecting_freehand(self, manager):
+        shapely = pytest.importorskip('shapely.geometry')
+        bowtie = [[0, 0], [10, 10], [10, 0], [0, 10]]
+        manager.add_region('Bowtie', 'freehand', bowtie)
+
+        feature = manager.to_geojson()['features'][0]
+        ring = feature['geometry']['coordinates'][0]
+
+        assert feature['properties']['repaired'] == 'self-intersecting'
+        assert shapely.Polygon(ring).is_valid
+        assert ring[0] == ring[-1]
+
+    def test_geojson_leaves_simple_freehand_untouched(self, manager):
+        shapely = pytest.importorskip('shapely.geometry')
+        square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+        manager.add_region('Square', 'freehand', square)
+
+        feature = manager.to_geojson()['features'][0]
+        ring = feature['geometry']['coordinates'][0]
+
+        assert 'repaired' not in feature['properties']
+        assert ring == [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+        assert shapely.Polygon(ring).is_valid

@@ -3,7 +3,12 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 
 
-def calibrated_chi2(data, model, axis=None):
+def distribution_dof(n_fit, n_components=1, fit_tvb=False):
+    n_params = 3 * n_components + 1 + int(fit_tvb)
+    return max(int(n_fit) - n_params, 1)
+
+
+def chi2_terms(data, model, axis=None):
     data_arr, model_arr = np.broadcast_arrays(
         np.asarray(data, dtype=float), np.asarray(model, dtype=float))
     valid = np.all(
@@ -14,12 +19,24 @@ def calibrated_chi2(data, model, axis=None):
         numerator = np.sum(
             (data_arr - model_arr) ** 2 / np.maximum(model_arr, 1.0), axis=axis)
         expected = np.sum(np.minimum(model_arr, 1.0), axis=axis)
+    return numerator, expected, valid
+
+
+def calibrated_from_terms(numerator, expected, valid):
     if np.ndim(expected) == 0:
-        return float(numerator / expected) if valid and expected > 0 else np.nan
+        return (float(numerator / expected)
+                if valid and expected > 0 else np.nan)
     result = np.full(np.shape(expected), np.nan, dtype=float)
     return np.divide(
         numerator, expected, out=result,
         where=valid & (expected > 0) & np.isfinite(numerator))
+
+
+def calibrated_chi2(data, model, axis=None):
+    numerator, expected, valid = chi2_terms(data, model, axis=axis)
+    if np.ndim(expected) == 0:
+        return float(numerator / expected) if valid and expected > 0 else np.nan
+    return calibrated_from_terms(numerator, expected, valid)
 
 
 def coates_pileup_correction(decay: np.ndarray, n_sync: int):
@@ -64,6 +81,8 @@ def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5):
     half = len(decay) // 2
     peak_bin = int(np.argmax(deriv[:half]))
     return peak_bin
+
+TAU_FIT_UNIT_S = 1e-9
 
 def estimate_bg(decay: np.ndarray, peak_bin: int, pre_gap: int = 5):
     end = max(0, peak_bin - pre_gap)

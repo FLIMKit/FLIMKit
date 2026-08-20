@@ -30,6 +30,13 @@ from .utils.enhanced_outputs import (
 from .utils.lifetime_image import make_lifetime_image
 from .image.tools import make_intensity_image, make_cell_mask, apply_intensity_threshold, pick_intensity_threshold
 from ._version import fitter_version
+
+def _cancelled(cancel_event):
+    if cancel_event is not None and cancel_event.is_set():
+        print('\nCancelled.')
+        return True
+    return False
+
 def _make_operation_progress_callback(operation_name, progress_window_manager):
     if progress_window_manager is None:
         return None
@@ -327,6 +334,8 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
         raise RuntimeError('No tiles were successfully stitched!')
     print(f"\nStitching complete: {stitch_result['tiles_processed']} tiles processed")
     roi_name = args.ptu_basename.replace(' ', '_')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 2: LOADING STITCHED DATA')
     print(f"{'='*60}")
@@ -433,6 +442,8 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             r1 = min(r0 + CHUNK_ROWS, ny)
             decay += stack[r0:r1].astype(np.float64).sum(axis=(0, 1))
         print(f'  Total photons (full canvas): {decay.sum():,.0f}')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 3: FLIM FITTING')
     print(f"{'='*60}")
@@ -541,6 +552,9 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             cost_function=getattr(args, 'cost_function', 'poisson'),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+            fit_start_ns=getattr(args, 'fit_start_ns', None),
+            fit_end_ns=getattr(args, 'fit_end_ns', None),
+            exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
         )
     else:
         print(f'\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...')
@@ -584,7 +598,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             irf_prompt=irf_prompt
         )
     pixel_maps = None
-    if args.mode in ('perPixel', 'both'):
+    if args.mode in ('perPixel', 'both') and not _cancelled(cancel_event):
         print(f'\nBuilding pixel stack (binning={args.binning}×{args.binning})...')
         pixel_stack = ptu.pixel_stack(channel=None, binning=args.binning)
         if tissue_mask is not None:
@@ -600,6 +614,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 min_photons=args.min_photons,
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
             )
         else:
@@ -612,6 +627,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
+                pileup_in_model=getattr(args, 'pileup_in_model', False),
                 n_sync=getattr(ptu, 'n_sync', None),
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
@@ -1108,6 +1124,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 min_photons=args.min_photons,
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
+                fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             )
@@ -1121,6 +1138,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
+                pileup_in_model=getattr(args, 'pileup_in_model', False),
                 n_sync=getattr(ptu, 'n_sync', None),
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
@@ -1396,6 +1414,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         canvas_height = canvas_height,
         canvas_width = canvas_width,
         n_exp = args.nexp,
+        cancel_event = cancel_event,
     )
     _binning = getattr(args, 'binning', 1)
     if _binning > 1:
@@ -1439,6 +1458,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f'  τ σ (pixel distribution)     = {tau_std:.4f} ns')
     print(f'  n pixels fitted              = {n_px}')
     print(f'  Optimizer: per-pixel (per-tile fit)')
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 4: SAVING OUTPUTS')
     print(f"{'='*60}")
@@ -1453,6 +1474,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
     )
+    if _cancelled(cancel_event):
+        return None
     print(f"\n{'='*60}")
     print(f'  STEP 5: LIFETIME IMAGE')
     print(f"{'='*60}")
@@ -1571,6 +1594,7 @@ def timelapse_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.pileup_in_model = False
         args.fit_start_ns = None
         args.fit_end_ns = None
         args.exclude_ns = None
@@ -1610,6 +1634,7 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--fit-start-ns', type=float, default=None,
                         help='fit window start in ns (default: auto from IRF onset)')
         ap.add_argument('--fit-end-ns', type=float, default=None,
@@ -1713,6 +1738,7 @@ def zstack_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.pileup_in_model = False
         args.fit_start_ns = None
         args.fit_end_ns = None
         args.exclude_ns = None
@@ -1754,6 +1780,7 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--fit-start-ns', type=float, default=None,
                         help='fit window start in ns (default: auto from IRF onset)')
         ap.add_argument('--fit-end-ns', type=float, default=None,

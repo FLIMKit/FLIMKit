@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from flimkit.UI.utils import _C
+from flimkit.UI.fit_help import help_button
 from typing import Optional
 
 _EXPERT_DEFAULTS = {
@@ -20,6 +21,7 @@ _EXPERT_DEFAULTS = {
     'irf_align': 'steepest_rise',
     'irf_shift_bins': 2,
     'free_tau_perpixel': False,
+    'pileup_in_model': False,
     'align_irf': False,
     'fit_start_ns': None,
     'fit_end_ns': None,
@@ -57,7 +59,10 @@ class ExpertSettingsDialog(tk.Toplevel):
         f = ttk.Frame(self, padding=12)
         f.pack(fill='both', expand=True)
 
-        ttk.Label(f, text='Optimizer:').grid(row=row, column=0, sticky='w', **PAD)
+        opt_label = ttk.Frame(f)
+        opt_label.grid(row=row, column=0, sticky='w', **PAD)
+        ttk.Label(opt_label, text='Optimizer:').pack(side='left')
+        help_button(opt_label, 'optimizer').pack(side='left', padx=(4, 0))
         self._sv_optimizer = tk.StringVar(value=vals['optimizer'])
         opt_frame = ttk.Frame(f)
         opt_frame.grid(row=row, column=1, columnspan=3, sticky='w', **PAD)
@@ -166,6 +171,14 @@ class ExpertSettingsDialog(tk.Toplevel):
             row=row, column=0, columnspan=4, sticky='w', **PAD)
 
         row += 1
+        self._bv_pileup_model = tk.BooleanVar(
+            value=bool(vals.get('pileup_in_model', False)))
+        ttk.Checkbutton(f, text='Pile-up in the model  (needs free τ per pixel and n_exp > 1 - '
+                                'fits the measured decay instead of rescaling it)',
+                        variable=self._bv_pileup_model).grid(
+            row=row, column=0, columnspan=4, sticky='w', **PAD)
+
+        row += 1
         self._bv_fit_t0 = tk.BooleanVar(value=bool(vals.get('fit_t0', False)))
         ttk.Checkbutton(f, text='Free t0  (tail fit only - correlated with the amplitudes, leave off unless they matter)',
                         variable=self._bv_fit_t0).grid(
@@ -208,6 +221,7 @@ class ExpertSettingsDialog(tk.Toplevel):
             'irf_shift_bins': int(self._sv_irf_shift.get() or 2),
             'align_irf': self._bv_align_irf.get(),
             'free_tau_perpixel': self._bv_free_tau.get(),
+            'pileup_in_model': self._bv_pileup_model.get(),
             'fit_t0': self._bv_fit_t0.get(),
             'fit_start_ns': float(_start_s) if _start_s else None,
             'fit_end_ns': float(_end_s) if _end_s else None,

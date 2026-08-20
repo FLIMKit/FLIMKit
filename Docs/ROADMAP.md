@@ -21,7 +21,11 @@ Let users define their own decay models and cost functions, and let analysis too
 Models and cost functions are the goal, and they are one job rather than two. The differential evolution costs are twelve hand-written classes covering model against cost function against reparameterisation, so both hooks need the same groundwork first: a parameter-layout object, and one generic cost class in place of the twelve. Tracked in issue #3. Tools, formats and filters come first, since they are close to free by comparison and they prove the registry.
 
 ### 5. GPU per-pixel fitting with a fit window
-The per-pixel fit falls back to CPU whenever a fit window or an exclusion band is set, and says so (`fitters.py`, `[per-pixel] fit window/exclusions active ... GPU backends have no window support yet`). Anyone dropping a reflection peak out of the fit therefore loses the GPU path, which is the case where the speed is wanted most. The projection and the grid scan both need to run over a bin subset rather than the whole histogram, on CUDA, MPS and MLX. Tail fits fall back for the same reason and would be fixed by the same change, since a tail fit is a window starting at t0.
+Fixed-tau and the one-exponential grid scan now honour a fit window and exclusion bands on the GPU, so dropping a reflection peak out of the fit no longer costs the GPU path. `intensity` and the `min_photons` mask stay computed over the whole decay, as on the CPU, and CPU/GPU parity is tested with a window active.
+
+Free-tau honours it too, by slicing the residual: that path is `least_squares` per pixel across a thread pool rather than GPU maths, so there was no kernel to change. Two cases still fall back and say so: one-exponential with a time-varying background, and tail fits. The tail fit is different, since its window starts at the fitted `t0` rather than at a bin the user chose.
+
+Per-pixel Gaussian and Lorentzian distribution fits now receive the same selected bins as the summed fit. The CPU, Torch and MLX paths restrict the distribution projection, iterative residual and fit diagnostics to those bins, while background estimation, `intensity` and the `min_photons` mask continue to use the whole decay.
 
 ## Medium Priority - To Do
 

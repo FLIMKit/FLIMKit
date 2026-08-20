@@ -22,6 +22,7 @@ MIN_PHOTONS = 50
 AMP_TOL   = 0.08
 TAU_TOL   = 0.08
 TAU1_TOL  = 0.12
+GRID_STEPS_ALLOWED = 3
 
 
 def _make_irf(n_bins=N_BINS, center=MOCK_IRF_CENTER, fwhm=MOCK_IRF_FWHM_BINS):
@@ -362,11 +363,28 @@ class TestCPUGPUParityDivergenceReport:
             + self._report(3, cpu, gpu))
 
 
-# Free-τ GPU parity tests
-# Adam (GPU) vs LM/TRF (CPU): same forward model, different optimiser.
-# We expect agreement within looser tolerances than fixed-tau.
+# Free-τ backend parity tests
+# One-component fits use the same lifetime grid scan on every path.
+# Multi-component fits use the shared SciPy solver.
 FREE_TAU_TOL     = 0.08
 FREE_TAU_CHI2_MULT = 3.0
+
+
+def _grid_step_rtol(tau_ns=2.0):
+    from flimkit.FLIM.fitters import tau_grid_points
+    lo = max(tau_ns / 20.0, 0.05)
+    hi = min(tau_ns * 20.0, 45.0)
+    return (hi / lo) ** (1.0 / (tau_grid_points() - 1)) - 1.0
+
+
+def _assert_within_grid_steps(cpu_tau, gpu_tau, steps=GRID_STEPS_ALLOWED):
+    step = _grid_step_rtol()
+    np.testing.assert_allclose(
+        cpu_tau, gpu_tau, rtol=steps * step,
+        err_msg=f'one exponential ignores free_tau and grid scans, and the GPU '
+                f'scan resolves the cost in float32, where neighbouring grid '
+                f'points differ by less than one part in ten thousand; allowing '
+                f'{steps} steps of {step:.2e} relative')
 
 
 def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
@@ -390,15 +408,18 @@ def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
 
 
 class TestCPUGPUParityFreeTau:
-    """
-    Free-τ per-pixel: GPU Adam vs CPU Levenberg-Marquardt.
-    Different optimisers reaching the same basin - tested with looser
-    tolerances than the fixed-τ NNLS paths.
-    """
+    """Free-tau per-pixel fitting agrees across backend selection."""
 
     @pytest.fixture(autouse=True)
     def setup(self, gpu_backend):
         self.gpu_backend = gpu_backend
+
+    def test_1exp_grid_scan_agrees_within_one_grid_step(self):
+        stack = _synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0)
+        cpu, gpu = _fit_both_free_tau(
+            stack, 1, _global_popt_1exp(), self.gpu_backend)
+        _assert_within_grid_steps(cpu['tau_1'], gpu['tau_1'])
+        np.testing.assert_allclose(cpu['chi2_r'], gpu['chi2_r'], rtol=0.05)
 
     # 2-exp free-tau
 
@@ -500,3 +521,125 @@ class TestCPUGPUParityFreeTau:
         for label, maps in [("CPU", cpu), ("GPU", gpu)]:
             missing = required - maps.keys()
             assert not missing, f"free-tau 3-exp {label} missing keys: {missing}"
+
+
+FIT_START = 8
+FIT_END = 112
+
+
+def _windowed_idx(n_bins=N_BINS):
+    idx = np.arange(FIT_START, FIT_END)
+    return idx[(idx < 40) | (idx > 52)]
+
+
+def _fit_both_windowed(stack, n_exp, global_popt, gpu_backend, fit_idx):
+    irf_prompt = _make_irf()
+    kwargs = dict(
+        stack       = stack,
+        tcspc_res   = TCSPC_RES,
+        n_bins      = N_BINS,
+        irf_prompt  = irf_prompt,
+        has_tail    = False,
+        fit_bg      = False,
+        fit_sigma   = False,
+        global_popt = global_popt,
+        n_exp       = n_exp,
+        min_photons = MIN_PHOTONS,
+        fit_idx     = fit_idx,
+    )
+    cpu = fit_per_pixel(**kwargs, use_gpu=False)
+    gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
+    return cpu, gpu
+
+
+class TestCPUGPUParityWindowed1Exp:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_1exp(ny=6, nx=8, tau_ns=2.0)
+        self.cpu, self.gpu = _fit_both_windowed(
+            stack, 1, _global_popt_1exp(tau_ns=2.0), gpu_backend, self.fit_idx)
+
+    def test_the_window_is_actually_narrower(self):
+        assert len(self.fit_idx) < N_BINS
+
+    def test_intensity_is_the_full_decay_not_the_window(self):
+        np.testing.assert_array_equal(self.cpu['intensity'], self.gpu['intensity'])
+
+    def test_tau_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_amp'], self.gpu['tau_mean_amp']) < TAU_TOL
+
+    def test_gpu_window_changes_the_answer(self):
+        stack = _synthetic_stack_1exp(ny=6, nx=8, tau_ns=2.0)
+        full = fit_per_pixel(
+            stack=stack, tcspc_res=TCSPC_RES, n_bins=N_BINS, irf_prompt=_make_irf(),
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=_global_popt_1exp(tau_ns=2.0), n_exp=1,
+            min_photons=MIN_PHOTONS, use_gpu=False)
+        assert not np.allclose(np.nanmedian(full['chi2_r']),
+                               np.nanmedian(self.gpu['chi2_r']))
+
+
+class TestCPUGPUParityWindowed2Exp:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_2exp(ny=6, nx=8)
+        self.cpu, self.gpu = _fit_both_windowed(
+            stack, 2, _global_popt_2exp(), gpu_backend, self.fit_idx)
+
+    def test_tau_mean_amp_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_amp'], self.gpu['tau_mean_amp']) < TAU_TOL
+
+    def test_tau_mean_int_agrees(self):
+        assert _rel_err(self.cpu['tau_mean_int'], self.gpu['tau_mean_int']) < TAU_TOL
+
+    def test_amplitudes_agree(self):
+        assert _rel_err(self.cpu['alpha_1'], self.gpu['alpha_1']) < AMP_TOL
+
+    def test_chi2_agrees(self):
+        assert _rel_err(self.cpu['chi2_r'], self.gpu['chi2_r']) < 0.15
+
+
+class TestCPUGPUParityWindowedFreeTau:
+
+    @pytest.fixture(autouse=True)
+    def setup(self, gpu_backend):
+        self.fit_idx = _windowed_idx()
+        stack = _synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0)
+        irf_prompt = _make_irf()
+        kwargs = dict(
+            stack       = stack,
+            tcspc_res   = TCSPC_RES,
+            n_bins      = N_BINS,
+            irf_prompt  = irf_prompt,
+            has_tail    = False,
+            fit_bg      = False,
+            fit_sigma   = False,
+            global_popt = _global_popt_1exp(tau_ns=2.0),
+            n_exp       = 1,
+            min_photons = MIN_PHOTONS,
+            fit_idx     = self.fit_idx,
+            free_tau    = True,
+        )
+        self.cpu = fit_per_pixel(**kwargs, use_gpu=False)
+        self.gpu = fit_per_pixel(**kwargs, gpu_backend=gpu_backend)
+
+    def test_tau_agrees(self):
+        _assert_within_grid_steps(self.cpu['tau_1'], self.gpu['tau_1'])
+
+    def test_chi2_agrees(self):
+        np.testing.assert_allclose(
+            self.cpu['chi2_r'], self.gpu['chi2_r'], rtol=0.05)
+
+    def test_the_window_changes_the_answer(self):
+        full = fit_per_pixel(
+            stack=_synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0),
+            tcspc_res=TCSPC_RES, n_bins=N_BINS, irf_prompt=_make_irf(),
+            has_tail=False, fit_bg=False, fit_sigma=False,
+            global_popt=_global_popt_1exp(tau_ns=2.0), n_exp=1,
+            min_photons=MIN_PHOTONS, free_tau=True, use_gpu=False)
+        assert not np.allclose(np.nanmedian(full['chi2_r']),
+                               np.nanmedian(self.gpu['chi2_r']))

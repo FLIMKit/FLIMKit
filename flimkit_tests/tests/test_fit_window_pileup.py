@@ -1,11 +1,34 @@
+import ast
+from pathlib import Path
+
 import numpy as np
 import pytest
 from flimkit.FLIM.models import apply_pileup
 from flimkit.FLIM.fit_tools import (coates_pileup_correction, build_fit_idx,
                                     bins_from_ns)
+from flimkit.GPU._base import fit_window
+from flimkit.FLIM.fitters import fit_per_pixel
 
 RES = 0.097e-9
 N = 133
+
+
+def test_fit_window_validates_indices():
+    identity = np.arange(8)
+    assert fit_window(identity, 8) is None
+    np.testing.assert_array_equal(fit_window(identity[::-1], 8), identity[::-1])
+    for invalid in (np.array([], dtype=int), np.array([0, 1, 1]),
+                    np.array([-1, 0]), np.array([0, 8])):
+        with pytest.raises(ValueError):
+            fit_window(invalid, 8)
+
+
+def test_distribution_dof_counts_all_fitted_terms():
+    from flimkit.FLIM.fit_tools import distribution_dof
+
+    assert distribution_dof(100, 1, False) == 96
+    assert distribution_dof(100, 1, True) == 95
+    assert distribution_dof(100, 2, False) == 93
 
 def _decay(tau_ns=4.1, total=3e5):
     t = np.arange(N) * RES * 1e9
@@ -129,3 +152,106 @@ class TestExclusionBandInFit:
                                   fit_start_ns=0.5, fit_end_ns=12.0, exclude_ns=ex)
             out.append(s['dof'])
         assert out[1] < out[0]
+
+
+def test_interactive_distribution_calls_propagate_fit_window():
+    import flimkit.interactive as interactive
+
+    tree = ast.parse(Path(interactive.__file__).read_text())
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+    summed_calls = [
+        node for node in calls
+        if isinstance(node.func, ast.Name) and node.func.id == 'fit_summed_dist'
+    ]
+    pixel_calls = [
+        node for node in calls
+        if isinstance(node.func, ast.Name) and node.func.id == 'fit_per_pixel_dist'
+    ]
+
+    assert len(summed_calls) == 2
+    assert len(pixel_calls) == 2
+    for node in summed_calls:
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert {'fit_start_ns', 'fit_end_ns', 'exclude_ns'} <= keywords
+    for node in pixel_calls:
+        keywords = {keyword.arg for keyword in node.keywords}
+        assert 'fit_idx' in keywords
+
+
+def _piled_stack(tau_ns=3.0, n_sync_px=6000, total=4000, side=2):
+    axis = np.arange(N) * RES
+    irf = np.exp(-0.5 * ((np.arange(N) - 12) / 2.0) ** 2)
+    irf = irf / irf.sum()
+    shape = np.convolve(np.exp(-axis / (tau_ns * 1e-9)), irf)[:N]
+    shape = shape / shape.sum() * total
+    piled = apply_pileup(shape, n_sync_px)
+    stack = np.repeat(np.repeat(piled[None, None, :], side, axis=0), side, axis=1)
+    return np.ascontiguousarray(stack, dtype=float), irf
+
+
+class TestPerPixelPileupReachesTheFreeTauFit:
+
+    def _fit(self, correct, n_sync_px=6000, side=2):
+        stack, irf = _piled_stack(n_sync_px=n_sync_px, side=side)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        return fit_per_pixel(
+            stack, RES, N, irf, has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=popt, n_exp=2, min_photons=50, free_tau=True,
+            use_gpu=False, correct_pileup=correct,
+            n_sync=n_sync_px * side * side)
+
+    def test_the_correction_changes_the_answer(self):
+        off = self._fit(False)
+        on = self._fit(True)
+        assert not np.allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                               rtol=1e-9, atol=1e-12)
+
+    def test_the_correction_moves_the_lifetime_towards_the_truth(self):
+        off = self._fit(False)
+        on = self._fit(True)
+        truth = 3.0
+        assert (abs(np.nanmedian(on['tau_mean_amp']) - truth)
+                < abs(np.nanmedian(off['tau_mean_amp']) - truth))
+
+    def test_a_negligible_pileup_rate_leaves_the_fit_alone(self):
+        off = self._fit(False, n_sync_px=4_000_000)
+        on = self._fit(True, n_sync_px=4_000_000)
+        np.testing.assert_allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                                   rtol=1e-3)
+
+
+class TestPileupInTheModel:
+
+    def _fit(self, n_sync_px=6000, side=2, **kwargs):
+        stack, irf = _piled_stack(n_sync_px=n_sync_px, side=side)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        return fit_per_pixel(
+            stack, RES, N, irf, has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=popt, n_exp=2, min_photons=50, free_tau=True,
+            use_gpu=False, n_sync=n_sync_px * side * side, **kwargs)
+
+    def test_the_model_route_changes_the_answer(self):
+        off = self._fit()
+        on = self._fit(pileup_in_model=True)
+        assert not np.allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                               rtol=1e-9, atol=1e-12)
+
+    def test_the_model_route_moves_the_lifetime_towards_the_truth(self):
+        off = self._fit()
+        on = self._fit(pileup_in_model=True)
+        truth = 3.0
+        assert (abs(np.nanmedian(on['tau_mean_amp']) - truth)
+                < abs(np.nanmedian(off['tau_mean_amp']) - truth))
+
+    def test_both_routes_at_once_is_refused(self):
+        with pytest.raises(ValueError, match='pick one pile-up route'):
+            self._fit(correct_pileup=True, pileup_in_model=True)
+
+    def test_the_model_route_is_refused_on_a_fixed_tau_fit(self):
+        stack, irf = _piled_stack(side=2)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        with pytest.raises(ValueError, match='needs a free-tau reconvolution fit'):
+            fit_per_pixel(stack, RES, N, irf, has_tail=False, fit_bg=True,
+                          fit_sigma=False, global_popt=popt, n_exp=2,
+                          min_photons=50, free_tau=False, use_gpu=False,
+                          n_sync=6000 * 4, pileup_in_model=True)

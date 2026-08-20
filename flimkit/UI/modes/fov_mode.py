@@ -51,7 +51,7 @@ class FovMode(BaseMode):
         self.b._irf_fov = IRFWidget(tab, default='irf_xlsx', xlsx_var=self.b.sv_xlsx,
                                    machine_irf_default=str(_C()['MACHINE_IRF_DEFAULT_PATH']))
         self.b._irf_fov.grid(row=1, column=0, sticky='ew', pady=(0, 6))
-        fp = _section(tab, 'Fitting Parameters')
+        fp = _section(tab, 'Fitting Parameters', help_topic='fit_model')
         fp.grid(row=2, column=0, sticky='ew', pady=(0, 6))
         ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
         self.b.state.sv_fit_model_fov = tk.StringVar(value='discrete')
@@ -118,7 +118,7 @@ class FovMode(BaseMode):
         self.b.state.sv_out_fov = tk.StringVar(value='flim_out')
         ttk.Entry(fp, textvariable=self.b.sv_out_fov, width=35).grid(
             row=4, column=1, columnspan=3, sticky='ew', padx=4)
-        fm = _section(tab, 'Masking & Thresholding')
+        fm = _section(tab, 'Masking & Thresholding', help_topic='masking')
         fm.grid(row=3, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_cell = tk.BooleanVar(value=False)
         ttk.Checkbutton(fm, text='Apply cell mask (Cellpose-SAM)',
