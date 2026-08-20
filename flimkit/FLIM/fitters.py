@@ -588,7 +588,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   global_popt, n_exp,
                   min_photons=MIN_PHOTONS_PERPIX,
                   tau_min_ns=None, tau_max_ns=None,
-                  correct_pileup=False, n_sync=None,
+                  correct_pileup=False, n_sync=None, pileup_in_model=False,
                   fit_idx=None,
                   progress_callback=None,
                   free_tau=False,
@@ -604,7 +604,15 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             print(f'  [!] free-tau per-pixel on {n_valid:,} pixels is slow (iterative fit each); '
                   f'fixed-tau is ~100x faster - untick free-tau or draw a smaller ROI')
     _n_sync_px = 0
-    if correct_pileup:
+    if correct_pileup and pileup_in_model:
+        raise ValueError('pick one pile-up route: correct_pileup rescales the measured '
+                         'decay, pileup_in_model folds pile-up into the fitted model')
+    if pileup_in_model and (not free_tau or n_exp == 1 or _tail):
+        raise ValueError('pileup_in_model needs a free-tau reconvolution fit with two '
+                         'or more components; the one-exponential and fixed-tau paths '
+                         'project onto a precomputed basis, and pile-up is not linear '
+                         'in the amplitudes')
+    if correct_pileup or pileup_in_model:
         if not n_sync:
             raise ValueError('pile-up correction requested but this file exposes no '
                              'excitation-pulse count (N_sync); Coates is unavailable here')
@@ -615,6 +623,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 f'pile-up correction needs more pulses than photons per pixel; got '
                 f'{_n_sync_px:,} pulses/px vs {_max_px:,.0f} photons in the brightest pixel. '
                 f'Check the N_sync reported by the reader.')
+    _n_sync_model = _n_sync_px if pileup_in_model else None
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     if _tail:
         taus_fixed, _, t0_px, _, _ = unpack_tail_params(
@@ -696,6 +705,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     tvb_profile=tvb_profile if tvb_on else None,
                     fit_tvb=tvb_on,
                     fit_idx=fit_idx if _windowed else None,
+                    n_sync_model=_n_sync_px if pileup_in_model else None,
                 )
     if tvb_on:
         B_cpu = np.asarray(tvb_profile, dtype=float)
@@ -921,10 +931,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         return reconvolution_model(
                             full_p, tcspc_res, n_bins, irf_prompt,
                             n_exp, 0.0, has_tail, False, fit_sigma,
-                            tvb_profile=tvb_profile, fit_tvb=True)
+                            tvb_profile=tvb_profile, fit_tvb=True,
+                            n_sync=_n_sync_model)
                     return reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_prompt,
-                        n_exp, _bg, has_tail, False, fit_sigma)
+                        n_exp, _bg, has_tail, False, fit_sigma,
+                        n_sync=_n_sync_model)
                 w_px = np.sqrt(np.maximum(decay_px, 1.0))
                 def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):
                     model_vals = _eval_model(np.array(_make_full(p_px)), _bg)

@@ -218,3 +218,40 @@ class TestPerPixelPileupReachesTheFreeTauFit:
         on = self._fit(True, n_sync_px=4_000_000)
         np.testing.assert_allclose(off['tau_mean_amp'], on['tau_mean_amp'],
                                    rtol=1e-3)
+
+
+class TestPileupInTheModel:
+
+    def _fit(self, n_sync_px=6000, side=2, **kwargs):
+        stack, irf = _piled_stack(n_sync_px=n_sync_px, side=side)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        return fit_per_pixel(
+            stack, RES, N, irf, has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=popt, n_exp=2, min_photons=50, free_tau=True,
+            use_gpu=False, n_sync=n_sync_px * side * side, **kwargs)
+
+    def test_the_model_route_changes_the_answer(self):
+        off = self._fit()
+        on = self._fit(pileup_in_model=True)
+        assert not np.allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                               rtol=1e-9, atol=1e-12)
+
+    def test_the_model_route_moves_the_lifetime_towards_the_truth(self):
+        off = self._fit()
+        on = self._fit(pileup_in_model=True)
+        truth = 3.0
+        assert (abs(np.nanmedian(on['tau_mean_amp']) - truth)
+                < abs(np.nanmedian(off['tau_mean_amp']) - truth))
+
+    def test_both_routes_at_once_is_refused(self):
+        with pytest.raises(ValueError, match='pick one pile-up route'):
+            self._fit(correct_pileup=True, pileup_in_model=True)
+
+    def test_the_model_route_is_refused_on_a_fixed_tau_fit(self):
+        stack, irf = _piled_stack(side=2)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        with pytest.raises(ValueError, match='needs a free-tau reconvolution fit'):
+            fit_per_pixel(stack, RES, N, irf, has_tail=False, fit_bg=True,
+                          fit_sigma=False, global_popt=popt, n_exp=2,
+                          min_photons=50, free_tau=False, use_gpu=False,
+                          n_sync=6000 * 4, pileup_in_model=True)

@@ -344,6 +344,7 @@ class MLXBackend(_BackendMixin):
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        n_sync_model=None,
     ):
         mx = self._mx
         ny, nx, n_bins = stack.shape
@@ -374,7 +375,7 @@ class MLXBackend(_BackendMixin):
             raw_valid, bg_valid, irf_array, tcspc_res,
             taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
-            weight_valid=weight_valid,
+            weight_valid=weight_valid, n_sync_model=n_sync_model,
         )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],

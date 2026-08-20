@@ -86,6 +86,7 @@ class GPUBackend:
         n_steps,
         lr,
         fit_idx=None,
+        n_sync_model=None,
     ):
         raise NotImplementedError
 
@@ -293,6 +294,7 @@ class _BackendMixin:
         fit_tvb=False,
         fit_idx=None,
         weight_valid=None,
+        n_sync_model=None,
     ):
         B = raw_valid.shape[0]
         weights = raw_valid if weight_valid is None else weight_valid
@@ -322,16 +324,18 @@ class _BackendMixin:
                 if fit_tvb:
                     full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
                                              p[n_exp:2 * n_exp], [0.0], [p[2 * n_exp]]])
-                    model  = reconvolution_model(
+                    model = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, 0.0, False, False, False,
-                        tvb_profile=tvb_profile, fit_tvb=True)
+                        tvb_profile=tvb_profile, fit_tvb=True,
+                        n_sync=n_sync_model)
                 else:
                     full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
                                              p[n_exp:], [0.0]])
-                    model  = reconvolution_model(
+                    model = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
-                        n_exp, bg_b, False, False, False)
+                        n_exp, bg_b, False, False, False,
+                        n_sync=n_sync_model)
                 if win is None:
                     return (model - decay_b) / wt
                 return (model[win] - decay_b[win]) / wt[win]
@@ -371,12 +375,14 @@ class _BackendMixin:
                 model_b = reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_array,
                     n_exp, 0.0, False, False, False,
-                    tvb_profile=tvb_profile, fit_tvb=True)
+                    tvb_profile=tvb_profile, fit_tvb=True,
+                    n_sync=n_sync_model)
             else:
                 full_p  = np.concatenate([taus_b, amps_b, [0.0]])
                 model_b = reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_array,
-                    n_exp, bg_b, False, False, False)
+                    n_exp, bg_b, False, False, False,
+                    n_sync=n_sync_model)
             decay_fit = raw_valid[b].astype(np.float64)
             if win is None:
                 model_fit = model_b
