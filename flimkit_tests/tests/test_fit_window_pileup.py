@@ -7,6 +7,7 @@ from flimkit.FLIM.models import apply_pileup
 from flimkit.FLIM.fit_tools import (coates_pileup_correction, build_fit_idx,
                                     bins_from_ns)
 from flimkit.GPU._base import fit_window
+from flimkit.FLIM.fitters import fit_per_pixel
 
 RES = 0.097e-9
 N = 133
@@ -175,3 +176,45 @@ def test_interactive_distribution_calls_propagate_fit_window():
     for node in pixel_calls:
         keywords = {keyword.arg for keyword in node.keywords}
         assert 'fit_idx' in keywords
+
+
+def _piled_stack(tau_ns=3.0, n_sync_px=6000, total=4000, side=2):
+    axis = np.arange(N) * RES
+    irf = np.exp(-0.5 * ((np.arange(N) - 12) / 2.0) ** 2)
+    irf = irf / irf.sum()
+    shape = np.convolve(np.exp(-axis / (tau_ns * 1e-9)), irf)[:N]
+    shape = shape / shape.sum() * total
+    piled = apply_pileup(shape, n_sync_px)
+    stack = np.repeat(np.repeat(piled[None, None, :], side, axis=0), side, axis=1)
+    return np.ascontiguousarray(stack, dtype=float), irf
+
+
+class TestPerPixelPileupReachesTheFreeTauFit:
+
+    def _fit(self, correct, n_sync_px=6000, side=2):
+        stack, irf = _piled_stack(n_sync_px=n_sync_px, side=side)
+        popt = np.array([3e-9, 1e-9, 0.7, 0.3, 0.0])
+        return fit_per_pixel(
+            stack, RES, N, irf, has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=popt, n_exp=2, min_photons=50, free_tau=True,
+            use_gpu=False, correct_pileup=correct,
+            n_sync=n_sync_px * side * side)
+
+    def test_the_correction_changes_the_answer(self):
+        off = self._fit(False)
+        on = self._fit(True)
+        assert not np.allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                               rtol=1e-9, atol=1e-12)
+
+    def test_the_correction_moves_the_lifetime_towards_the_truth(self):
+        off = self._fit(False)
+        on = self._fit(True)
+        truth = 3.0
+        assert (abs(np.nanmedian(on['tau_mean_amp']) - truth)
+                < abs(np.nanmedian(off['tau_mean_amp']) - truth))
+
+    def test_a_negligible_pileup_rate_leaves_the_fit_alone(self):
+        off = self._fit(False, n_sync_px=4_000_000)
+        on = self._fit(True, n_sync_px=4_000_000)
+        np.testing.assert_allclose(off['tau_mean_amp'], on['tau_mean_amp'],
+                                   rtol=1e-3)

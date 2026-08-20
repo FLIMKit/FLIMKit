@@ -291,8 +291,10 @@ class _BackendMixin:
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        weight_valid=None,
     ):
         B = raw_valid.shape[0]
+        weights = raw_valid if weight_valid is None else weight_valid
         win = fit_window(fit_idx, n_bins)
         n_fit = n_bins if win is None else len(win)
 
@@ -309,7 +311,7 @@ class _BackendMixin:
         def _fit_pixel(b):
             decay_b = raw_valid[b].astype(np.float64)
             bg_b    = float(bg_valid[b])
-            wt      = np.sqrt(np.maximum(decay_b, 1.0))
+            wt = np.sqrt(np.maximum(weights[b].astype(np.float64), 1.0))
             p0      = np.concatenate([taus_init,
                                       np.full(n_exp, amp0)])
             if fit_tvb:

@@ -8,6 +8,10 @@
 - The GPU block budget is per backend rather than one constant, and CUDA and ROCm drop from 256 MB to 32 MB. Measured on an RTX A5000, the budget sets a cliff between 32 and 64 MB that costs a flat 2x at every field size: 15.7s against 33.5s on a 2048 square field, with peak device memory 0.09 GB against 0.63 GB. The card has 6 MB of L2, so the fast region is where the basis and a block stay resident. MLX does not share the behaviour and keeps 256 MB. The budget is now also clamped to half of free device memory, which is the ceiling a small card needs and one nothing previously provided, since no part of the GPU code queried the card at all. `FLIMKIT_GPU_BLOCK_BYTES` still overrides the default and is still clamped.
 - The publish workflow no longer has a TestPyPI job. The pending publisher for it was never set up on test.pypi.org, so every dry run failed on `invalid-publisher`.
 
+### Fixed
+- Pile-up correction was silently discarded on the free-tau per-pixel path. All three sites, `fitters.py` on the CPU and both GPU backends, computed a background-subtracted decay, ran Coates on it, and then fitted the raw decay instead. Turning `correct_pileup` on changed nothing: measured on a 48 square field at 500, 1200 and 4000 sync pulses per pixel, the free-tau lifetimes came back identical to the last bit, while `batch_grid_scan_1exp` and `batch_fixed_tau` moved by up to 1.61 ns and 0.78 ns over the same range.
+- Coates now runs on the raw decay and the background is estimated from the corrected version, which is the order the effect happens in: dead time acts on every photon reaching the detector, background included. The residual weights stay on the measured counts, because Coates rescales bins by a factor that depends on earlier bins, so its output is neither Poisson nor independent bin to bin and weighting by it would claim precision the measurement does not have. Free-tau keeps carrying the background as a term in the model rather than subtracting it, which is what SPCImage and SymPhoTime both do. `fitter_version` moves to 20; only fits with `correct_pileup` on are affected.
+
 ## [0.12.0] - 2026-08-19
 
 ### Added

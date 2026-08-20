@@ -886,10 +886,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 if decay_px.sum() < min_photons:
                     skipped += 1
                     continue
-                bg_px = estimate_bg(decay_px, int(np.argmax(decay_px)))
-                data_corr = np.maximum(decay_px - bg_px, 0.0)
+                fit_px = decay_px
                 if correct_pileup and _n_sync_px > 0:
-                    data_corr = coates_pileup_correction(data_corr, _n_sync_px)
+                    fit_px = coates_pileup_correction(decay_px, _n_sync_px)
+                bg_px = estimate_bg(fit_px, int(np.argmax(fit_px)))
                 def _make_full(p_px):
                     taus_p = p_px[:n_exp]
                     amps_p = p_px[n_exp:2 * n_exp]
@@ -925,7 +925,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         full_p, tcspc_res, n_bins, irf_prompt,
                         n_exp, _bg, has_tail, False, fit_sigma)
                 w_px = np.sqrt(np.maximum(decay_px, 1.0))
-                def _resid(p_px, _decay=decay_px, _bg=bg_px, _w=w_px):
+                def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):
                     model_vals = _eval_model(np.array(_make_full(p_px)), _bg)
                     return (model_vals[fit_idx] - _decay[fit_idx]) / _w[fit_idx]
                 try:
@@ -955,14 +955,14 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                            if denom > 0 else np.nan
                 full_sol = np.array(_make_full(p_sol))
                 model_sol = _eval_model(full_sol, bg_px)
-                resid_sol = decay_px[fit_idx] - model_sol[fit_idx]
+                resid_sol = fit_px[fit_idx] - model_sol[fit_idx]
                 chi2_px = float(np.sum(resid_sol**2 / np.maximum(model_sol[fit_idx], 1.0)))
                 dof_px = max(len(fit_idx) - 2 * n_exp, 1)
                 maps['tau_mean_int'][yi, xi] = tau_int
                 maps['tau_mean_amp'][yi, xi] = tau_amp
                 maps['chi2_r'][yi, xi] = chi2_px / dof_px
                 maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
-                    decay_px[fit_idx], model_sol[fit_idx])
+                    fit_px[fit_idx], model_sol[fit_idx])
                 for i in range(n_exp):
                     maps[f"tau_{i+1}"][yi, xi] = taus_ns[i]
                     maps[f"alpha_{i+1}"][yi, xi] = amps_sol[i]
