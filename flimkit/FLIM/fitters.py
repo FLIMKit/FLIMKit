@@ -589,6 +589,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   min_photons=MIN_PHOTONS_PERPIX,
                   tau_min_ns=None, tau_max_ns=None,
                   correct_pileup=False, n_sync=None, pileup_in_model=False,
+                  bg_in_model=False,
                   fit_idx=None,
                   progress_callback=None,
                   free_tau=False,
@@ -656,11 +657,19 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     if _tail and use_gpu is not False:
         print(f'  [per-pixel] tail fit uses the CPU path; the projection has to be '
               f'restricted to bins past t0')
+    if bg_in_model and (_tail or tvb_on or free_tau):
+        raise ValueError('bg_in_model applies to the one-exponential scan and the '
+                         'fixed-tau projection; the tail fit, the time-varying '
+                         'background and the free-tau fit already carry the '
+                         'background in the model')
+    if bg_in_model and use_gpu is not False:
+        print('  [per-pixel] a modelled background uses the CPU path; the GPU '
+              'kernels subtract it before projecting')
     _gpu_windowed_ok = not (_windowed and n_exp == 1 and tvb_on)
     if _windowed and use_gpu is not False and not _tail and n_exp == 1 and tvb_on:
         print(f'  [per-pixel] fit window with a time-varying background is not supported '
               f'on the GPU for one-exponential fits, using the CPU path')
-    if use_gpu is not False and not _tail and _gpu_windowed_ok:
+    if use_gpu is not False and not _tail and _gpu_windowed_ok and not bg_in_model:
         _backend = gpu_backend if gpu_backend is not None else (
             None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache
         )
@@ -707,6 +716,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     fit_idx=fit_idx if _windowed else None,
                     n_sync_model=_n_sync_px if pileup_in_model else None,
                 )
+    if bg_in_model:
+        A_bg = np.column_stack([A, np.ones(n_bins)])
     if tvb_on:
         B_cpu = np.asarray(tvb_profile, dtype=float)
         A_aug = np.column_stack([A, B_cpu, np.ones(n_bins)])
@@ -739,6 +750,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                                  irf_fft=irf_fft, t0=t0_px)
         basis_fit = basis_grid[:, fit_idx]
         bb_grid = np.maximum((basis_fit ** 2).sum(axis=1), 1e-20)
+        if bg_in_model:
+            basis_cen = basis_fit - basis_fit.mean(axis=1, keepdims=True)
+            bb_cen = np.maximum((basis_cen ** 2).sum(axis=1), 1e-20)
         if tvb_on:
             _tvb_prof_f = np.asarray(tvb_profile, dtype=float)[fit_idx]
             _tvb_U = np.column_stack([_tvb_prof_f, np.ones(len(fit_idx))])
@@ -790,23 +804,41 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     fitted += 1
                 continue
             dv = decay_row[valid_xi] 
-            peak_b_v = np.argmax(dv, axis=1)  
-            bg_v = np.array([estimate_bg(dv[k], int(peak_b_v[k]))
-                             for k in range(len(valid_xi))])
-            dc_v = np.maximum(dv - bg_v[:, np.newaxis], 0.0)  
-            if correct_pileup and _n_sync_px > 0:
-                dc_v = np.array([
-                    coates_pileup_correction(dc_v[k], _n_sync_px)
-                    for k in range(len(valid_xi))
-                ])
-            dc_f = dc_v[:, fit_idx]
-            bd = dc_f @ basis_fit.T
-            amps_g = np.maximum(bd / bb_grid, 0.0)
+            if bg_in_model:
+                dfit_v = dv[:, fit_idx].astype(float)
+                if correct_pileup and _n_sync_px > 0:
+                    dfit_v = np.array([
+                        coates_pileup_correction(dfit_v[k], _n_sync_px)
+                        for k in range(len(valid_xi))
+                    ])
+                dc_f = dfit_v - dfit_v.mean(axis=1, keepdims=True)
+                basis_use = basis_cen
+                bb_use = bb_cen
+            else:
+                peak_b_v = np.argmax(dv, axis=1)  
+                bg_v = np.array([estimate_bg(dv[k], int(peak_b_v[k]))
+                                 for k in range(len(valid_xi))])
+                dc_v = np.maximum(dv - bg_v[:, np.newaxis], 0.0)  
+                if correct_pileup and _n_sync_px > 0:
+                    dc_v = np.array([
+                        coates_pileup_correction(dc_v[k], _n_sync_px)
+                        for k in range(len(valid_xi))
+                    ])
+                dc_f = dc_v[:, fit_idx]
+                basis_use = basis_fit
+                bb_use = bb_grid
+            bd = dc_f @ basis_use.T
+            amps_g = np.maximum(bd / bb_use, 0.0)
             dc_sq = (dc_f ** 2).sum(axis=1)
-            costs = dc_sq[:, np.newaxis] - np.maximum(bd, 0.0) ** 2 / bb_grid
+            costs = dc_sq[:, np.newaxis] - np.maximum(bd, 0.0) ** 2 / bb_use
             best_g = np.argmin(costs, axis=1)                          
             tau_v = tau_grid[best_g]                                 
             amp_v = amps_g[np.arange(len(valid_xi)), best_g]        
+            if bg_in_model:
+                bg_v = (dfit_v.mean(axis=1)
+                        - amp_v * basis_fit[best_g].mean(axis=1))
+                dv = np.array(dv, dtype=float)
+                dv[:, fit_idx] = dfit_v
             good = amp_v > 0
             skipped += int((~good).sum())
             for k, xi in enumerate(valid_xi):
@@ -843,6 +875,14 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     tvb_px = coeffs_px[n_exp]
                     bg_px = coeffs_px[n_exp + 1]
                     model_px = A_fit @ amps_px + tvb_px * B_cpu[fit_idx] + bg_px
+                elif bg_in_model:
+                    dfit = decay_px.astype(float)
+                    if correct_pileup and _n_sync_px > 0:
+                        dfit = coates_pileup_correction(dfit, _n_sync_px)
+                    coeffs_px, _ = nnls(A_bg[fit_idx], dfit[fit_idx])
+                    amps_px = coeffs_px[:n_exp]
+                    bg_px = coeffs_px[n_exp]
+                    model_px = A_fit @ amps_px + bg_px
                 else:
                     bg_px = estimate_bg(decay_px, int(np.argmax(decay_px)))
                     data_corr = np.maximum(decay_px - bg_px, 0.0)

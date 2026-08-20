@@ -255,3 +255,55 @@ class TestPileupInTheModel:
                           fit_sigma=False, global_popt=popt, n_exp=2,
                           min_photons=50, free_tau=False, use_gpu=False,
                           n_sync=6000 * 4, pileup_in_model=True)
+
+
+def _decay_with_background(tau_ns, total, bg_per_bin, side=3, seed=5):
+    axis = np.arange(N) * RES
+    irf = np.exp(-0.5 * ((np.arange(N) - 12) / 2.0) ** 2)
+    irf = irf / irf.sum()
+    shape = np.convolve(np.exp(-axis / (tau_ns * 1e-9)), irf)[:N]
+    shape = shape / shape.sum() * total + bg_per_bin
+    rng = np.random.default_rng(seed)
+    stack = rng.poisson(np.repeat(np.repeat(
+        shape[None, None, :], side, 0), side, 1)).astype(float)
+    return stack, irf
+
+
+class TestBackgroundInTheModel:
+
+    def _fit(self, stack, irf, n_exp=1, **kwargs):
+        popt = (np.array([2.4e-9, 1.0, 0.0]) if n_exp == 1
+                else np.array([3.5e-9, 0.8e-9, 0.6, 0.4, 0.0]))
+        return fit_per_pixel(
+            stack, RES, N, irf, has_tail=False, fit_bg=True, fit_sigma=False,
+            global_popt=popt, n_exp=n_exp, min_photons=50, use_gpu=False,
+            **kwargs)
+
+    def test_it_recovers_the_lifetime_under_a_large_background(self):
+        stack, irf = _decay_with_background(2.4, 20000, 40.0)
+        on = np.nanmedian(self._fit(stack, irf, bg_in_model=True)['tau_1'])
+        assert on == pytest.approx(2.4, abs=0.12)
+
+    def test_the_two_routes_are_biased_the_opposite_way(self):
+        stack, irf = _decay_with_background(2.4, 20000, 40.0)
+        off = np.nanmedian(self._fit(stack, irf)['tau_1'])
+        on = np.nanmedian(self._fit(stack, irf, bg_in_model=True)['tau_1'])
+        assert off < 2.4 < on, (
+            f'subtracting an estimate biases low and modelling the offset biases '
+            f'high; got {off:.4f} and {on:.4f} either side of 2.4')
+
+    def test_no_background_leaves_the_two_routes_close(self):
+        stack, irf = _decay_with_background(2.4, 20000, 0.0)
+        off = np.nanmedian(self._fit(stack, irf)['tau_1'])
+        on = np.nanmedian(self._fit(stack, irf, bg_in_model=True)['tau_1'])
+        assert abs(on - off) < 0.05
+
+    def test_the_fixed_tau_path_accepts_it(self):
+        stack, irf = _decay_with_background(2.4, 20000, 40.0)
+        maps = self._fit(stack, irf, n_exp=2, bg_in_model=True)
+        assert np.isfinite(maps['tau_mean_amp']).any()
+
+    def test_it_is_refused_with_a_free_tau_fit(self):
+        stack, irf = _decay_with_background(2.4, 20000, 5.0)
+        with pytest.raises(ValueError, match='already carry the background'):
+            self._fit(stack, irf, n_exp=2, free_tau=True, bg_in_model=True)
