@@ -42,6 +42,9 @@ block boundary.
 Smaller blocks were faster, not slower: 1.10 s at 32 MB, 2.10 s at the 256 MB
 default, 4.83 s at 4096 MB. That is worth a look on its own.
 
+The A5000 also turned up a resolution limit in the one exponential scan, which
+is written up below under D6.
+
 ## Before anything
 
 ```bash
@@ -162,6 +165,27 @@ done
 Pass: recovered tau converges as the grid tightens and does not move by more
 than the grid step between 3200 and 6400. A tau that keeps moving means the
 grid bounds, not the density, are binding.
+
+**D6. What the float32 scan can resolve.** The GPU scan picks a grid point by
+minimising `|d|^2 - (b.d)^2/|b|^2`. Both terms are around 8e6 on a 300 photon
+pixel and the cost is their difference, around 1.8e4, so about two and a half
+digits are lost to cancellation. Neighbouring grid points differ in cost by
+roughly one part in ten thousand, which sits at the float32 floor.
+
+Measured on the A5000: the kernel picked grid index 796 where float64 on the
+same arrays picked 795, with the two costs 17882.08 and 17883.53. The `bd`
+matmul itself was accurate to 2.6e-07 relative, so the loss is in the cost, not
+the product. Rewriting the selection as an argmax over the projection does not
+help, because the projection carries the same magnitude.
+
+The practical size of this is one grid step, 0.0074 ns at 2 ns with the default
+1600 point grid, or 0.37 per cent. Perturbing CUDA state moves it to two steps:
+importing cellpose before the fit was enough.
+
+Pass: the GPU tau lands within three grid steps of the CPU tau, and chi-squared
+within 5 per cent. Anything larger is a real break rather than the float32
+floor. Do not tighten this below a grid step, since the comparison is between a
+float32 argmin and a float64 one over a discrete grid.
 
 **D2. `batch_fixed_tau`, two and three exponentials.** Covered by the kernels
 section of the benchmark. Pass: amplitudes non-negative, fractions summing to
