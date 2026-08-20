@@ -627,6 +627,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
+                pileup_in_model=getattr(args, 'pileup_in_model', False),
                 n_sync=getattr(ptu, 'n_sync', None),
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
@@ -1137,6 +1138,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 tau_min_ns=args.tau_min,
                 tau_max_ns=args.tau_max,
                 correct_pileup=getattr(args, 'correct_pileup', False),
+                pileup_in_model=getattr(args, 'pileup_in_model', False),
                 n_sync=getattr(ptu, 'n_sync', None),
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
@@ -1592,6 +1594,7 @@ def timelapse_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.pileup_in_model = False
         args.fit_start_ns = None
         args.fit_end_ns = None
         args.exclude_ns = None
@@ -1631,6 +1634,7 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--fit-start-ns', type=float, default=None,
                         help='fit window start in ns (default: auto from IRF onset)')
         ap.add_argument('--fit-end-ns', type=float, default=None,
@@ -1734,6 +1738,7 @@ def zstack_flim_fit(interactive=False):
         args.channel = channels
         args.min_photons = MIN_PHOTONS_PERPIX
         args.correct_pileup = False
+        args.pileup_in_model = False
         args.fit_start_ns = None
         args.fit_end_ns = None
         args.exclude_ns = None
@@ -1775,6 +1780,7 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--correct-pileup', action='store_true')
+        ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--fit-start-ns', type=float, default=None,
                         help='fit window start in ns (default: auto from IRF onset)')
         ap.add_argument('--fit-end-ns', type=float, default=None,

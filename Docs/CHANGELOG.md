@@ -9,6 +9,7 @@
 - The publish workflow no longer has a TestPyPI job. The pending publisher for it was never set up on test.pypi.org, so every dry run failed on `invalid-publisher`.
 
 ### Added
+- The pile-up route is selectable rather than being a Python keyword. `--pileup-in-model` on `fit_cli.py` and on both interactive parsers, and a checkbox in Expert Fit Settings, which is where a switch with prerequisites belongs. It sits next to free tau per pixel, since it needs one. Ticking it alongside the Coates checkbox is refused at fit time with a message naming both.
 - `pileup_in_model` on `fit_per_pixel`, which folds pile-up into the fitted model rather than rescaling the measured decay. `fit_summed` has taken `n_sync` for this since 0.9.17; the per-pixel path never passed it through. Correcting the data has to divide each bin by a factor built from the bins before it, which is numerically awkward and leaves the result neither Poisson nor independent bin to bin, so Patting and Wahl, and Isbaner and colleagues, both put the effect in the model instead. It needs a free-tau reconvolution fit with two or more components, and is refused elsewhere: the one-exponential and fixed-tau paths project onto a precomputed basis, and pile-up is not linear in the amplitudes. Asking for it alongside `correct_pileup` is refused too. On a known-truth bi-exponential the two routes now agree to 0.0003 ns, so it is an alternative rather than an improvement, and the data is left alone.
 
 ### Fixed
