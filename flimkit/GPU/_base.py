@@ -1,6 +1,4 @@
-import multiprocessing
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import least_squares
 from ..FLIM.fit_tools import calibrated_chi2, calibrated_from_terms, chi2_terms
 from ..FLIM.models import reconvolution_model
@@ -341,9 +339,7 @@ class _BackendMixin:
             except Exception:
                 return None
 
-        n_workers = min(B, max(1, multiprocessing.cpu_count()))
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            solutions = list(pool.map(_fit_pixel, range(B)))
+        solutions = [_fit_pixel(b) for b in range(B)]
 
         taus_out  = np.zeros((B, n_exp), dtype=np.float32)
         amps_out  = np.zeros((B, n_exp), dtype=np.float32)
