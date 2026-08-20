@@ -1,7 +1,8 @@
 import threading
 
 import numpy as np
-from flimkit.GPU._base import _BackendMixin, fit_window, pixel_blocks
+from flimkit.GPU._base import (_BackendMixin, fit_window, pixel_blocks,
+                               gpu_block_bytes, CUDA_BLOCK_BYTES)
 from flimkit.FLIM.fit_tools import (calibrated_chi2, distribution_dof,
                                     estimate_bg, coates_pileup_correction)
 
@@ -13,6 +14,16 @@ class TorchBackend(_BackendMixin):
         import torch
         self._torch = torch
         self.device = torch.device(device)
+
+    def block_bytes(self):
+        if self.device.type != 'cuda':
+            return gpu_block_bytes()
+        budget = gpu_block_bytes(CUDA_BLOCK_BYTES)
+        try:
+            free = int(self._torch.cuda.mem_get_info(self.device)[0])
+        except Exception:
+            return budget
+        return max(1, min(budget, free // 2))
 
     def _matmul_full_precision(self, left, right):
         if self.device.type != 'cuda':
@@ -69,7 +80,8 @@ class TorchBackend(_BackendMixin):
             A_cpu = torch.as_tensor(A, dtype=torch.float32, device='cpu')
             A_pinv = torch.linalg.pinv(A_cpu).to(self.device)
         n_fit = A.shape[0]
-        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp)):
+        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -157,7 +169,8 @@ class TorchBackend(_BackendMixin):
             basis_t = torch.as_tensor(basis_grid, dtype=torch.float32, device=self.device)
             bb_t = torch.as_tensor(bb_grid, dtype=torch.float32, device=self.device)
         per_pixel = 4 * (2 * n_bins + n_fit + N_GRID)
-        for first, last in pixel_blocks(valid_idx.size, per_pixel):
+        for first, last in pixel_blocks(valid_idx.size, per_pixel,
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -233,6 +246,7 @@ class TorchBackend(_BackendMixin):
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        n_sync_model=None,
     ):
         torch = self._torch
         ny, nx, n_bins = stack.shape
@@ -249,18 +263,21 @@ class TorchBackend(_BackendMixin):
         )
         if valid_idx.size == 0:
             return maps
-        bg_flat = self._estimate_bg_batch(flat, valid_mask)
-        dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)
+        fit_flat = flat
         if correct_pileup and n_sync_px > 0:
+            fit_flat = flat.copy()
             for idx in valid_idx:
-                dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
-        raw_valid = flat[valid_idx].astype(np.float32)
-        bg_valid  = bg_flat[valid_idx].astype(np.float32)
+                fit_flat[idx] = coates_pileup_correction(flat[idx], n_sync_px)
+        bg_flat = self._estimate_bg_batch(fit_flat, valid_mask)
+        raw_valid = fit_flat[valid_idx].astype(np.float32)
+        bg_valid = bg_flat[valid_idx].astype(np.float32)
+        weight_valid = flat[valid_idx].astype(np.float32)
         B = len(valid_idx)
         taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
             raw_valid, bg_valid, irf_array, tcspc_res,
             taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
+            weight_valid=weight_valid, n_sync_model=n_sync_model,
         )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],

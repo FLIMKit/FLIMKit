@@ -6,7 +6,7 @@ tqdm.disable = True
 from scipy.optimize import least_squares, differential_evolution, nnls
 from scipy.stats.distributions import chi2 as chi2_dist
 from ..FLIM.irf_tools import build_full_irf
-from ..FLIM.fit_tools import (estimate_bg, find_fit_start, find_fit_end, _build_bounds,
+from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
                               calibrated_chi2, distribution_dof)
@@ -588,7 +588,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   global_popt, n_exp,
                   min_photons=MIN_PHOTONS_PERPIX,
                   tau_min_ns=None, tau_max_ns=None,
-                  correct_pileup=False, n_sync=None,
+                  correct_pileup=False, n_sync=None, pileup_in_model=False,
                   fit_idx=None,
                   progress_callback=None,
                   free_tau=False,
@@ -604,7 +604,15 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             print(f'  [!] free-tau per-pixel on {n_valid:,} pixels is slow (iterative fit each); '
                   f'fixed-tau is ~100x faster - untick free-tau or draw a smaller ROI')
     _n_sync_px = 0
-    if correct_pileup:
+    if correct_pileup and pileup_in_model:
+        raise ValueError('pick one pile-up route: correct_pileup rescales the measured '
+                         'decay, pileup_in_model folds pile-up into the fitted model')
+    if pileup_in_model and (not free_tau or n_exp == 1 or _tail):
+        raise ValueError('pileup_in_model needs a free-tau reconvolution fit with two '
+                         'or more components; the one-exponential and fixed-tau paths '
+                         'project onto a precomputed basis, and pile-up is not linear '
+                         'in the amplitudes')
+    if correct_pileup or pileup_in_model:
         if not n_sync:
             raise ValueError('pile-up correction requested but this file exposes no '
                              'excitation-pulse count (N_sync); Coates is unavailable here')
@@ -615,6 +623,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 f'pile-up correction needs more pulses than photons per pixel; got '
                 f'{_n_sync_px:,} pulses/px vs {_max_px:,.0f} photons in the brightest pixel. '
                 f'Check the N_sync reported by the reader.')
+    _n_sync_model = _n_sync_px if pileup_in_model else None
     tvb_on = bool(fit_tvb) and tvb_profile is not None
     if _tail:
         taus_fixed, _, t0_px, _, _ = unpack_tail_params(
@@ -696,6 +705,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     tvb_profile=tvb_profile if tvb_on else None,
                     fit_tvb=tvb_on,
                     fit_idx=fit_idx if _windowed else None,
+                    n_sync_model=_n_sync_px if pileup_in_model else None,
                 )
     if tvb_on:
         B_cpu = np.asarray(tvb_profile, dtype=float)
@@ -870,9 +880,10 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         tau_max_s = (tau_max_ns if tau_max_ns is not None
                      else taus_fixed.max() * 1e9 * 10.0) * 1e-9
         amp_hi = float(stack.max()) * 10.0
-        lo_px = np.array([tau_min_s] * n_exp + [0.0] * n_exp)
-        hi_px = np.array([tau_max_s] * n_exp + [amp_hi]   * n_exp)
-        p0_px = np.concatenate([taus_fixed, np.full(n_exp, float(stack.max()) / n_exp)])
+        lo_px = np.array([tau_min_s / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi_px = np.array([tau_max_s / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
+        p0_px = np.concatenate([taus_fixed / TAU_FIT_UNIT_S,
+                                np.full(n_exp, float(stack.max()) / n_exp)])
         if tvb_on:
             tvb_hi = float(stack.sum(axis=2).max())
             lo_px = np.concatenate([lo_px, [0.0]])
@@ -886,12 +897,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 if decay_px.sum() < min_photons:
                     skipped += 1
                     continue
-                bg_px = estimate_bg(decay_px, int(np.argmax(decay_px)))
-                data_corr = np.maximum(decay_px - bg_px, 0.0)
+                fit_px = decay_px
                 if correct_pileup and _n_sync_px > 0:
-                    data_corr = coates_pileup_correction(data_corr, _n_sync_px)
+                    fit_px = coates_pileup_correction(decay_px, _n_sync_px)
+                bg_px = estimate_bg(fit_px, int(np.argmax(fit_px)))
                 def _make_full(p_px):
-                    taus_p = p_px[:n_exp]
+                    taus_p = p_px[:n_exp] * TAU_FIT_UNIT_S
                     amps_p = p_px[n_exp:2 * n_exp]
                     if _tail:
                         full = list(taus_p) + list(amps_p)
@@ -920,12 +931,14 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         return reconvolution_model(
                             full_p, tcspc_res, n_bins, irf_prompt,
                             n_exp, 0.0, has_tail, False, fit_sigma,
-                            tvb_profile=tvb_profile, fit_tvb=True)
+                            tvb_profile=tvb_profile, fit_tvb=True,
+                            n_sync=_n_sync_model)
                     return reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_prompt,
-                        n_exp, _bg, has_tail, False, fit_sigma)
+                        n_exp, _bg, has_tail, False, fit_sigma,
+                        n_sync=_n_sync_model)
                 w_px = np.sqrt(np.maximum(decay_px, 1.0))
-                def _resid(p_px, _decay=decay_px, _bg=bg_px, _w=w_px):
+                def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):
                     model_vals = _eval_model(np.array(_make_full(p_px)), _bg)
                     return (model_vals[fit_idx] - _decay[fit_idx]) / _w[fit_idx]
                 try:
@@ -938,7 +951,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 except Exception:
                     skipped += 1
                     continue
-                taus_sol = p_sol[:n_exp]
+                taus_sol = p_sol[:n_exp] * TAU_FIT_UNIT_S
                 amps_sol = p_sol[n_exp:2 * n_exp]
                 amp_sum = amps_sol.sum()
                 if amp_sum <= 0:
@@ -955,14 +968,14 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                            if denom > 0 else np.nan
                 full_sol = np.array(_make_full(p_sol))
                 model_sol = _eval_model(full_sol, bg_px)
-                resid_sol = decay_px[fit_idx] - model_sol[fit_idx]
+                resid_sol = fit_px[fit_idx] - model_sol[fit_idx]
                 chi2_px = float(np.sum(resid_sol**2 / np.maximum(model_sol[fit_idx], 1.0)))
                 dof_px = max(len(fit_idx) - 2 * n_exp, 1)
                 maps['tau_mean_int'][yi, xi] = tau_int
                 maps['tau_mean_amp'][yi, xi] = tau_amp
                 maps['chi2_r'][yi, xi] = chi2_px / dof_px
                 maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
-                    decay_px[fit_idx], model_sol[fit_idx])
+                    fit_px[fit_idx], model_sol[fit_idx])
                 for i in range(n_exp):
                     maps[f"tau_{i+1}"][yi, xi] = taus_ns[i]
                     maps[f"alpha_{i+1}"][yi, xi] = amps_sol[i]

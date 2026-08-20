@@ -1,8 +1,7 @@
-import multiprocessing
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import least_squares
-from ..FLIM.fit_tools import calibrated_chi2, calibrated_from_terms, chi2_terms
+from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, calibrated_chi2,
+                             calibrated_from_terms, chi2_terms)
 from ..FLIM.models import reconvolution_model
 
 def fit_window(fit_idx, n_bins):
@@ -24,8 +23,9 @@ def fit_window(fit_idx, n_bins):
 
 
 GPU_BLOCK_BYTES = 256 * 1024 * 1024
+CUDA_BLOCK_BYTES = 32 * 1024 * 1024
 
-def gpu_block_bytes():
+def gpu_block_bytes(default=GPU_BLOCK_BYTES):
     import os
     override = os.environ.get('FLIMKIT_GPU_BLOCK_BYTES')
     if override:
@@ -33,7 +33,7 @@ def gpu_block_bytes():
             return max(1, int(override))
         except ValueError:
             pass
-    return GPU_BLOCK_BYTES
+    return default
 
 def pixel_blocks(n_pixels, bytes_per_pixel, budget=None):
     budget = gpu_block_bytes() if budget is None else budget
@@ -86,6 +86,7 @@ class GPUBackend:
         n_steps,
         lr,
         fit_idx=None,
+        n_sync_model=None,
     ):
         raise NotImplementedError
 
@@ -108,6 +109,10 @@ class GPUBackend:
         raise NotImplementedError
 
 class _BackendMixin:
+
+    def block_bytes(self):
+        return gpu_block_bytes()
+
 
     @staticmethod
     def _estimate_bg_batch(flat, valid_mask, pre_gap=5):
@@ -288,16 +293,19 @@ class _BackendMixin:
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        weight_valid=None,
+        n_sync_model=None,
     ):
         B = raw_valid.shape[0]
+        weights = raw_valid if weight_valid is None else weight_valid
         win = fit_window(fit_idx, n_bins)
         n_fit = n_bins if win is None else len(win)
 
         amp0    = float(raw_valid.max()) / n_exp
         # Use the same bounds as the CPU free-tau path in fit_per_pixel
         amp_hi  = float(raw_valid.max()) * 10.0
-        lo_px   = np.array([float(tau_min_s)] * n_exp + [0.0]      * n_exp)
-        hi_px   = np.array([float(tau_max_s)] * n_exp + [amp_hi]   * n_exp)
+        lo_px = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi_px = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
         if fit_tvb:
             tvb_hi = float(raw_valid.sum(axis=1).max())
             lo_px  = np.concatenate([lo_px, [0.0]])
@@ -306,24 +314,28 @@ class _BackendMixin:
         def _fit_pixel(b):
             decay_b = raw_valid[b].astype(np.float64)
             bg_b    = float(bg_valid[b])
-            wt      = np.sqrt(np.maximum(decay_b, 1.0))
-            p0      = np.concatenate([taus_init,
-                                      np.full(n_exp, amp0)])
+            wt = np.sqrt(np.maximum(weights[b].astype(np.float64), 1.0))
+            p0 = np.concatenate([taus_init / TAU_FIT_UNIT_S,
+                                 np.full(n_exp, amp0)])
             if fit_tvb:
                 p0 = np.concatenate([p0, [bg_b * n_bins]])
 
             def _resid(p):
                 if fit_tvb:
-                    full_p = np.concatenate([p[:n_exp], p[n_exp:2 * n_exp], [0.0], [p[2 * n_exp]]])
-                    model  = reconvolution_model(
+                    full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
+                                             p[n_exp:2 * n_exp], [0.0], [p[2 * n_exp]]])
+                    model = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, 0.0, False, False, False,
-                        tvb_profile=tvb_profile, fit_tvb=True)
+                        tvb_profile=tvb_profile, fit_tvb=True,
+                        n_sync=n_sync_model)
                 else:
-                    full_p = np.concatenate([p[:n_exp], p[n_exp:], [0.0]])
-                    model  = reconvolution_model(
+                    full_p = np.concatenate([p[:n_exp] * TAU_FIT_UNIT_S,
+                                             p[n_exp:], [0.0]])
+                    model = reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_array,
-                        n_exp, bg_b, False, False, False)
+                        n_exp, bg_b, False, False, False,
+                        n_sync=n_sync_model)
                 if win is None:
                     return (model - decay_b) / wt
                 return (model[win] - decay_b[win]) / wt[win]
@@ -336,9 +348,7 @@ class _BackendMixin:
             except Exception:
                 return None
 
-        n_workers = min(B, max(1, multiprocessing.cpu_count()))
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            solutions = list(pool.map(_fit_pixel, range(B)))
+        solutions = [_fit_pixel(b) for b in range(B)]
 
         taus_out  = np.zeros((B, n_exp), dtype=np.float32)
         amps_out  = np.zeros((B, n_exp), dtype=np.float32)
@@ -351,7 +361,8 @@ class _BackendMixin:
         for b, p_sol in enumerate(solutions):
             if p_sol is None:
                 continue
-            taus_b = p_sol[:n_exp];  amps_b = p_sol[n_exp:2 * n_exp]
+            taus_b = p_sol[:n_exp] * TAU_FIT_UNIT_S
+            amps_b = p_sol[n_exp:2 * n_exp]
             if amps_b.sum() <= 0:
                 continue
             tvb_b = float(p_sol[2 * n_exp]) if fit_tvb else 0.0
@@ -364,12 +375,14 @@ class _BackendMixin:
                 model_b = reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_array,
                     n_exp, 0.0, False, False, False,
-                    tvb_profile=tvb_profile, fit_tvb=True)
+                    tvb_profile=tvb_profile, fit_tvb=True,
+                    n_sync=n_sync_model)
             else:
                 full_p  = np.concatenate([taus_b, amps_b, [0.0]])
                 model_b = reconvolution_model(
                     full_p, tcspc_res, n_bins, irf_array,
-                    n_exp, bg_b, False, False, False)
+                    n_exp, bg_b, False, False, False,
+                    n_sync=n_sync_model)
             decay_fit = raw_valid[b].astype(np.float64)
             if win is None:
                 model_fit = model_b

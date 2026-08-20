@@ -82,6 +82,8 @@ def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5):
     peak_bin = int(np.argmax(deriv[:half]))
     return peak_bin
 
+TAU_FIT_UNIT_S = 1e-9
+
 def estimate_bg(decay: np.ndarray, peak_bin: int, pre_gap: int = 5):
     end = max(0, peak_bin - pre_gap)
     region = decay[:end]

@@ -53,7 +53,8 @@ class MLXBackend(_BackendMixin):
         else:
             A_pinv_mx = mx.linalg.pinv(mx.array(A.astype(np.float32)), stream=mx.cpu)
         n_fit = A.shape[0]
-        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp)):
+        for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -144,7 +145,8 @@ class MLXBackend(_BackendMixin):
             basis_mx = mx.array(basis_grid.astype(np.float32))
             bb_mx = mx.array(bb_grid.astype(np.float32))
         per_pixel = 4 * (2 * n_bins + n_fit + N_GRID)
-        for first, last in pixel_blocks(valid_idx.size, per_pixel):
+        for first, last in pixel_blocks(valid_idx.size, per_pixel,
+                                        budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
             if with_tvb:
@@ -342,6 +344,7 @@ class MLXBackend(_BackendMixin):
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        n_sync_model=None,
     ):
         mx = self._mx
         ny, nx, n_bins = stack.shape
@@ -358,18 +361,21 @@ class MLXBackend(_BackendMixin):
         )
         if valid_idx.size == 0:
             return maps
-        bg_flat = self._estimate_bg_batch(flat, valid_mask)
-        dc_flat = np.maximum(flat - bg_flat[:, None], 0.0)
+        fit_flat = flat
         if correct_pileup and n_sync_px > 0:
+            fit_flat = flat.copy()
             for idx in valid_idx:
-                dc_flat[idx] = coates_pileup_correction(dc_flat[idx], n_sync_px)
-        raw_valid = flat[valid_idx].astype(np.float32)
+                fit_flat[idx] = coates_pileup_correction(flat[idx], n_sync_px)
+        bg_flat = self._estimate_bg_batch(fit_flat, valid_mask)
+        raw_valid = fit_flat[valid_idx].astype(np.float32)
         bg_valid = bg_flat[valid_idx].astype(np.float32)
+        weight_valid = flat[valid_idx].astype(np.float32)
         B = len(valid_idx)
         taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
             raw_valid, bg_valid, irf_array, tcspc_res,
             taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
+            weight_valid=weight_valid, n_sync_model=n_sync_model,
         )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],
