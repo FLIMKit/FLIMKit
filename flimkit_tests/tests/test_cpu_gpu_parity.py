@@ -369,6 +369,13 @@ FREE_TAU_TOL     = 0.08
 FREE_TAU_CHI2_MULT = 3.0
 
 
+def _grid_step_rtol(tau_ns):
+    from flimkit.FLIM.fitters import tau_grid_points
+    lo = max(tau_ns / 20.0, 0.05)
+    hi = min(tau_ns * 20.0, 45.0)
+    return (hi / lo) ** (1.0 / (tau_grid_points() - 1)) - 1.0
+
+
 def _fit_both_free_tau(stack, n_exp, global_popt, gpu_backend):
     irf_prompt = _make_irf()
     kwargs = dict(
@@ -396,12 +403,17 @@ class TestCPUGPUParityFreeTau:
     def setup(self, gpu_backend):
         self.gpu_backend = gpu_backend
 
-    def test_1exp_free_tau_agrees(self):
+    def test_1exp_grid_scan_agrees_within_one_grid_step(self):
         stack = _synthetic_stack_1exp(ny=4, nx=4, tau_ns=2.0)
         cpu, gpu = _fit_both_free_tau(
             stack, 1, _global_popt_1exp(), self.gpu_backend)
-        np.testing.assert_allclose(cpu['tau_1'], gpu['tau_1'], rtol=1e-6)
-        np.testing.assert_allclose(cpu['chi2_r'], gpu['chi2_r'], rtol=1e-4)
+        step = _grid_step_rtol(2.0)
+        np.testing.assert_allclose(
+            cpu['tau_1'], gpu['tau_1'], rtol=1.5 * step,
+            err_msg=f'one exponential ignores free_tau and grid scans, so the '
+                    f'two paths can land on neighbouring grid points; one step '
+                    f'is {step:.2e} relative')
+        np.testing.assert_allclose(cpu['chi2_r'], gpu['chi2_r'], rtol=0.05)
 
     # 2-exp free-tau
 
