@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.1** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -568,7 +568,7 @@ popt, summary = fit_summed(..., exclude_ns=[(7.5, 8.5)])
 maps = fit_per_pixel(..., fit_idx=summary['fit_idx'])
 ```
 
-Windowed per-pixel fitting runs on the CPU path; the GPU backends have no window support yet.
+The GPU backends honour the window too. All four per-pixel kernels take `fit_idx` and restrict themselves to it, so excluding a reflection peak does not cost the GPU.
 
 ---
 
@@ -1399,7 +1399,7 @@ Two halves, one on each side.
 1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
 
-QuPath 0.7.0 or newer is required, and FLIMKit 0.12.0 or newer, which pip pulls in.
+QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer, which pip pulls in.
 
 ### Using it
 
@@ -1508,7 +1508,9 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app - the default IRF path is resolved at startup and won't update mid-session.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` with n_exp ≥ 2 uses batched Adam on GPU; it only falls back to CPU when no backend is detected.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.
+
+The per-pixel GPU fit works in blocks, and `FLIMKIT_GPU_BLOCK_BYTES` sets the budget for one block in bytes. The default is 32 MB on CUDA and ROCm and 256 MB on MLX, and either way it is clamped to half of the free device memory. The CUDA default came off an RTX A5000, where anything above 32 MB costs a flat 2x because the card has 6 MB of L2 and the fast region is where the basis and a block stay resident. It does not generalise: an RTX A2000, with less L2, shows no cliff at all and is about 10 per cent slower at 32 MB than at 256 MB. Every budget returns identical lifetimes, so this is speed only.
 
 **Tile stitching produces visible seams**  
 Check that the max drift setting isn't too restrictive. If registration looks fine but seams persist, it's likely a sample contrast issue at tile boundaries rather than a registration failure.
