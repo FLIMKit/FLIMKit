@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -20,9 +21,11 @@ if not loaded:
 
 
 def test_a_format_lookup_loads_plugins_without_a_gui():
+    from tests.test_headless_imports import probe_env
+
     proc = subprocess.run(
         [sys.executable, '-c', PROBE], capture_output=True, text=True,
-        env=dict(os.environ, MPLBACKEND='Agg'))
+        env=probe_env())
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 

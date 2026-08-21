@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 CORE_MODULES = [
     'flimkit',
@@ -49,8 +50,17 @@ for name in {modules!r}:
     importlib.import_module(name)
 '''
 
+REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+
+
+def probe_env():
+    existing = os.environ.get('PYTHONPATH', '')
+    path = REPO_ROOT + (os.pathsep + existing if existing else '')
+    return dict(os.environ, MPLBACKEND='Agg', PYTHONPATH=path)
+
+
 def run_probe(source):
-    env = dict(os.environ, MPLBACKEND='Agg')
+    env = probe_env()
     return subprocess.run(
         [sys.executable, '-c', source.format(modules=CORE_MODULES)],
         capture_output=True, text=True, env=env)
