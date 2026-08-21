@@ -3886,7 +3886,6 @@ if HAS_TKMT:
             self.root.minsize(760, 700)
             self._init_ui()
             self._run_plugin_startups()
-            self.run(cleanresize=False)
 
 class FLIMKitGUIFallback(_UIBuilder):
     def __init__(self, root):
@@ -3895,7 +3894,41 @@ class FLIMKitGUIFallback(_UIBuilder):
         self.root.minsize(760, 700)
         self._init_ui()
         self._run_plugin_startups()
-        self.root.mainloop()
+
+def discard_default_root():
+    root = getattr(tk, '_default_root', None)
+    if root is None:
+        return
+    try:
+        root.destroy()
+    except Exception:
+        pass
+    tk._default_root = None
+
+def plain_root():
+    if HAS_DND:
+        try:
+            from tkinterdnd2 import Tk
+            return Tk()
+        except Exception as exc:
+            print(f'Drag and drop is off, the tkdnd library would not load: {exc}')
+            discard_default_root()
+    return tk.Tk()
+
+def apply_fallback_theme(root):
+    try:
+        import sv_ttk
+        sv_ttk.set_theme('dark')
+        return 'sun-valley through sv_ttk'
+    except Exception:
+        pass
+    style = ttk.Style(root)
+    names = style.theme_names()
+    for theme_name in ('vista', 'aqua', 'clam', 'alt', 'default'):
+        if theme_name in names:
+            style.theme_use(theme_name)
+            return theme_name
+    return style.theme_use()
 
 def launch_gui():
     global GUI_MODE
@@ -3904,20 +3937,21 @@ def launch_gui():
     init_crash_handler()
     from flimkit import plugins
     plugins.ensure_loaded()
+    themed = None
     if HAS_TKMT:
-        app = FLIMKitGUIThemed(theme='sun-valley', mode='dark')
-    else:
-        if HAS_DND:
-            from tkinterdnd2 import Tk
-            root = Tk()
-        else:
-            root = tk.Tk()
-        style = ttk.Style(root)
-        for theme_name in ('clam', 'alt', 'default'):
-            if theme_name in style.theme_names():
-                style.theme_use(theme_name)
-                break
-        app = FLIMKitGUIFallback(root)
+        try:
+            themed = FLIMKitGUIThemed(theme='sun-valley', mode='dark')
+        except tk.TclError as exc:
+            discard_default_root()
+            print(f'The themed window would not start on this Tk: {exc}')
+            print('Falling back. Tk 9 needs tkinterdnd2 0.6.2 or newer and sv-ttk.')
+    if themed is not None:
+        themed.run(cleanresize=False)
+        return
+    root = plain_root()
+    print(f'Theme: {apply_fallback_theme(root)}')
+    FLIMKitGUIFallback(root)
+    root.mainloop()
 
 if __name__ == '__main__':
     launch_gui()
