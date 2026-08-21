@@ -220,10 +220,13 @@ class _BackendMixin:
     ):
         good   = amp_v > 0
         tau_ns = tau_v * 1e9
-        model  = amp_v[:, None] * basis_best + bg_v[:, None]
+        model = (amp_v[:, None].astype(np.float32)
+                 * basis_best.astype(np.float32)
+                 + bg_v[:, None].astype(np.float32))
         if tvb is not None and tvb_profile is not None:
-            model = model + tvb[:, None] * tvb_profile[None, :]
-        numerator, expected, row_ok = chi2_terms(decay_valid, model, axis=1)
+            model = model + (tvb[:, None] * tvb_profile[None, :]).astype(np.float32)
+        numerator, expected, row_ok = chi2_terms(
+            decay_valid, model, axis=1, dtype=np.float32)
         chi2 = numerator / max(n_bins - 2, 1)
         calibrated = calibrated_from_terms(numerator, expected, row_ok)
 

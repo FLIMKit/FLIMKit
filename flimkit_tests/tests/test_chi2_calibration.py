@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from flimkit.FLIM.fit_tools import calibrated_chi2
+from flimkit.FLIM.fit_tools import (calibrated_chi2, calibrated_from_terms,
+                                    chi2_terms)
 
 
 def test_calibrated_chi2_uses_expected_sparse_bin_contributions():
@@ -357,3 +358,25 @@ def test_zstack_display_restores_calibrated_summed_values(tmp_path):
 
     assert summary['calibrated_chi2_pearson'] == pytest.approx(1.1)
     assert summary['calibrated_chi2_tail_pearson'] == pytest.approx(0.9)
+
+
+def test_float32_chi2_terms_match_float64():
+    rng = np.random.default_rng(3)
+    model = rng.uniform(0.5, 400.0, size=(2048, 459))
+    data = rng.poisson(model).astype(np.float32)
+    model32 = model.astype(np.float32)
+    n64, e64, v64 = chi2_terms(data, model32, axis=1, dtype=float)
+    n32, e32, v32 = chi2_terms(data, model32, axis=1, dtype=np.float32)
+    assert np.array_equal(v64, v32)
+    np.testing.assert_allclose(n32, n64, rtol=1e-5)
+    np.testing.assert_allclose(e32, e64, rtol=1e-5)
+    c64 = calibrated_from_terms(n64, e64, v64)
+    c32 = calibrated_from_terms(n32, e32, v32)
+    np.testing.assert_allclose(c32, c64, rtol=1e-5)
+
+
+def test_chi2_terms_still_default_to_float64():
+    data = np.array([[10.0, 20.0]], dtype=np.float32)
+    numerator, expected, _ = chi2_terms(data, data, axis=1)
+    assert numerator.dtype == np.float64
+    assert expected.dtype == np.float64
