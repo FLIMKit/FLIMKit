@@ -49,8 +49,9 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = [
-    'tkinterdnd2==0.4.3',
+    'tkinterdnd2>=0.6.2',
     'TKinterModernThemes',
+    'sv-ttk>=2.6.1',
 ]
 notebook = [
     'ipython==9.10.0',
