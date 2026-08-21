@@ -2299,6 +2299,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.free_tau_perpixel = ex['free_tau_perpixel']
         if 'pileup_in_model' in ex:
             a.pileup_in_model = ex['pileup_in_model']
+        if 'bg_in_model' in ex:
+            a.bg_in_model = ex['bg_in_model']
         if 'align_irf' in ex:
             a.align_irf = ex['align_irf']
         if 'fit_start_ns' in ex:
