@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.1] - 2026-08-21
+
+### Added
+- Stitching says how big the photon cube is, where it is going and how long the allocation took. A 124 tile mosaic at 512 square comes to a 5581 square canvas, which is 57.2 GB at 459 bins, and the line before it was `Allocating arrays...` with nothing after it until every tile had been read.
+- A warning when the output drive cannot make sparse files. exFAT and FAT cannot, so the whole cube is physically written before the first tile is read: 57.2 GB at 0.57 GB/s on a USB drive here, against 0.75s on APFS where the file is sparse. The check writes a 64 MB probe and reads `st_blocks`, so it costs nothing.
+
+### Changed
+- `flimkit[cellpose]` installs Cellpose. The extra was only called `segmentation`, so asking for it by the package's own name got a pip warning and no Cellpose. Both names work now.
+- The documentation said windowed per-pixel fitting runs on the CPU and that the GPU backends have no window support. They have had it since 0.10.1: all four per-pixel kernels take `fit_idx` and restrict themselves to it.
+- The documentation said `--free-tau-perpixel` with two or more components uses batched Adam on the GPU. It does not. The backend prepares the batch and then runs SciPy per pixel on the CPU, which is why a GPU buys almost nothing there: 436.7s against 460.7s for 16,384 pixels on an RTX A2000, where the fixed-tau kernel is 9x and the distribution scan 22x on the same card.
+- `FLIMKIT_GPU_BLOCK_BYTES` is documented. It has never appeared in the user documentation, and the 32 MB CUDA default is now stated as what it is: a figure measured on an RTX A5000 that does not generalise. An RTX A2000 shows no cliff at all and is about 10 per cent slower at 32 MB than at 256 MB. Every budget returns identical lifetimes, so the choice is speed only.
+- The QuPath Bridge section says which pipeline writes the photon cube. `Pipeline` had no explanation, so `stitch_fit` looked like the obvious choice when it is the expensive one: it writes the whole canvas of raw photons to disk before fitting anything, 57 GB for a 124 tile mosaic, while `tile_fit` fits each tile and assembles the maps.
+- The QuPath Bridge section asked for FLIMKit 0.12.0 or newer. Pile-up in the model needs 0.13.0, and the bridge scales the sync count for a region fit on the strength of it.
+- The QuPath bridge documentation names `flimkit-bridge`. The section said the bridge starts with FLIMKit and that it can also run without the window, without ever giving the command, so the only documented route was through the desktop app. `flimkit` opens a window and `flimkit-bridge` does not, which is now said in as many words.
+
 ## [0.13.0] - 2026-08-21
 
 ### Added
@@ -21,6 +36,7 @@
 
 ### Security
 - The `test` extra asked for `pytest==9.0.2`, which CVE-2025-71176 covers. It now asks for 9.1.0 or newer. A hard pin in an extra was wrong regardless, since it fights whatever the environment already has.
+
 
 ## [0.12.0] - 2026-08-19
 
