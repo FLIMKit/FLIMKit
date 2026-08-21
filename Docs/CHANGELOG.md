@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.2] - 2026-08-21
 
 ### Fixed
 - FLIMKit starts on a Tk 9 interpreter. The Windows python.org build of 3.14 ships Tk 9.0 where the macOS build still ships 8.6, and two GUI dependencies are built for Tcl 8.6 only: `tkinterdnd2` 0.4.3 cannot load its `tkdnd` binary, and `TKinterModernThemes` cannot source the Sun Valley theme, so `set_theme` is never defined. Either one killed the launch outright. `tkinterdnd2` moves to 0.6.2 or newer, which carries `tkdnd` 2.10.1 and loads on Tk 8.6.15 and 9.0.4 alike, and `sv-ttk` is a new GUI dependency because it is the maintained home of the same Sun Valley theme and works on both.
