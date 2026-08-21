@@ -126,7 +126,24 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 
 ### Installation
 
-From PyPI, for analysis in scripts, notebooks and the terminal:
+#### No Python, no terminal
+
+Download the build for your machine from the
+[Releases](https://github.com/FLIMKit/FLIMKit/releases/latest) tab, unzip it,
+and run it. Python is inside it, so there is nothing else to install.
+`FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` are attached
+to every release, built by GitHub Actions on each tag.
+
+On macOS the app is self-signed, so the first launch needs right-click then
+Open. A double-click will be refused.
+
+This route gets the desktop application only. It carries no GPU backend unless
+the build machine had one, which is covered under GPU acceleration in the
+compiled app.
+
+#### From PyPI
+
+For analysis in scripts, notebooks and the terminal:
 
 ```bash
 pip install flimkit                 # readers, fitting, phasors, stitching, the CLI

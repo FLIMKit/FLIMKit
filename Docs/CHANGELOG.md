@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- The installation instructions lead with the compiled application rather than with pip, in the README and in the documentation. A facility manager looked at the pip route and gave up before starting, which is a fair reaction from someone who has not installed Python and does not use a terminal. `FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` have been attached to every release for some time and need none of that, but the line saying so sat at the bottom of the section in parentheses.
+
 ## [0.13.2] - 2026-08-21
 
 ### Fixed
