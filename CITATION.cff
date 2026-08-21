@@ -28,7 +28,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-4605-1682"
 type: software
 license: MIT
-version: 0.13.1
+version: 0.13.2
 date-released: 2026-08-21
 doi: 10.5281/zenodo.21931131
 identifiers:
