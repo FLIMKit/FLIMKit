@@ -1420,6 +1420,8 @@ QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer, which pip pulls 
 
 ### Using it
 
+The server itself is a separate package, [flimkit-bridge](https://github.com/FLIMKit/flimkit-bridge). The QuPath extension and the Fiji add-on are both clients of it, so there is one server, one port and one place a fix has to land. `pip install flimkit-qupath-bridge` still pulls in everything it needs.
+
 The bridge starts with FLIMKit. There is nothing to launch and no port to configure. FLIMKit writes its address and a generated token to `~/.flimkit/qupath-bridge.json`, and QuPath reads that file, so `Extensions > FLIMKit bridge > Connect` needs nothing typed in. If port 8765 is busy an ephemeral one is used and recorded in the same file.
 
 QuPath also pairs itself. Opening or dropping any file makes QuPath ask the bridge whether FLIMKit recognises it, so a `.ptu` opens through FLIMKit without connecting first. Pass `-Dflimkit.bridge.imageserver=false` to QuPath to turn that off.
