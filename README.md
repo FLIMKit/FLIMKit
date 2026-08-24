@@ -25,9 +25,25 @@ Desktop GUI showing reconvolution fitting with per-pixel lifetime maps, summed d
 
 ## Installation
 
+### No Python, no terminal
+
+Download the build for your machine from the
+[Releases](https://github.com/FLIMKit/FLIMKit/releases/latest) tab, unzip it,
+and run it. Python is inside it, so there is nothing else to install.
+`FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` are attached
+to every release.
+
+On macOS the app is self-signed, so the first launch needs right-click then
+Open. A double-click will be refused.
+
+This route gets the desktop application only. Everything below is for scripting,
+the terminal, or GPU fitting.
+
+### From PyPI
+
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
 
-From PyPI, for analysis in scripts, notebooks and the terminal:
+For analysis in scripts, notebooks and the terminal:
 
 ```bash
 pip install flimkit            # readers, fitting, phasors, stitching, the CLI
@@ -52,8 +68,6 @@ For development work (PyInstaller + test dependencies):
 ```bash
 python install.py --dev
 ```
-
-Or download the compiled app from the Releases tab (no Python needed).
 
 ## Docker / TrueNAS SCALE
 
