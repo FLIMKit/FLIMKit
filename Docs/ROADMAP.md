@@ -20,9 +20,6 @@ The registry half of the add-on system shipped in 0.10.0. Analysis tools, file f
 
 Models and cost functions are what is left, and they are one job rather than two. The differential evolution costs are twelve hand-written classes covering model against cost function against reparameterisation, so both hooks need the same groundwork first: a parameter-layout object, and one generic cost class in place of the twelve. Tracked in issue #3.
 
-### 5. Freehand phasor regions in QuPath
-The bridge accepts a polygon cursor already. `cursor_masks` dispatches `type: 'polygon'` and tests each pixel against the outline in `(g, s)`, and that path is covered by tests. What is missing is the QuPath side: the phasor canvas offers elliptical cursors only, with no way to draw an outline. Sending the vertices as GeoJSON in `(g, s)` would reuse the wire format ROIs already use rather than inventing a second one.
-
 ## Medium Priority - To Do
 
 ### 1. Auto-Detect Regions
@@ -56,5 +53,5 @@ Listed so the sections above stay a list of work and not a history.
 - 0.13.x: pile-up in the forward model, background as a fitted term, nanosecond parameterisation for free-tau per-pixel fits, float32 per-pixel chi-squared, a per-backend GPU block budget, and a GUI that starts on Tk 9.
 - 0.12.0: per-pixel GPU fitting, device pinning, and the expanded GPU benchmark.
 - 0.11.0 and 0.10.x: the plugin registry, the QuPath and FIJI bridges, `batch_fixed_tau` windowing, and the anisotropy spin-out.
-- QuPath bridge 0.5.0: phasor filtering and IRF calibration driven from QuPath, and a phasor cache keyed on the settings that produced it.
+- QuPath bridge 0.5.0: phasor filtering and IRF calibration driven from QuPath, freehand regions traced on the phasor plot, and a phasor cache keyed on the settings that produced it.
 - GPU per-pixel fitting with a fit window: fixed-tau and the one-exponential grid scan honour a fit window and exclusion bands on the GPU, and free-tau honours it by slicing the residual. Two cases still fall back and say so: one-exponential with a time-varying background, and tail fits, whose window starts at the fitted `t0` rather than at a bin the user chose.

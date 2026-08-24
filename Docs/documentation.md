@@ -1437,6 +1437,8 @@ From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuP
 
 The phasor window draws the same density plot the desktop app does, for whichever time-domain file QuPath has open. Click on it to place an elliptical cursor and drag to move one. Each cursor reports its pixel count, phase and modulation lifetimes, and mean G and S, and six is the limit because that is how many colours the palette has.
 
+**Draw region** switches the plot to tracing. Drag to draw an outline and it becomes a cursor when you let go, so a population that is not an ellipse can still be selected. The outline goes to FLIMKit as a polygon in G and S, points closer than three pixels apart are dropped, and fewer than three points is not a region. Drawn regions cannot be dragged afterwards. Remove and redraw instead. The button releases itself after each outline, so the plot goes back to placing ellipses.
+
 **Create annotations** turns the cursors into QuPath annotations on the image, one per cursor, classified as `Phasor` and carrying the same measurements the cursor list shows. The phasor is computed on binned pixels, so the label image comes back at that resolution and is traced with the binning as its downsample, which puts the outlines in full-resolution image coordinates.
 
 **Settings** picks the filter and the IRF.
