@@ -1429,8 +1429,30 @@ From QuPath:
 - **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
 - **Send annotations to FLIMKit** posts the annotations on the current image.
 - **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
+- **Phasor** opens the phasor window for the image in view.
 
 From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
+
+### The phasor window
+
+The phasor window draws the same density plot the desktop app does, for whichever time-domain file QuPath has open. Click on it to place an elliptical cursor and drag to move one. Each cursor reports its pixel count, phase and modulation lifetimes, and mean G and S, and six is the limit because that is how many colours the palette has.
+
+**Create annotations** turns the cursors into QuPath annotations on the image, one per cursor, classified as `Phasor` and carrying the same measurements the cursor list shows. The phasor is computed on binned pixels, so the label image comes back at that resolution and is traced with the binning as its downsample, which puts the outlines in full-resolution image coordinates.
+
+**Settings** picks the filter and the IRF.
+
+| Setting | Values | What it does |
+|---|---|---|
+| Phasor filter | `none`, `gaussian`, `median`, `wavelet`, plus anything a plugin registers | Spatial smoothing of the G and S coordinates |
+| Gaussian sigma | 0.1 to 10 px | Width of the gaussian kernel |
+| Median window | 3 to 15 px | Size of the median window |
+| IRF calibration | `none`, plus every machine IRF installed | Rotates and scales the phasor onto the calibrated frame |
+
+Calibration runs before filtering, the same order the desktop app and `phasor_cli.py` use, so the same file gives the same coordinates whichever front end you drive it from.
+
+The IRF list is empty on a fresh install. A machine IRF describes one microscope, so none are distributed with FLIMKit, and you have to measure your own under **Tools > Machine IRF Builder** in the desktop app before it appears here. An uncalibrated phasor is still useful for comparing populations within one image, but the absolute lifetimes it reports are not.
+
+Changing a setting recomputes the phasor rather than reusing what was already on screen. The bridge caches per dataset and per setting, so switching back to a combination you have already looked at is immediate.
 
 ### Without the FLIMKit window
 
