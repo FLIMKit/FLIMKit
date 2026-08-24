@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.12.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.2** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -126,7 +126,24 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 
 ### Installation
 
-From PyPI, for analysis in scripts, notebooks and the terminal:
+#### No Python, no terminal
+
+Download the build for your machine from the
+[Releases](https://github.com/FLIMKit/FLIMKit/releases/latest) tab, unzip it,
+and run it. Python is inside it, so there is nothing else to install.
+`FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` are attached
+to every release, built by GitHub Actions on each tag.
+
+On macOS the app is self-signed, so the first launch needs right-click then
+Open. A double-click will be refused.
+
+This route gets the desktop application only. It carries no GPU backend unless
+the build machine had one, which is covered under GPU acceleration in the
+compiled app.
+
+#### From PyPI
+
+For analysis in scripts, notebooks and the terminal:
 
 ```bash
 pip install flimkit                 # readers, fitting, phasors, stitching, the CLI
@@ -145,7 +162,7 @@ Extras combine, so ask for whichever apply:
 | `pip install "flimkit[gui]"` | 54 | The desktop window as well. |
 | `pip install "flimkit[torch]"` | 62 | Headless with GPU fitting. |
 | `pip install "flimkit[gui,torch]"` | 64 | Desktop and GPU. |
-| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. |
+| `pip install "flimkit[segmentation]"` | 70 | Cellpose cell masking. Cellpose depends on PyTorch, so this brings GPU fitting with it. `flimkit[cellpose]` is the same thing under the package's own name. |
 | `pip install "flimkit[notebook]"` | 71 | The Jupyter phasor cursor tool. |
 | `pip install "flimkit[all]"` | 91 | `gui`, `notebook` and `segmentation` together, and GPU by way of Cellpose. |
 | `pip install "flimkit[test]"` | 56 | pytest, for running the suite against an installed copy. |
@@ -568,7 +585,7 @@ popt, summary = fit_summed(..., exclude_ns=[(7.5, 8.5)])
 maps = fit_per_pixel(..., fit_idx=summary['fit_idx'])
 ```
 
-Windowed per-pixel fitting runs on the CPU path; the GPU backends have no window support yet.
+The GPU backends honour the window too. All four per-pixel kernels take `fit_idx` and restrict themselves to it, so excluding a reflection peak does not cost the GPU.
 
 ---
 
@@ -1396,10 +1413,10 @@ It runs inside a live QuPath session rather than as a script, so it works with t
 
 Two halves, one on each side.
 
-1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
+1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
 
-QuPath 0.7.0 or newer is required, and FLIMKit 0.12.0 or newer, which pip pulls in.
+QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer, which pip pulls in.
 
 ### Using it
 
@@ -1412,10 +1429,47 @@ From QuPath:
 - **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
 - **Send annotations to FLIMKit** posts the annotations on the current image.
 - **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
+- **Phasor** opens the phasor window for the image in view.
 
 From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
 
-The bridge can also run without the FLIMKit window, and the same HTTP API drives stitching and fitting from QuPath. The bridge's README documents both.
+### The phasor window
+
+The phasor window draws the same density plot the desktop app does, for whichever time-domain file QuPath has open. Click on it to place an elliptical cursor and drag to move one. Each cursor reports its pixel count, phase and modulation lifetimes, and mean G and S, and six is the limit because that is how many colours the palette has.
+
+**Create annotations** turns the cursors into QuPath annotations on the image, one per cursor, classified as `Phasor` and carrying the same measurements the cursor list shows. The phasor is computed on binned pixels, so the label image comes back at that resolution and is traced with the binning as its downsample, which puts the outlines in full-resolution image coordinates.
+
+**Settings** picks the filter and the IRF.
+
+| Setting | Values | What it does |
+|---|---|---|
+| Phasor filter | `none`, `gaussian`, `median`, `wavelet`, plus anything a plugin registers | Spatial smoothing of the G and S coordinates |
+| Gaussian sigma | 0.1 to 10 px | Width of the gaussian kernel |
+| Median window | 3 to 15 px | Size of the median window |
+| IRF calibration | `none`, plus every machine IRF installed | Rotates and scales the phasor onto the calibrated frame |
+
+Calibration runs before filtering, the same order the desktop app and `phasor_cli.py` use, so the same file gives the same coordinates whichever front end you drive it from.
+
+The IRF list is empty on a fresh install. A machine IRF describes one microscope, so none are distributed with FLIMKit, and you have to measure your own under **Tools > Machine IRF Builder** in the desktop app before it appears here. An uncalibrated phasor is still useful for comparing populations within one image, but the absolute lifetimes it reports are not.
+
+Changing a setting recomputes the phasor rather than reusing what was already on screen. The bridge caches per dataset and per setting, so switching back to a combination you have already looked at is immediate.
+
+### Without the FLIMKit window
+
+QuPath does not need the FLIMKit desktop app. `flimkit-bridge` starts the same server on its own, with no window and no display, which is what you want on a headless machine or when QuPath is the only front end you use.
+
+```bash
+pip install flimkit-qupath-bridge
+flimkit-bridge
+```
+
+Note that `flimkit` is the desktop app and always opens a window. `flimkit-bridge` is the headless one.
+
+It writes the same `~/.flimkit/qupath-bridge.json`, so `Extensions > FLIMKit bridge > Connect` finds it exactly as it finds a running FLIMKit. `--port` and `--token` are there if you need them, `--force` takes over the discovery file from a bridge that has been left running, and `--no-announce` serves alongside one instead.
+
+QuPath drives everything in this mode, stitching and fitting included, over the same HTTP API. `Extensions > FLIMKit bridge > Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side.
+
+The **Pipeline** setting in that dialog picks how. `tile_fit`, the default, fits each tile after a global summed fit and assembles the maps. `stitch_fit` stitches the raw photons into one canvas and fits that, which means writing the whole photon cube to disk first: 124 tiles at 512 square make a 5581 square canvas, which is 57 GB at 459 bins. Pick `stitch_fit` when you want the stitched photon cube itself, and `tile_fit` otherwise.
 
 ### Co-registration
 
@@ -1493,7 +1547,9 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app - the default IRF path is resolved at startup and won't update mid-session.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. Note that `--free-tau-perpixel` with n_exp ≥ 2 uses batched Adam on GPU; it only falls back to CPU when no backend is detected.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.
+
+The per-pixel GPU fit works in blocks, and `FLIMKIT_GPU_BLOCK_BYTES` sets the budget for one block in bytes. The default is 32 MB on CUDA and ROCm and 256 MB on MLX, and either way it is clamped to half of the free device memory. The CUDA default came off an RTX A5000, where anything above 32 MB costs a flat 2x because the card has 6 MB of L2 and the fast region is where the basis and a block stay resident. It does not generalise: an RTX A2000, with less L2, shows no cliff at all and is about 10 per cent slower at 32 MB than at 256 MB. Every budget returns identical lifetimes, so this is speed only.
 
 **Tile stitching produces visible seams**  
 Check that the max drift setting isn't too restrictive. If registration looks fine but seams persist, it's likely a sample contrast issue at tile boundaries rather than a registration failure.

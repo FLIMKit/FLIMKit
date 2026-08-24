@@ -8,17 +8,18 @@ def distribution_dof(n_fit, n_components=1, fit_tvb=False):
     return max(int(n_fit) - n_params, 1)
 
 
-def chi2_terms(data, model, axis=None):
+def chi2_terms(data, model, axis=None, dtype=float):
     data_arr, model_arr = np.broadcast_arrays(
-        np.asarray(data, dtype=float), np.asarray(model, dtype=float))
+        np.asarray(data, dtype=dtype), np.asarray(model, dtype=dtype))
     valid = np.all(
         np.isfinite(data_arr) & (data_arr >= 0.0)
         & np.isfinite(model_arr) & (model_arr >= 0.0),
         axis=axis)
+    one = dtype(1.0)
     with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
         numerator = np.sum(
-            (data_arr - model_arr) ** 2 / np.maximum(model_arr, 1.0), axis=axis)
-        expected = np.sum(np.minimum(model_arr, 1.0), axis=axis)
+            (data_arr - model_arr) ** 2 / np.maximum(model_arr, one), axis=axis)
+        expected = np.sum(np.minimum(model_arr, one), axis=axis)
     return numerator, expected, valid
 
 
