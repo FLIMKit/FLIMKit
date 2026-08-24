@@ -1413,12 +1413,16 @@ It runs inside a live QuPath session rather than as a script, so it works with t
 
 Two halves, one on each side.
 
-1. `pip install flimkit-qupath-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
+1. `pip install flimkit-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
 2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
+
+`pip install flimkit-qupath-bridge` used to be step 1 and still works, but that package is being sunset. There is nothing QuPath-specific left in it: it is a shim that re-exports `flimkit-bridge`, warns on import, and is removed in 0.7.0. Install `flimkit-bridge` instead.
 
 QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer, which pip pulls in.
 
 ### Using it
+
+The server itself is a separate package, [flimkit-bridge](https://github.com/FLIMKit/flimkit-bridge). The QuPath extension and the Fiji add-on are both clients of it, so there is one server, one port and one place a fix has to land.
 
 The bridge starts with FLIMKit. There is nothing to launch and no port to configure. FLIMKit writes its address and a generated token to `~/.flimkit/qupath-bridge.json`, and QuPath reads that file, so `Extensions > FLIMKit bridge > Connect` needs nothing typed in. If port 8765 is busy an ephemeral one is used and recorded in the same file.
 
@@ -1461,13 +1465,13 @@ Changing a setting recomputes the phasor rather than reusing what was already on
 QuPath does not need the FLIMKit desktop app. `flimkit-bridge` starts the same server on its own, with no window and no display, which is what you want on a headless machine or when QuPath is the only front end you use.
 
 ```bash
-pip install flimkit-qupath-bridge
+pip install flimkit-bridge
 flimkit-bridge
 ```
 
 Note that `flimkit` is the desktop app and always opens a window. `flimkit-bridge` is the headless one.
 
-It writes the same `~/.flimkit/qupath-bridge.json`, so `Extensions > FLIMKit bridge > Connect` finds it exactly as it finds a running FLIMKit. `--port` and `--token` are there if you need them, `--force` takes over the discovery file from a bridge that has been left running, and `--no-announce` serves alongside one instead.
+It writes the same `~/.flimkit/bridge.json`, so `Extensions > FLIMKit bridge > Connect` finds it exactly as it finds a running FLIMKit. Extensions built before the server moved out read `qupath-bridge.json`, which is written alongside it until those versions are retired. `--port` and `--token` are there if you need them, `--force` takes over the discovery file from a bridge that has been left running, and `--no-announce` serves alongside one instead.
 
 QuPath drives everything in this mode, stitching and fitting included, over the same HTTP API. `Extensions > FLIMKit bridge > Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side.
 
@@ -1593,7 +1597,7 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, compiled app builds, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
 
 FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
 
