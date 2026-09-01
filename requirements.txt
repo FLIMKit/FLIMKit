@@ -24,5 +24,6 @@ tifffile
 tqdm==4.67.3
 tkinterdnd2>=0.6.2
 xarray==2026.1.0
+zarr>=2.18
 TKinterModernThemes
 sv-ttk>=2.6.1

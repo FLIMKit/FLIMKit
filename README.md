@@ -263,6 +263,7 @@ python run_tests.py integration  # integration tests only
 |---|---|
 | PNG | Intensity and lifetime map images |
 | OME-TIFF | Lossless export with metadata - opens in Fiji/ImageJ |
+| OME-Zarr | Lossless and compressed, one channel per map (OME-NGFF 0.4) |
 | GeoJSON | ROI geometries and stats - imports directly into QuPath |
 | CSV | Fit summaries and per-ROI statistics |
 | NPZ | Session files for restoring analysis state |
