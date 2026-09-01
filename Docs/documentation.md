@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.2** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.3** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
