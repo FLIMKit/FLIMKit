@@ -36,6 +36,7 @@ def check_dependencies():
         'numpy': 'NumPy',
         'scipy': 'SciPy',
         'tifffile': 'TiffFile',
+        'zarr': 'Zarr (OME-Zarr export)',
         'ptufile': 'ptufile (PicoQuant .ptu reading)',
         'sdtfile': 'sdtfile (Becker & Hickl .sdt reading)',
         'phasorpy': 'PhasorPy',

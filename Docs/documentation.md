@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.2** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.3** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -122,6 +122,7 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `openpyxl` | Excel XLSX parsing for FLIM microscope software IRF extraction |
 | `pandas` | Excel/XLSX IRF file parsing |
 | `tifffile` | TIFF image I/O |
+| `zarr` | OME-Zarr export of the result maps |
 | `tqdm` | Progress bars |
 
 ### Installation
@@ -1336,7 +1337,7 @@ FLIMKit never creates that folder and does not load from it until you say so. Op
 
 A wheel works in that folder too, which is the only way to install a packaged add-on into the compiled app, since it has no `pip`. Download the `.whl` from the add-on's releases, drop it in, and restart. FLIMKit puts it on the import path before it looks for entry points, so the add-on registers exactly as it would if it had been pip installed.
 
-Two limits on that route. The wheel has to be pure Python, tagged `py3-none-any`; one built for a specific platform cannot be imported from a zip and is refused with that reason rather than failing later. And its dependencies have to be ones FLIMKit already bundles, because there is nothing in the compiled app to fetch the rest with. `numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile` and tkinter are there.
+Two limits on that route. The wheel has to be pure Python, tagged `py3-none-any`; one built for a specific platform cannot be imported from a zip and is refused with that reason rather than failing later. And its dependencies have to be ones FLIMKit already bundles, because there is nothing in the compiled app to fetch the rest with. `numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile`, `zarr` and tkinter are there.
 
 Running from source, `pip install` is the better route and this is unnecessary.
 
@@ -1536,11 +1537,38 @@ pytest tests/test_integration.py -v
 |---|---|
 | PNG | Intensity and lifetime map images for quick visualisation |
 | OME-TIFF | Lossless, metadata-preserving export, opens correctly in Fiji/ImageJ |
+| OME-Zarr | Lossless and compressed, one channel per exported map, OME-NGFF 0.4 |
 | GeoJSON | ROI geometries and statistics, imports directly into QuPath |
 | CSV | Fit summaries and per-ROI statistics |
 | NPZ | Session files (fitting results, phasor arrays, cursor state) for session restoration |
 | NPY | Raw FLIM histogram cubes and assembled lifetime maps |
 | TXT | Human-readable fit summaries |
+
+### OME-Zarr export
+
+Export Images offers OME-Zarr alongside PNG and OME-TIFF. It writes one store
+holding a single `(c, y, x)` float32 array, with each image you ticked as a
+named channel, so intensity and lifetime end up as two channels of the same
+image rather than two files. Channel names, the pixel size and the summed-fit
+results are written into the store metadata: the fit summary sits under the
+`flimkit` key in `.zattrs`, so the numbers travel with the image.
+
+The store is named after the scan, `R146_FOV1.ome.zarr` for `R146_FOV1.ptu`,
+falling back to `results.ome.zarr` when there is no input path to take a name
+from. Exporting several fields of view into one folder therefore leaves one
+store per field rather than overwriting.
+
+The layout is OME-NGFF 0.4 on a Zarr v2 store, which is the version the
+readers in Fiji, napari and QuPath are written against. The store validates
+against the `ome-zarr-models` 0.4 schema and reads back through the reference
+`ome-zarr` reader with its channel names and axes intact; I have not opened one
+in Fiji, napari or QuPath myself. Chunks are compressed with Blosc/zstd, which
+is where the size saving comes from: on a 512 square float32 intensity and
+lifetime pair the store is about a third of the two uncompressed OME-TIFFs.
+
+Zarr is a base dependency, so nothing extra needs installing and the compiled
+application carries it. If it is somehow missing the export dialog says so and
+does nothing rather than writing a partial store.
 
 ---
 

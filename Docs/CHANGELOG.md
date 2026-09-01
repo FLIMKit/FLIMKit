@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.3] - 2026-09-01
+
+### Added
+- OME-Zarr as a third choice in Export Images, next to PNG and OME-TIFF. It writes one store, named after the scan, holding a single `(c, y, x)` float32 array, with every map you ticked as a named channel, so intensity and lifetime come out as two channels of one image rather than as two files. The pixel size and the summed-fit summary go into the store metadata under the `flimkit` key, so the numbers travel with the image, and exporting several fields of view into one folder leaves one store per field rather than overwriting. Chunks are compressed with Blosc/zstd, which is the point of the format here: a 512 square float32 intensity and lifetime pair comes to about a third of the two uncompressed OME-TIFFs. The layout is OME-NGFF 0.4 on a Zarr v2 store, which is the version the readers in Fiji, napari and QuPath are written against. The store validates against the `ome-zarr-models` 0.4 schema and reads back through the reference `ome-zarr` reader with its channel names and axes intact, but I have not opened one in those three applications. Zarr is a base dependency rather than an extra, so the pip install and the compiled application both carry it.
 
 ### Changed
 - The installation instructions lead with the compiled application rather than with pip, in the README and in the documentation. A facility manager looked at the pip route and gave up before starting, which is a fair reaction from someone who has not installed Python and does not use a terminal. `FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` have been attached to every release for some time and need none of that, but the line saying so sat at the bottom of the section in parentheses.
