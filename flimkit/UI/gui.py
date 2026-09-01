@@ -1964,6 +1964,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                            variable=bv_format, value='png').pack(anchor='w', pady=3)
             ttk.Radiobutton(fmt_frame, text='OME-TIFF (lossless, metadata-rich)',
                            variable=bv_format, value='ometiff').pack(anchor='w', pady=3)
+            ttk.Radiobutton(fmt_frame, text='OME-Zarr (lossless, compressed, one channel per image)',
+                           variable=bv_format, value='omezarr').pack(anchor='w', pady=3)
             loc_frame = ttk.LabelFrame(dlg, text='Save Location', padding=10)
             loc_frame.pack(fill='x', padx=20, pady=5)
             export_path = tk.StringVar(value=output_dir)
@@ -1990,11 +1992,21 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         messagebox.showwarning('No path', 'Please select an export directory.')
                         return
                     fmt = bv_format.get()
+                    if fmt == 'omezarr':
+                        try:
+                            import zarr
+                        except ImportError:
+                            messagebox.showerror(
+                                'Zarr not installed',
+                                'OME-Zarr export needs the zarr package.\n\n'
+                                'Install it with:  pip install zarr')
+                            return
                     print(f'[Export] Exporting {len(selected_images)} images in {fmt.upper()} format to {export_dir}')
                     self._export_images(selected_images, export_dir,
                                        with_scalebar=bv_scalebar.get(),
                                        with_annotations=bv_annotations.get(),
-                                       format=fmt)
+                                       format=fmt,
+                                       fit_result=image_dict)
                     dlg.destroy()
                     messagebox.showinfo('Success', f'Results exported to\n{export_dir}')
                 except Exception as e:
@@ -2018,7 +2030,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _export_images(self, image_dict: dict, output_dir: str,
                       with_scalebar: bool = True, with_annotations: bool = True,
-                      format: str = 'png'):
+                      format: str = 'png', fit_result: dict = None):
         try:
             from pathlib import Path
             import numpy as np
@@ -2032,6 +2044,44 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if with_scalebar and pixel_size_um is None:
                 print('[Export] No pixel size available - scale bar will be omitted')
                 with_scalebar = False
+            if fmt == 'omezarr':
+                try:
+                    from flimkit.utils.ome_zarr import fit_metadata, write_ome_zarr
+                    planes = {k: v for k, v in image_dict.items()
+                              if isinstance(v, np.ndarray) and v.ndim == 2}
+                    skipped = [k for k, v in image_dict.items()
+                               if isinstance(v, np.ndarray) and v.ndim != 2]
+                    for k in skipped:
+                        print(f'[Export] Skipping {k}: OME-Zarr export takes 2-D maps only')
+                    if not planes:
+                        print('[Export] No 2-D images selected for OME-Zarr export')
+                    else:
+                        by_shape = {}
+                        for k, v in planes.items():
+                            by_shape.setdefault(v.shape, {})[k] = v
+                        units = {k: 'ns' for k in planes if k.startswith(('lifetime', 'tau'))}
+                        meta = fit_metadata(fit_result or image_dict, pixel_size_um,
+                                            channel_units=units or None)
+                        stem = self._current_scan_stem() or 'results'
+                        for idx, (shape, group_planes) in enumerate(sorted(by_shape.items())):
+                            suffix = '' if idx == 0 else f'_{shape[0]}x{shape[1]}'
+                            output_file = output_path / f'{stem}{suffix}.ome.zarr'
+                            if output_file.exists():
+                                import shutil as _shutil
+                                _shutil.rmtree(output_file)
+                            write_ome_zarr(output_file, group_planes,
+                                           pixel_size_um=pixel_size_um, metadata=meta,
+                                           name=stem)
+                            channels = ', '.join(sorted(group_planes))
+                            print(f'\u2713 Exported OME-Zarr: {output_file.name} ({channels})')
+                            exported_count += 1
+                except ImportError as e:
+                    print(f'[Export] zarr not installed ({e}), falling back to PNG')
+                    fmt = 'png'
+                except Exception as e:
+                    print(f'[Export] Error exporting OME-Zarr: {e}')
+                    import traceback
+                    traceback.print_exc()
             if fmt == 'ometiff':
                 try:
                     import tifffile
