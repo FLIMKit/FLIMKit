@@ -1,0 +1,33 @@
+name: Draft JOSS PDF
+
+on:
+  push:
+    paths:
+      - _joss_paper_updated/paper.md
+      - _joss_paper_updated/paper.bib
+      - .github/workflows/draft-pdf.yml
+  pull_request:
+    paths:
+      - _joss_paper_updated/paper.md
+      - _joss_paper_updated/paper.bib
+  workflow_dispatch:
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    name: Paper Draft
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build draft PDF
+        uses: openjournals/openjournals-draft-action@master
+        with:
+          journal: joss
+          paper-path: _joss_paper_updated/paper.md
+
+      - name: Upload PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: _joss_paper_updated/paper.pdf
