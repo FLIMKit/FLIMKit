@@ -33,8 +33,8 @@ date-released: 2026-09-01
 doi: 10.5281/zenodo.21931131
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.21931132
-    description: "Archived release v0.10.1"
+    value: 10.5281/zenodo.22229793
+    description: "Archived release v0.13.3"
 repository-code: "https://github.com/FLIMKit/FLIMKit"
 keywords:
   - FLIM
