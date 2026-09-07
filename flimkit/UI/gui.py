@@ -3955,6 +3955,17 @@ def discard_default_root():
         pass
     tk._default_root = None
 
+def salvage_root():
+    root = getattr(tk, '_default_root', None)
+    if root is None:
+        return None
+    try:
+        for child in root.winfo_children():
+            child.destroy()
+    except tk.TclError:
+        return None
+    return root
+
 def plain_root():
     if HAS_DND:
         try:
@@ -3962,7 +3973,9 @@ def plain_root():
             return Tk()
         except Exception as exc:
             print(f'Drag and drop is off, the tkdnd library would not load: {exc}')
-            discard_default_root()
+            salvaged = salvage_root()
+            if salvaged is not None:
+                return salvaged
     return tk.Tk()
 
 def apply_fallback_theme(root):
@@ -3988,17 +4001,19 @@ def launch_gui():
     from flimkit import plugins
     plugins.ensure_loaded()
     themed = None
+    root = None
     if HAS_TKMT:
         try:
             themed = FLIMKitGUIThemed(theme='sun-valley', mode='dark')
         except tk.TclError as exc:
-            discard_default_root()
+            root = salvage_root()
             print(f'The themed window would not start on this Tk: {exc}')
             print('Falling back. Tk 9 needs tkinterdnd2 0.6.2 or newer and sv-ttk.')
     if themed is not None:
         themed.run(cleanresize=False)
         return
-    root = plain_root()
+    if root is None:
+        root = plain_root()
     print(f'Theme: {apply_fallback_theme(root)}')
     FLIMKitGUIFallback(root)
     root.mainloop()

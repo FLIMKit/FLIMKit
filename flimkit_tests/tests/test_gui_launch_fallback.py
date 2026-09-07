@@ -80,3 +80,37 @@ def test_a_root_is_built_even_when_tkdnd_will_not_load(monkeypatch):
     assert isinstance(built, tk.Tk)
     built.destroy()
     gui.discard_default_root()
+
+
+def test_the_failed_themed_root_is_reused_not_destroyed(monkeypatch):
+    if not gui.HAS_TKMT:
+        pytest.skip('TKinterModernThemes is not installed')
+    try:
+        tk.Tk().destroy()
+    except tk.TclError:
+        pytest.skip('no display available for tkinter')
+    gui.discard_default_root()
+    seen = {}
+
+    def refuse(*args, **kwargs):
+        seen['themed_root'] = tk.Tk()
+        ttk.Label(seen['themed_root'], text='half built theme').pack()
+        raise tk.TclError('invalid command name "set_theme"')
+
+    class Stub:
+        def __init__(self, built):
+            seen['root'] = built
+            seen['children'] = built.winfo_children()
+            built.update_idletasks()
+
+    monkeypatch.setattr(gui.FLIMKitGUIThemed, '__init__', refuse)
+    monkeypatch.setattr(gui, 'FLIMKitGUIFallback', Stub)
+    monkeypatch.setattr(tk.Misc, 'mainloop', lambda self, n=0: seen.setdefault('mainloop', True))
+    monkeypatch.setattr(gui, 'init_crash_handler', lambda: None, raising=False)
+    gui.launch_gui()
+
+    assert seen['root'] is seen['themed_root']
+    assert seen['children'] == []
+    assert seen['mainloop'] is True
+    seen['root'].destroy()
+    gui.discard_default_root()

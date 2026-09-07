@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.13.4] - 2026-09-07
+
+### Fixed
+- The desktop GUI opens on a Tk 9 interpreter when the Sun Valley theme will not load. 0.13.2 made the window fall back to a plain one rather than dying, and on Tk 8.6 it does. On Tk 9 it segfaulted instead, inside `showRootWindow`, before anything was drawn. Tk 9 on macOS queues an idle handler when a root window is created and does not cancel it when that root is destroyed, so the fallback, which threw the themed root away and built a second one, crashed on the first `update_idletasks` the interface reached. The fallback now reuses the root the themed attempt had already built, with its children cleared, because only the theme had failed and the window itself was sound. The same destroy and rebuild sat on the path taken when the tkdnd library will not load, and is gone from there too. This is only reachable on a fresh install, because it needs a Python whose Tk is 9.0 and a `TKinterModernThemes` that cannot source its theme on it.
+
 ## [0.13.3] - 2026-09-01
 
 ### Added
