@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.5] - 2026-09-15
 
 ### Changed
 - The Docker images serve FLIMKit through the web UI instead of streaming the desktop over noVNC. Port 14500 opens the `flimkit-web-ui` page, which drives the same Tk window running on the virtual display, so the address a TrueNAS app already points at does not change. `FLIMKIT_PASSWORD` protects the web UI with HTTP Basic authentication, user `flimkit`, as well as the desktop view. The desktop is still there for the windows the web UI does not cover, behind `FLIMKIT_DESKTOP=1` on port 14501, and raw VNC on 5900 is no longer published because websockify was its only client. The images have a health check against `/healthz`.
