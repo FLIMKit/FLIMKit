@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- The Docker images serve FLIMKit through the web UI instead of streaming the desktop over noVNC. Port 14500 opens the `flimkit-web-ui` page, which drives the same Tk window running on the virtual display, so the address a TrueNAS app already points at does not change. `FLIMKIT_PASSWORD` protects the web UI with HTTP Basic authentication, user `flimkit`, as well as the desktop view. The desktop is still there for the windows the web UI does not cover, behind `FLIMKIT_DESKTOP=1` on port 14501, and raw VNC on 5900 is no longer published because websockify was its only client. The images have a health check against `/healthz`.
+- `docker-compose.yaml` mounts the config folder at `/root/.flimkit`, which is where FLIMKit reads its config. It was mounted at `/config` with `FLIMKIT_CONFIG_DIR` and `FLIMKIT_DATA_DIR` set, and nothing reads either variable, so settings were lost whenever the container was recreated. Its `build:` also pointed at `docker/`, which has no `requirements.txt`, and now builds from the repository root.
+
 ## [0.13.4] - 2026-09-07
 
 ### Fixed
