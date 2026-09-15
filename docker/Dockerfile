@@ -25,6 +25,8 @@ RUN grep -v -E '^\s*(pytest|#)' requirements.txt > requirements-docker.txt \
        --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-docker.txt \
     && rm requirements-docker.txt
+ARG FLIMKIT_WEB_UI=https://github.com/FLIMKit/flimkit-web-ui/archive/refs/heads/main.zip
+RUN pip install --no-cache-dir "${FLIMKIT_WEB_UI}"
 COPY flimkit/ ./flimkit/
 COPY main.py .
 RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=true&resize=scale&reconnect=true">\n' > /usr/share/novnc/index.html \
@@ -32,5 +34,10 @@ RUN printf '<!doctype html>\n<meta http-equiv="refresh" content="0; url=vnc.html
 RUN mkdir -p /app/mpl-cache && chmod 777 /app/mpl-cache
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-EXPOSE 14500 5900
+ENV FLIMKIT_WEB_HOST=0.0.0.0 \
+    FLIMKIT_WEB_PORT=14500 \
+    FLIMKIT_WEB_HEADLESS=1
+EXPOSE 14500 14501
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['FLIMKIT_WEB_PORT'] + '/healthz', timeout=4)"
 ENTRYPOINT ["/docker-entrypoint.sh"]
