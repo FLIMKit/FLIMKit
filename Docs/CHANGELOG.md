@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Apply fit settings, under the project list. Fit one file the way you want it, press the button, tick the other files in the project, and each is fitted with the same model, components, IRF method, fit window, masking, corrections and expert settings, then saved with the same FLIM display range, gamma, colormap and τ weighting, and the same intensity range and colormap. The settings come from the fitted file's saved session, so what is copied is what that file was actually fitted with even if the form has been touched since. ROIs are not copied, since they belong to one field of view. A file whose IRF comes from a LAS X export uses its own export, and its output is named after itself. Single FOV files only for now; tile scans and z-stacks are left out of the list.
+- Intensity display controls next to the FLIM ones: a minimum, a maximum, Auto, and a colormap (inferno, gray, magma, viridis, hot, bone, cividis, plasma). Blank keeps what it always did, 0 to the 99th percentile in inferno. The intensity image was drawn that way in five places with nothing to change it; they now share one routine, which the PNG export uses too, and the settings are saved in the session beside the FLIM ones.
+- Nine more FLIM colormaps: turbo, jet, rainbow, spectral, plasma, inferno, magma, cividis and coolwarm.
+
+### Fixed
+- hsv and twilight no longer wrap round. Both are cyclic: hsv ends on the red it starts on, and twilight ends on exactly its starting colour, so the shortest and longest lifetimes in a map looked the same. Only the stretch of each that does not come back round is used now, and sessions saved with those names still load.
+- Loading a session left the FLIM range boxes blank, so pressing Update afterwards reset a saved range to auto. The boxes are filled from the session now.
+
 ## [0.13.5] - 2026-09-15
 
 ### Changed

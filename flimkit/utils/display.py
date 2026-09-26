@@ -2,7 +2,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from matplotlib.colors import Normalize, PowerNorm
+from matplotlib.colors import LinearSegmentedColormap, Normalize, PowerNorm
 
 def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
     from flimkit.utils.batch_fit import group_zstack_files
@@ -83,12 +83,28 @@ def load_zstack_display_slices(group_dir, ptu_dir=None, region=None):
     return slices
 
 COLORMAPS = {
-    'hsv': 'hsv',
     'viridis': 'viridis',
+    'turbo': 'turbo',
+    'jet': 'jet',
+    'rainbow': 'rainbow',
+    'spectral': 'Spectral_r',
+    'plasma': 'plasma',
+    'inferno': 'inferno',
+    'magma': 'magma',
+    'cividis': 'cividis',
+    'coolwarm': 'coolwarm',
     'cool': 'cool',
     'hot': 'hot',
+    'hsv': 'hsv',
     'twilight': 'twilight',
 }
+
+# hsv and twilight are cyclic: they end on the colour they start with, so the
+# shortest and longest lifetimes would look the same. Only the stretch that
+# does not come back round is used.
+_OPEN_SPAN = {'hsv': (0.0, 0.8), 'twilight': (0.0, 0.5)}
+
+INTENSITY_COLORMAPS = ['inferno', 'gray', 'magma', 'viridis', 'hot', 'bone', 'cividis', 'plasma']
 
 def compute_weighted_lifetime(
     pixel_maps,
@@ -149,7 +165,15 @@ def apply_color_scale(
 
 def get_colormap(name='viridis'):
     cmap_name = COLORMAPS.get(name, name)
-    return plt.cm.get_cmap(cmap_name)
+    base = plt.get_cmap(cmap_name)
+    span = _OPEN_SPAN.get(cmap_name)
+    if span is not None:
+        cmap = LinearSegmentedColormap.from_list(cmap_name + '_open', base(np.linspace(span[0], span[1], 256)))
+    else:
+        cmap = base.copy()
+    cmap.set_under(cmap(0.0))
+    cmap.set_over(cmap(1.0))
+    return cmap
 
 def compute_region_stats(
     lifetime_map,

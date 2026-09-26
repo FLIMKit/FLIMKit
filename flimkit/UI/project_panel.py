@@ -54,7 +54,14 @@ class ProjectBrowserPanel:
             wraplength = width - 12,
             anchor = 'w',
         ).grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
+        ttk.Button(self.frame, text='Apply fit settings...',
+                   command=self._open_apply_settings).grid(
+            row=3, column=0, sticky='ew', padx=4, pady=(0, 6))
         self._setup_dnd()
+
+    def _open_apply_settings(self):
+        if hasattr(self._app, '_open_apply_fit_settings_dialog'):
+            self._app._open_apply_fit_settings_dialog()
 
     def grid(self, **kw):
         self.frame.grid(**kw)
