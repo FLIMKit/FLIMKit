@@ -12,7 +12,8 @@
 2. [Supported Input Formats](#supported-input-formats)
 3. [Requirements & Installation](#requirements--installation)
 4. [Quick Start](#quick-start)
-5. [Workflows](#workflows)
+5. [Step-by-Step Guide](#step-by-step-guide)
+6. [Workflows](#workflows)
    - [Desktop GUI](#desktop-gui)
    - [Guided Terminal UI](#guided-terminal-ui-mainpy)
    - [Machine IRF Setup](#machine-irf-setup-required)
@@ -21,15 +22,15 @@
    - [Synthetic Data Generation (CLI)](#synthetic-data-generation-cli)
    - [Phasor Analysis (CLI)](#phasor-analysis-cli)
    - [Python API](#python-api)
-6. [Configuration Reference](#configuration-reference)
-7. [Module Reference](#module-reference)
-8. [Project Structure](#project-structure)
-9. [Compiled App](#compiled-app-macos--windows--linux)
-10. [Plugins](#plugins)
-11. [Testing](#testing)
-12. [Outputs & File Formats](#outputs--file-formats)
-13. [Troubleshooting](#troubleshooting)
-14. [Contact](#contact)
+7. [Configuration Reference](#configuration-reference)
+8. [Module Reference](#module-reference)
+9. [Project Structure](#project-structure)
+10. [Compiled App](#compiled-app-macos--windows--linux)
+11. [Plugins](#plugins)
+12. [Testing](#testing)
+13. [Outputs & File Formats](#outputs--file-formats)
+14. [Troubleshooting](#troubleshooting)
+15. [Contact](#contact)
 
 ---
 
@@ -238,6 +239,378 @@ python phasor_cli.py --ptu data.ptu --irf irf.xlsx
 
 ---
 
+## Step-by-Step Guide
+
+A worked analysis of one field of view, `Ado_1.ptu`, from opening the file to exporting the maps, followed by a project folder with a z-stack, the tile stitching form, and a list of every file FLIMKit reads and writes. Every screenshot is the desktop GUI running from source (v0.13.5 plus the commits after it), and every number quoted was produced by those runs. Your numbers will differ with your data and your machine IRF, but the order of the steps and the reasons for each setting carry over.
+
+`Ado_1.ptu` is a single 1024 x 1024 px field of view: 1,714,555 photons in channel 1, 529 TCSPC bins of 96.97 ps, a 19.505 MHz laser (51.27 ns period) and 127.5 s of acquisition.
+
+### Step 1: Open the file
+
+Start the GUI (`python main.py`, or the compiled app) and stay in Single FOV Fit mode.
+
+![FLIMKit on start-up](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/01_start.jpg)
+
+The window has four areas. The Project list on the left fills when you open a folder ([Step 13](#step-13-work-from-a-project-folder)). The settings form sits in the middle, with the Progress log, Fit Summary and Images tabs underneath. The FOV Preview on the right shows the intensity image, the lifetime map and the summed decay.
+
+Input Files:
+
+| Option | What it does |
+|---|---|
+| Analysis: Single FOV | One file, one field of view. |
+| Analysis: Z-stack | A folder of `region_zX.ptu` slices fitted as one field of view ([Step 14](#step-14-fit-a-z-stack)). |
+| Data file | The FLIM file. Any format in [Supported Input Formats](#supported-input-formats) works. Browse, type the path, or drag the file onto the box. |
+| LAS X export (optional) | The `.xlsx` (or delimited text) exported from the LAS X FLIM window for this same file. It is only needed for the Analytical model IRF, and it lets you compare against the LAS X fit. |
+
+Load `Ado_1.ptu`. The preview draws the intensity image and the summed decay straight away, and the status line under the preview gives the image size and photon count.
+
+![Ado_1.ptu loaded](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/02_loaded.jpg)
+
+If a `Ado_1.roi_session.npz` already sits next to the file, FLIMKit restores the last fit, the ROIs and the form settings from it instead of starting clean. The log says `[Auto-Load] No session found` when there isn't one.
+
+Look at the decay before you change anything. This one rises at about 2.6 ns, decays over roughly three decades, and has a small peak at about 47 ns. That peak is the start of the next laser period, and FLIMKit finds it and cuts the fit window short of it on its own ([Step 6](#step-6-run-a-fast-fit-first)).
+
+### Step 2: Choose the IRF
+
+![IRF options](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/03_irf.jpg)
+
+The instrument response function is the largest single source of systematic error in a reconvolution fit, and it matters most for the shortest component. The ⓘ next to each section heading opens the same explanations inside the app.
+
+| Option | When to use it |
+|---|---|
+| Analytical model (LAS X export) | Builds the IRF from the LAS X export named in Input Files. The default for FALCON data when you have the export for this file. |
+| Machine IRF (.npy pre-built) | A stored IRF for your microscope, built once from matched pairs ([Machine IRF Setup](#machine-irf-setup-required)). Use it when the optical path hasn't changed since it was built. |
+| Machine IRF + full σ broadening | The same stored IRF, which the fit may broaden with a Gaussian of up to 3.0 bins. For when the stored IRF is narrower than the real response, after a change of objective or pinhole for example. |
+| Machine IRF + half σ broadening (σ≤0.5) | Broadening capped at 0.5 bins. For a stored IRF that is close, where a free σ would start absorbing the decay. |
+| Measured IRF file (scatter PTU or .pck) | An IRF recorded alongside the sample from a scattering solution or a reflective surface. The most defensible choice when you have one. |
+| Estimate from decay - raw | Takes 21 bins around the decay peak as the IRF. A last resort: it can't separate the instrument from the fastest part of the decay, so short lifetimes come out long. |
+| Estimate from decay - parametric | Fits a pulse shape to a 1.5 ns window around the peak. Smoother than raw, with the same bias. |
+| Gaussian (fallback) | A Gaussian of the configured width. |
+
+The Machine IRF path box appears under the options when a machine IRF method is picked, filled with your default. The default can be changed in File > Preferences... > Files ([Machine IRF Setup](#machine-irf-setup-required)). For `Ado_1.ptu` I used Machine IRF, since there is no LAS X export for this file.
+
+### Step 3: Set the fitting parameters
+
+![Fitting parameters and masking](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/04_fit_params.jpg)
+
+| Option | What it does |
+|---|---|
+| Fit model: n-exp | A sum of 1, 2 or 3 discrete exponentials convolved with the IRF. The right choice for most samples. |
+| Fit model: Gaussian dist. | One continuous distribution of lifetimes, reported as a centre and a width. For a fluorophore in a heterogeneous environment where a discrete fit needs too many components. Slower, since each evaluation integrates over a 200-point lifetime grid. |
+| Fit model: Lorentzian dist. | The same with heavier tails, so a small sub-population far from the centre doesn't drag the centre towards it. |
+| Fit model: n-exp tail | Discrete exponentials fitted past the decay peak with no IRF. Fast, and the IRF drops out as a source of error, but components shorter than about the IRF width come out biased. The IRF section is hidden when this is picked. |
+| Components | 1, 2 or 3 for n-exp and tail, or 1 (unimodal) / 2 (bimodal) for the distributions. Start low and add a component only when the residuals show structure ([Step 6](#step-6-run-a-fast-fit-first)). |
+| Fitting mode: Full | Fits the summed decay, then every pixel. This is what makes the lifetime map. |
+| Fitting mode: Fast | The summed decay only. Seconds instead of minutes, with no map. Use it to check the IRF, the model and the component count first. |
+| τ bounds (ns) | The lower and upper bounds on the fitted lifetimes (0.145 and 45 ns by default). The part of the decay that is fitted is set separately, in Expert Settings. |
+| Output prefix | Where the output files go and what they're called. It fills with the file name, so outputs land next to the data. A bare name is placed in the data folder; a full path is used as it is. |
+
+### Step 4: Masking and thresholding
+
+![Masking and the run buttons](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/05_masking_run.jpg)
+
+| Option | What it does |
+|---|---|
+| Apply cell mask (Cellpose-SAM) | Segments cells in the intensity image and fits only inside them, so background pixels don't add noise-dominated lifetimes to the statistics. It runs on the GPU when there is one. Needs the `segmentation` extra. |
+| Intensity threshold (min photons/px) | Skips pixels below this count. Blank means no threshold. |
+| Apply Coates pile-up correction | Corrects the early-photon bias at high count rates. The log prints the photons per pulse at the start of each fit: tick this above about 5%. The corrected decay is no longer Poisson, so χ²_r is unreliable with it on, though the lifetimes are not. |
+| Time-varying background PTU | A separate acquisition of a fluorophore-free region (medium, buffer). Its decay shape is fitted as a scaled background instead of a flat offset ([Time-varying background correction](#time-varying-background-correction)). |
+
+`Ado_1.ptu` ran at 0.0007 photons per pulse (0.07%), so pile-up correction stays off. I left the mask off for the first fits to show what it changes in [Step 8](#step-8-mask-out-the-background).
+
+### Step 5: Expert settings
+
+Expert Settings opens a dialog shared by the single FOV and tile pipelines. When anything in it differs from the defaults, an orange "Custom expert settings active" line appears above the run button.
+
+![Expert Fit Settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/06_expert.jpg)
+
+| Option | What it does |
+|---|---|
+| Optimizer: Differential Evolution (DE) | A global search over the bounded parameter space with a Levenberg-Marquardt polish at the end. It doesn't depend on a starting guess. The default. |
+| Optimizer: Levenberg-Marquardt (LM) | A local fit from several starting points. Much faster, and it can miss the global minimum on a multi-exponential decay with few restarts. |
+| DE population / DE max iterations | DE search size (30 and 5000). |
+| LM random restarts | Number of LM starting points (8). |
+| Spatial binning (NxN) | Sums N x N pixels before the per-pixel fit. 1 is no binning. See [Step 7](#step-7-full-fit-and-binning). |
+| CPU workers | Cores for DE. -1 uses all of them. The compiled app is limited to 1. |
+| Min photons/pixel | Pixels below this count are left out of the per-pixel fit (10). |
+| Cost function | Poisson deviance (default) or the legacy Neyman χ². Poisson is correct for photon counts, above all at low counts. |
+| Channel filter | Detector channel. Blank uses all channels. |
+| IRF FWHM (ns) | Width for the estimated and Gaussian IRFs. Blank is one TCSPC bin. |
+| IRF alignment | Where the IRF is anchored against the decay. Steepest rise (default) or the legacy decay peak. |
+| IRF shift bound (±bins) | How far the fit may shift the IRF in time. 2 is recommended; 5 is the old default. |
+| Align measured IRF peak to the decay rising edge | For a scatter PTU or `.pck` recorded in a separate acquisition, whose time zero won't match the sample's. |
+| Fit window start / end (ns) | The part of the decay that is fitted. Blank lets FLIMKit choose from the IRF onset and the end of the period. |
+| Exclude bands (ns) | Stretches of the decay to leave out, such as a reflection peak, written `7.2-8.8` or `7.2-8.8,11.0-11.5` ([Fit window and exclusion bands](#fit-window-and-exclusion-bands)). |
+| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. |
+| Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
+| Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
+| Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
+| Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |
+
+For `Ado_1.ptu` I left everything at the defaults until [Step 7](#step-7-full-fit-and-binning).
+
+### Step 6: Run a fast fit first
+
+With Fast mode and 2 components, Run Single-FOV Fit took a few seconds.
+
+![2-exponential fast fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/07_fast_2exp.jpg)
+
+The Progress log records every choice the fit made, so it's the first place to look when a result seems wrong.
+
+![Progress log for the fast fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/08_log.jpg)
+
+Section [1] reads the file header, and section [2] gives the count rate and photons per pulse used to decide on pile-up correction. Section [5] shows the fit window chosen: here FLIMKit found the next-period artefact at bin 484 (46.93 ns) and fitted bins 19-464 (1.84-44.99 ns) automatically.
+
+The 2-exponential result was τ₁ = 4.04 ns and τ₂ = 0.61 ns with χ²_r(tail) = 18.29, and the residuals have a clear wave across the first 20 ns. That structure means the model is missing something. Changing to 3 components and running again dropped χ²_r(tail) to 1.53 and flattened the residuals, so I kept three. A lower χ² on its own doesn't justify an extra component, since more parameters always fit better. Check that the new lifetimes are physically distinct and that the residuals improved.
+
+### Step 7: Full fit and binning
+
+With 3 components, switch Fitting mode to Full and run again. A progress window counts the pixels as they're fitted.
+
+![Per-pixel fit running](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/09_running.jpg)
+
+At binning 1 only 34,680 of 507,977 signal pixels (6.8%) reached the 10-photon minimum, which the log flags as `PHOTON-STARVED`. When most of the image is starved, FLIMKit says so when the fit finishes and suggests a binning.
+
+![Too few photons per pixel](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/10_photon_warning.jpg)
+
+Binning sums an N x N block of pixels into one decay before fitting, trading resolution for photons per pixel. With Spatial binning set to 8 in Expert Settings, the map filled in.
+
+![Full fit at 8 x 8 binning](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/11_binned_map.jpg)
+
+The per-pixel fit keeps the summed-fit lifetimes and fits only the amplitudes in each pixel, unless Free τ per pixel is on. The map is the amplitude-weighted mean lifetime per pixel. The background between the cells now fills with noise-dominated values, which the next step removes.
+
+### Step 8: Mask out the background
+
+Tick Apply cell mask (Cellpose-SAM) and run again.
+
+![Masked fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/12_masked.jpg)
+
+The map now covers the segmented cells only. The summed decay is built from those pixels too, so the global fit changes with it: τ = 5.81, 1.94 and 0.398 ns and χ²_r(tail) = 1.244. Cellpose missed part of one cell at the top left here, so check the mask (saved as `<prefix>_cell_mask.png`) before trusting the per-cell statistics.
+
+Fit Summary tab, row by row:
+
+| Row | Meaning |
+|---|---|
+| τ1, τ2, τ3 | Component lifetimes from the summed fit, in ns. |
+| α1, α2, α3 | Component amplitudes, in counts. |
+| f1, f2, f3 (amp frac) | Amplitude fractions, αᵢ / Σα. |
+| τ_mean (amp-weighted) | Σαᵢτᵢ / Σαᵢ. Weighted towards the short, high-amplitude components (1.125 ns here). |
+| τ_mean (int-weighted) | Σαᵢτᵢ² / Σαᵢτᵢ. Weighted towards the long components, closer to what a phasor or a mean arrival time gives (2.834 ns here). |
+| Background (fitted) | Constant offset per bin. |
+| IRF shift | How far the IRF was moved to match the decay, in bins (0.913 bins, about 88 ps). |
+| IRF σ (broadening) | Extra Gaussian width. 0 unless a broadening IRF method is used. |
+| IRF FWHM (eff.) | Effective IRF width after any broadening. |
+| χ²_r(tail) Neyman / Pearson | Reduced χ² over the tail of the decay, kept for comparison with LAS X. See [Fit Diagnostics](#fit-diagnostics). |
+
+Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
+
+### Step 9: Adjust the display
+
+The FLIM Color Scale panel under the preview changes the picture, never the fitted values.
+
+![Display controls with the decay plot hidden](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/15_display.jpg)
+
+| Control | What it does |
+|---|---|
+| τ range Min / Max, Auto, Update | Colour limits in ns. Auto sets them to the 2nd and 98th percentiles of the map (0.90-1.90 ns for Ado_1). Type values and press Update to set them yourself. Values outside the range are clamped, not removed. |
+| Γ | Gamma on the colour scale. 1.0 is linear. |
+| Colormap | Colour map for the lifetime image. |
+| Show Decay Plot | Hides the decay and residuals so the images get the whole panel. |
+| View: FLIM / Intensity | With the decay plot hidden, which of the two images fills the panel. |
+| τ weighting: Amplitude / Intensity | Recomputes the map as the amplitude- or intensity-weighted mean lifetime from the stored per-pixel amplitudes. No refit. |
+| Intensity: Min / Max, Auto, colormap | The same for the intensity image. |
+
+The colour scale is saved into the session file, so it comes back when the file is reopened.
+
+### Step 10: Measure regions of interest
+
+Open the ROI Analysis tab, pick a drawing mode and drag on either image.
+
+![Two ROIs on Ado_1](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/13_roi.jpg)
+
+| Control | What it does |
+|---|---|
+| Select | Click a region on the image to select it. |
+| Rectangle / Ellipse | Drag a box. |
+| Polygon | Click the vertices, then right-click to close the shape (three points minimum). |
+| Freehand | Draw the outline. |
+| Clear All | Removes every region. |
+| Delete Selected / Rename... | Act on the region selected in the list. |
+| Import from GeoJSON | Loads regions drawn elsewhere, QuPath for example. Only the outer boundary of each shape is kept, so holes are lost. |
+| Export as CSV | The Regions table as a spreadsheet. |
+| Export as GeoJSON / Export All as GeoJSON | The selected or all regions, with their statistics, for QuPath. |
+| Fit ROI Decay / View Fit | Fits the summed decay of the selected region(s) on its own ([Per-ROI decay fitting](#per-roi-decay-fitting)). |
+| Send to a viewer | Added by the `flimkit-bridge` plugin. Sends the current field of view to a connected viewer such as QuPath ([QuPath Bridge](#qupath-bridge)). |
+
+The table gives, per region, the mean, median and standard deviation of the pixel lifetimes and the photon count. The ellipse over the lower cell gave τ_mean = 1.22 ns (median 1.18, SD 0.21) from 163,093 photons, and the rectangle over the upper cell 1.22 ns (median 1.19, SD 0.23) from 138,519. Regions are written to the session file as soon as they're drawn.
+
+### Step 11: Export
+
+Export Images..., under the Fit Summary table, saves the images shown in the preview.
+
+![Export Results dialog](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/14_export.jpg)
+
+| Option | What it does |
+|---|---|
+| Images to Export | The images the fit produced, Intensity and Lifetime here. All / None tick or clear them. |
+| Include scale bar | Draws a µm scale bar when the file carries a pixel size. `Ado_1.ptu` doesn't, so the log said `No pixel size available - scale bar will be omitted`. |
+| Include ROI annotations | Draws the regions on the images. |
+| PNG | The images as displayed, with the current colour map and limits. For slides and quick looks. |
+| OME-TIFF | `<scan>_lifetime.ome.tiff` as 32-bit floats in ns, with unfitted pixels left as NaN, and `<scan>_intensity.ome.tiff` as 32-bit photon counts. The pixel size goes into the OME metadata when the file carries one. These are the ones to measure from in Fiji/ImageJ. |
+| OME-Zarr | One compressed store named after the scan, each image a channel ([OME-Zarr export](#ome-zarr-export)). |
+| Save Location | The folder. |
+
+Every export is named after the scan, so the PNG export of `Ado_1.ptu` writes `Ado_1_intensity.png`, `Ado_1_lifetime.png` and `Ado_1_summed_decay.png`, and exporting several files into one folder doesn't overwrite anything. What else the fit writes by itself is listed in [Step 16](#step-16-what-flimkit-reads-and-writes).
+
+### Step 12: Phasor analysis
+
+Switch the mode to Phasor Analysis. The file and the machine IRF carry over from the fit form.
+
+![Phasor settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/16_phasor_setup.jpg)
+
+| Option | What it does |
+|---|---|
+| Input Mode: New PTU file / Resume session (.npz) | Start from a file, or reopen a saved phasor session with its cursors. |
+| PTU file | The FLIM file. |
+| IRF XLSX (optional) / Machine IRF (optional) | The calibration. Phasors need an IRF to place the universal circle correctly. The XLSX wins if both are given. |
+| Min photons (fraction) | Pixels whose mean count per time bin is below this are left out of the plot. The default 0.01 is about 5 photons for a 529-bin decay. |
+| Max cursors | How many cursors can be placed. |
+| Load & Analyse | Computes and plots the phasor. |
+
+![Find Peaks and FRET settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/17_phasor_options.jpg)
+
+| Option | What it does |
+|---|---|
+| Find Peaks: Smooth σ, Threshold, Find Peaks | Smooths the phasor histogram and places cursors on the peaks above the threshold. |
+| FRET Analysis: Donor τ, Acceptor τ, Donor fretting | The donor lifetime, an optional acceptor lifetime (blank for donor-only), and the fraction of donors that transfer. |
+| Overlay Trajectory / Fit Donor FRET / Clear Overlay | Draw the FRET efficiency trajectory, fit it to the data, or remove it. |
+
+On the plot, a click places an elliptical cursor and the matching pixels light up in the image above. The toolbar above the plot has Clear all and Undo, Save session, Ellipse or Polygon cursors, the Radius and Minor/major sliders for the cursor shape, and Fit Cursor Decay / View Fit to fit the summed decay of the pixels under a cursor.
+
+`Ado_1.ptu` gave 48,357 valid pixels at 19.5 MHz. A cursor of radius 0.05 on the main cloud of the raw phasor took 6,259 pixels with a phase lifetime τ_φ of 2.20-2.71 ns (median 2.45 ns).
+
+![Unfiltered phasor](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/18_phasor_raw.jpg)
+
+The raw cloud is wide because each pixel carries few photons. Phasor filter smooths the G and S coordinates in image space, which pulls the cloud together without changing where it sits:
+
+| Filter | Parameter | What it does |
+|---|---|---|
+| none | | Raw phasor. |
+| gaussian | σ | Gaussian smoothing of G and S. |
+| median | size | Median filter of G and S. Removes outliers and keeps edges. |
+| wavelet | | Wavelet soft-thresholding (Daubechies db4). It takes no parameter. This is the filter closest to the LAS X phasor display. |
+
+Apply runs the filter and Reset goes back to the raw data. With the wavelet filter and the same cursor, the count went to 13,771 pixels and τ_φ to 2.20-2.70 ns (median 2.43 ns).
+
+![Wavelet-filtered phasor](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/19_phasor_wavelet.jpg)
+
+The phasor session is saved as `<file>_phasor.npz` next to the data whenever a cursor or the filter changes. Loading the same file again recomputes the phasor with the current IRF and then puts the saved cursors and filter back on it, the same way a fit session comes back, and the log says `[Auto-Load] Restored 1 cursor(s) and the wavelet filter from Ado_1_phasor.npz`. Clear all and Reset start again from nothing.
+
+### Step 13: Work from a project folder
+
+A project is a folder of acquisitions. File > Open Project Folder... lists every FLIM file in it, groups `region_zX` slices into z-stacks and picks up `.xlif` files for tiles. It writes a `project.json` into the folder to remember them. For this I made a folder holding `Ado_1.ptu`, `Ado_2.ptu` and the eight slices `Series008_z1.ptu` to `Series008_z8.ptu`.
+
+![Project with a z-stack selected](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/20_project_zstack_loaded.jpg)
+
+Each row shows a session mark (○ nothing saved, ● a fit, ◐ a phasor, ◉ both) and the scan type (F for a field of view, Z for a z-stack, T for tiles from an XLIF). The footer counts scans and saved sessions. Clicking a row loads it into the right form, restoring its fit and ROIs when there is a session.
+
+To fit several files the same way, fit one, keep it selected, and press Apply fit settings... under the list.
+
+![Apply Fit Settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/23_apply_settings.jpg)
+
+The dialog shows the model, IRF, lifetime bounds and display scales it will copy, and lists the other single-FOV files. Files that already have a fit are marked ● and their fit is replaced; ROIs aren't copied. I refitted Ado_1 in the project (3 components, machine IRF, cell mask, 8 x 8 binning) and applied it to Ado_2, which fitted to τ = 5.43, 1.58 and 0.264 ns with χ²_r(tail) = 2.29.
+
+![Settings applied](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/24_apply_done.jpg)
+
+Clicking Ado_2 afterwards reloads its saved fit. The residual plot isn't stored in the session, so it stays empty until the file is refitted, but the values are all there.
+
+![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
+
+### Step 14: Fit a z-stack
+
+Selecting the Z row switches Analysis to Z-stack and fills the folder. The slider under the preview steps through the slices. The fit pools every slice to fit one set of lifetimes, then fits each slice per pixel with those lifetimes locked, so only the amplitudes change with depth ([Timelapse and Z-stack Fitting](#timelapse-and-z-stack-fitting)). The form is the same as for a single FOV, and the button reads Run Z-stack Fit.
+
+With the machine IRF and 2 components, the eight 256 x 256 slices (1,731,281 photons pooled) gave τ₁ = 3.48 ns and τ₂ = 0.572 ns, and per-slice amplitude-weighted means of 1.90-2.00 ns.
+
+![Z-stack result](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/21_zstack_result.jpg)
+
+![Z-stack log](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/22_zstack_log.jpg)
+
+The residuals show why χ²_r(tail) came out at 688.9: this 25.7 ns period has a reflection peak at about 20 ns, and the whole period was fitted (bins 0-265).
+
+Expert Settings apply to z-stacks the same way as to a single FOV. Setting Exclude bands to `19.6-21.2` dropped those bins from the fit, 248 of 265 fitted, and moved the pooled lifetimes to τ₁ = 3.66 ns and τ₂ = 0.604 ns. The calibrated tail χ² in `Series008_reference_fit.json` went from 159.6 to 21.1. It isn't near 1, so look at the residuals for what is left before trusting the absolute values. Spatial binning applies to every slice as well. The Images tab steps through the per-slice maps.
+
+### Step 15: Stitch tiles from an XLIF
+
+Tile Stitch/Fit mode takes a tiled acquisition: the `.xlif` from the LAS X project's Metadata folder and the folder of PTU tiles exported with it.
+
+![Tile Stitch/Fit form](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/26_stitch_form.jpg)
+
+| Option | What it does |
+|---|---|
+| XLIF metadata | Tile positions and layout. |
+| PTU tile directory | The folder of tiles. Tiles from several scans in one folder are sorted out by name. |
+| Base output dir | A sub-folder named after the ROI is made inside it. |
+| Rotate tiles 90° CW | Rotates each tile 90° clockwise before it is placed. On by default and recommended for Leica FLIM data. |
+| Stitch tiles only | Registers and stitches the intensity image and the decay cube, without fitting. |
+| Stitch then fit full ROI | Fits the whole mosaic at once. Needs tens of GB of RAM on large mosaics. |
+| Per-tile fit | Fits a global decay for the lifetimes, then each tile with those lifetimes locked, and stitches the maps. The recommended option. |
+| Multidimensional series | Per-tile fitting repeated over z and/or time, one stitched plane per (t, z) ([Multidimensional Series](#multidimensional-series-stitched-tiles-over-z-and-time)). |
+
+Below the pipeline choice come the same IRF, model and masking sections as for a single FOV, then:
+
+| Option | What it does |
+|---|---|
+| Per-pixel fitting | Needed for the lifetime maps and for ROI analysis on the mosaic. |
+| Export τ-weighted / intensity-weighted / amplitude-weighted map | 32-bit TIFF lifetime maps. |
+| Save individual component maps | One TIFF per τᵢ. |
+| Lifetime display / Intensity display | Display limits for the exported images. Blank is automatic. |
+| Phase-correlation registration, Max shift (px) | Corrects stage drift before stitching ([Tile registration](#tile-stitching-and-fitting)). Raise the shift above 120 px if the drift is larger. |
+| Pool decay every N timepoints | Multidimensional series only. Subsamples the files used for the pooled lifetime fit. |
+| IRF XLSX dir | A folder with one `<tile_name>.xlsx` per tile. Blank uses the IRF method above. The machine IRF is safer, since per-tile exports vary. |
+
+### Step 16: What FLIMKit reads and writes
+
+Files FLIMKit reads, apart from the FLIM data in [Supported Input Formats](#supported-input-formats):
+
+| File | Where it's read | What it carries |
+|---|---|---|
+| `.xlsx`, `.csv`, `.tsv`, `.txt`, `.dat`, `.ascii`, `.asc` | LAS X export box, IRF XLSX, per-tile XLSX folder | The LAS X decay export: the IRF for the analytical model and the LAS X fit for comparison. |
+| `.npy` machine IRF | Machine IRF path | The stored instrument response ([Machine IRF Setup](#machine-irf-setup-required)). |
+| Scatter `.ptu` or `.pck` | Measured IRF file | A recorded IRF. |
+| Background `.ptu` | Time-varying background PTU | A fluorophore-free decay fitted as background. |
+| `.xlif` (or `.lif`) | Tile Stitch/Fit, project folders | Tile positions and layout. |
+| `<file>.roi_session.npz` | Automatically when the file is opened, or File > Restore NPZ... | A saved fit, its ROIs, form settings and display scales. |
+| `<file>_phasor.npz` | Phasor > Resume session | A saved phasor with its cursors. |
+| `.geojson` | ROI Analysis > Import from GeoJSON, File > Import GeoJSON... | Regions from QuPath or any GeoJSON source. |
+| `project.json` | File > Open Project Folder... | The project's scan list and output folder. |
+
+Files FLIMKit writes:
+
+| File | Written by | What's in it |
+|---|---|---|
+| `<prefix>_summed_<n>exp.png` | Every fit | Summed decay, IRF, fitted curve and residuals. |
+| `<prefix>_pixelmaps_<n>exp.png` | Full fits | A figure of the per-pixel maps. |
+| `<prefix>_lifetime_hist_<n>exp.png` | Full fits | Histogram of the per-pixel lifetimes. |
+| `<prefix>_cell_mask.png` | Fits with the cell mask on | The Cellpose mask used. |
+| `<file>.roi_session.npz` | Every fit, every ROI change, colour-scale changes | Fit results (summed and per-pixel arrays, decay, IRF, time axis, intensity, lifetime map), form settings, display scales and ROIs. Reopening the file restores all of it. File > Save NPZ / Save NPZ As... writes it on demand. |
+| `<file>_phasor.npz` | Phasor mode, automatically, or Save session | Calibrated G and S before filtering, the mean intensity, frequency, the cursors (ellipses and polygons), their size and the filter applied. Restored when the file is loaded again. |
+| `<scan>_intensity.png`, `<scan>_lifetime.png`, `<scan>_summed_decay.png` | Export Images..., PNG | The images as displayed, for slides. |
+| `<scan>_intensity.ome.tiff`, `<scan>_lifetime.ome.tiff` | Export Images..., OME-TIFF | Intensity as 32-bit photon counts, lifetime as 32-bit floats in ns with NaN where nothing was fitted, and the pixel size when known. |
+| `<scan>.ome.zarr` | Export Images..., OME-Zarr | One compressed store, each image a channel, the fit summary in the metadata. |
+| ROI `.csv` | Export as CSV, File > Export > Export ROI Table CSV | Per region: ID, name, type, τ mean/median/SD, photons and photon SD, and the per-ROI fit (τ_mean, χ²_r, τᵢ and αᵢ) when there is one. |
+| ROI `.geojson` | Export as GeoJSON / Export All as GeoJSON, and the File > Export menu | Each region as a GeoJSON feature with its name, type, colour and statistics (τ median and SD, photons and SD). Self-intersecting outlines are repaired and flagged. Opens in QuPath. |
+| Fit summary `.csv` | File > Export > Export Summed Fit CSV | The Fit Summary table. |
+| `project.json` | Opening a project folder | Scan list, types, source paths and output folder. |
+| `<stack>_reference_fit.json` | Z-stack fits | The pooled lifetimes, bounds, photons and slices used. |
+| `<stack>_intensity_stack.npy`, `_tau_mean_amp_stack.npy`, `_alpha_<i>_stack.npy`, `_chi2_r_stack.npy`, `_calibrated_chi2_r_stack.npy` | Z-stack fits | `(Z, H, W)` arrays, one plane per slice. |
+| `<stack>_zseries.csv` / `.json` / `.png` | Z-stack fits | Per-slice summary: mean amplitudes, mean τ and its SD, χ²_r and pixels fitted, with a plot. |
+| `reference_decay.npz` | Z-stack fits | The pooled decay the reference lifetimes were fitted to. |
+| `z0001/`, `z0002/`, ... | Z-stack fits | Per-slice fit plots and maps. |
+| Stitched `.npy` cube, intensity and τ TIFFs, CSV summary | Tile Stitch/Fit and Batch ROI | See [Tile stitching and fitting](#tile-stitching-and-fitting). |
+
+---
+
 ## Workflows
 
 ### Desktop GUI
@@ -313,10 +686,10 @@ Note: GeoJSON import currently only preserves the outer boundary of shapes, donu
 
 ##### Per-ROI decay fitting
 
-The **⚗ Fit ROI Decay** button fits the summed decay from the selected region(s) independently, rather than using the whole-FOV fit.
+The **Fit ROI Decay** button fits the summed decay from the selected region(s) independently, rather than using the whole-FOV fit.
 
 **Selecting regions:**
-- Single region: click it in the list, then click **⚗ Fit ROI Decay**.
+- Single region: click it in the list, then click **Fit ROI Decay**.
 - Multiple regions: Shift-click or Cmd-click to select several; they are combined into one union mask and treated as a single merged region for the fit.
 
 **Fit Options dialog:** Before the fit runs, a small dialog appears pre-filled with the current global fit parameters. You can change any of the following without touching the main form:
@@ -415,7 +788,11 @@ Don't go below 10 unless your data is very homogeneous.
 | Compiled app (macOS/Linux) | `~/.flimkit/machine_irf/` |
 | Compiled app (Windows) | `C:\Users\<name>\.flimkit\machine_irf\` |
 
-After saving, restart the app so it picks up the new default.
+To use an IRF kept somewhere else, a shared drive or one per microscope for example, set it in File > Preferences... > Files > Default machine IRF (.npy). Browse picks the file, Use the built-in IRF clears the setting, and Save checks the file loads before accepting it. The choice is stored in `~/.flimkit/config.json`, so it applies to every form straight away and stays set after a restart. The terminal tools read the same setting. If the chosen file later goes missing, FLIMKit says so in the log and falls back to the built-in one.
+
+![Default machine IRF in Preferences](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/27_prefs_machine_irf.jpg)
+
+A newly built `machine_irf_default` is picked up after a restart, unless a different default is set in Preferences.
 
 #### Python API
 
@@ -534,6 +911,7 @@ Expected filename patterns: `region_tX[_sY][_zZ].ptu` for timelapse, `region_zX.
 | `--fit-end-ns FLOAT` | Fit window end in ns (default: auto) |
 | `--exclude-ns SPEC` | Bands to drop from the fit, e.g. `"7.2-8.8"` or `"7.2-8.8,11.0-11.5"` |
 | `--correct-pileup` | Coates pile-up correction |
+| `--binning INT` | Spatial binning (NxN) before the per-slice per-pixel fit (default: 1) |
 | `--no-stack` | Skip saving the `(T,H,W)` / `(Z,H,W)` map stacks |
 | `--bound-fraction` | Z-stack only: compute bound fraction α₂/(α₁+α₂) |
 
@@ -802,7 +1180,7 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 | Parameter | Default | Description |
 |---|---|---|
 | `MACHINE_IRF_DIR` | `flimkit/machine_irf` (source) / `~/.flimkit/machine_irf` (compiled) | Storage directory |
-| `MACHINE_IRF_DEFAULT_PATH` | User copy if present, else bundled default | Resolved at startup |
+| `MACHINE_IRF_DEFAULT_PATH` | The Preferences choice if set, else the user copy if present, else the bundled default | Resolved at startup, and again when Preferences are saved |
 | `MACHINE_IRF_ALIGN_ANCHOR` | `'peak'` | Alignment landmark during IRF construction |
 | `MACHINE_IRF_REDUCER` | `'median'` | Aggregation method across paired IRFs |
 | `MACHINE_IRF_FIT_STRATEGY` | `'fixed'` | Runtime fitting strategy |
@@ -1183,7 +1561,7 @@ All output files are saved to the same directory as the input PTU file. The work
 
 ### Machine IRF
 
-Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app.
+Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app, or point File > Preferences... > Files > Default machine IRF (.npy) at it, which takes effect at once.
 
 ---
 
@@ -1578,7 +1956,7 @@ does nothing rather than writing a partial store.
 Right-click → Open on first launch. After that it should run normally.
 
 **Machine IRF not found after saving**  
-Restart the app - the default IRF path is resolved at startup and won't update mid-session.
+Restart the app, since a newly built default is picked up at startup, or set it in File > Preferences... > Files, which applies at once.
 
 **Per-pixel fitting is very slow**  
 That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.

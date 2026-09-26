@@ -66,11 +66,31 @@ MACHINE_IRF_DIR = USER_MACHINE_IRF_DIR if _is_frozen else _BUNDLED_MACHINE_IRF_D
 # When frozen: prefer a user-saved copy (if it exists), else fall back to the
 # bundled factory default so a fresh install still works out of the box.
 _user_default = USER_MACHINE_IRF_DIR / 'machine_irf_default.npy'
-MACHINE_IRF_DEFAULT_PATH = (
+FACTORY_MACHINE_IRF_DEFAULT_PATH = (
     (_user_default if _user_default.exists() else _BUNDLED_MACHINE_IRF_DIR / 'machine_irf_default.npy')
     if _is_frozen
     else _BUNDLED_MACHINE_IRF_DIR / 'machine_irf_default.npy'
 )
+
+# A default chosen in Preferences (preferences.machine_irf_path in
+# ~/.flimkit/config.json) wins over the factory one, for the GUI and the CLIs.
+def preferred_machine_irf_path():
+    import json
+    config_file = Path.home() / '.flimkit' / 'config.json'
+    try:
+        with open(config_file, encoding='utf-8') as fh:
+            chosen = (json.load(fh).get('preferences') or {}).get('machine_irf_path') or ''
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not chosen:
+        return None
+    chosen = Path(chosen).expanduser()
+    if not chosen.is_file():
+        print(f'[Config] Default machine IRF {chosen} is missing, using {FACTORY_MACHINE_IRF_DEFAULT_PATH}')
+        return None
+    return chosen
+
+MACHINE_IRF_DEFAULT_PATH = preferred_machine_irf_path() or FACTORY_MACHINE_IRF_DEFAULT_PATH
 MACHINE_IRF_ALIGN_ANCHOR = 'peak'
 MACHINE_IRF_REDUCER = 'median'
 MACHINE_IRF_FIT_STRATEGY = 'fixed'

@@ -1,5 +1,5 @@
 __version__ = '0.13.5'
-fitter_version = '20'
+fitter_version = '21'
 
 roadmap = '''Flim program roadmap:
 Version history:

@@ -20,6 +20,18 @@ from ..utils.batch_fit import (
     save_tile_lifetime_txt, save_map_stacks, plot_metric_summary,
 )
 
+def _window_kwargs(args):
+    from ..interactive import parse_exclude_ns
+    return dict(
+        irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
+        fit_start_ns=getattr(args, 'fit_start_ns', None),
+        fit_end_ns=getattr(args, 'fit_end_ns', None),
+        exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
+    )
+
+def _binning(args):
+    return max(1, int(getattr(args, 'binning', 1) or 1))
+
 def _save_4d_stacks(frame_positions, group_dir, group_label):
     sorted_t = sorted(frame_positions.keys())
     all_s = sorted({s for pos in frame_positions.values() for s in pos})
@@ -122,6 +134,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 polish=not getattr(args, 'no_polish', False),
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
+                **_window_kwargs(args),
             )
             print(f'    Reference fit: {time.time() - t0:.1f} s')
             taus_ns = global_summary.get('taus_ns', global_popt[:args.nexp] * 1e9)
@@ -163,7 +176,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 print(f'\n  t={t}  s={s}: {ptu_path.name}')
                 t_start = time.time()
                 ptu = FLIMFile(str(ptu_path), verbose=False)
-                pixel_stack = ptu.raw_pixel_stack(channel=channel)
+                pixel_stack = ptu.raw_pixel_stack(channel=channel, binning=_binning(args))
                 if pixel_stack.shape[2] != n_bins:
                     nb = pixel_stack.shape[2]
                     if nb > n_bins:
@@ -229,6 +242,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                             polish=not getattr(args, 'no_polish', False),
                             cost_function=getattr(args, 'cost_function', 'poisson'),
                             sigma_max=sigma_max,
+                            **_window_kwargs(args),
                         )
                         plot_summed(
                             tile_decay, tile_summary, ptu, None,
@@ -430,6 +444,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                 polish=not getattr(args, 'no_polish', False),
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
+                **_window_kwargs(args),
             )
             print(f'    Reference fit: {time.time() - t0:.1f} s')
             taus_ns = global_summary.get('taus_ns', global_popt[:args.nexp] * 1e9)
@@ -489,7 +504,7 @@ def fit_zstack(ptu_dir, output_dir, args,
             slice_dir = group_dir / f'z{z:04d}'
             slice_dir.mkdir(exist_ok=True)
             ptu = FLIMFile(str(ptu_path), verbose=False)
-            pixel_stack = ptu.raw_pixel_stack(channel=channel)
+            pixel_stack = ptu.raw_pixel_stack(channel=channel, binning=_binning(args))
             if pixel_stack.shape[2] != n_bins:
                 nb = pixel_stack.shape[2]
                 if nb > n_bins:
@@ -555,6 +570,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                         polish=not getattr(args, 'no_polish', False),
                         cost_function=getattr(args, 'cost_function', 'poisson'),
                         sigma_max=sigma_max,
+                        **_window_kwargs(args),
                     )
                     plot_summed(
                         tile_decay, tile_summary, ptu, None,
