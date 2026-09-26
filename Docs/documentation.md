@@ -1972,7 +1972,7 @@ By default the server listens on `127.0.0.1` only and has no password. Anyone wh
 | `FLIMKIT_WEB_USER` | The user name for that login, `flimkit` by default |
 | `FLIMKIT_WEB_HEADLESS` | Set to `1` when nobody can see the desktop, so every dialog goes to the page instead of waiting on an invisible window |
 
-FLIMKit still needs an X display to start its window, so run it under Xvfb on a server. `GET /healthz` answers `ok` without a password once the server is up, for container health checks. The FLIMKit Docker images are set up this way.
+FLIMKit still needs an X display to start its window, so run it under Xvfb on a server. `GET /healthz` answers `ok` without a password once the server is up, for container health checks. The [FLIMKit Docker images](https://github.com/FLIMKit/flimkit-docker) are set up this way.
 
 ---
 

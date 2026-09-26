@@ -71,45 +71,21 @@ python install.py --dev
 
 ## Docker / TrueNAS SCALE
 
-A pre-built image is available on Docker Hub. It runs FLIMKit with the [web UI](https://github.com/FLIMKit/flimkit-web-ui), so the whole app is used from a browser with nothing installed on the client.
-
-**Pull and run:**
+Pre-built images are on Docker Hub as `alex1075/flimkit`. They run FLIMKit with the [web UI](https://github.com/FLIMKit/flimkit-web-ui), so the whole app is used from a browser with nothing installed on the client.
 
 ```bash
 docker run -d \
   -p 14500:14500 \
   -e FLIMKIT_PASSWORD=choose-a-password \
   -v /path/to/your/data:/data \
-  -v /path/to/flimkit-config:/root/.flimkit \
+  -v /path/to/flimkit-config:/config \
   --name flimkit \
   alex1075/flimkit:latest
 ```
 
-Then open **http://localhost:14500** and log in as `flimkit` with that password. Put PTU files and data in the folder you mount to `/data` and use the Browse buttons in the page to navigate there. The config mount keeps expert settings, preferences and recent files when the container is recreated.
+Then open http://localhost:14500 and log in as `flimkit` with that password.
 
-| Variable | Default | Effect |
-|---|---|---|
-| `FLIMKIT_PASSWORD` | not set | Password for the web UI (user `flimkit`) and for the desktop view. Without it, anyone who can reach the port can use FLIMKit and browse `/data`. |
-| `FLIMKIT_DESKTOP` | `0` | Set to `1` to also serve the full desktop through noVNC on port 14501, for the few windows the web UI does not cover. Publish that port too. |
-| `FLIMKIT_GEOMETRY` | `1440x900` | Size of the virtual screen FLIMKit draws on |
-| `TZ` | `Etc/UTC` | Time zone for log timestamps |
-
-The container reports healthy once the web UI answers on `/healthz`.
-
-**TrueNAS SCALE (Custom App):**
-
-1. Apps → Discover Apps → Custom App
-2. Paste the contents of `docker/docker-compose.yaml` from this repo
-3. Edit the volume paths to match your pool (e.g. `/mnt/tank/microscopy:/data`) and uncomment `FLIMKIT_PASSWORD` with a password of your own
-4. Deploy - TrueNAS will pull the image automatically
-
-**Build from source** (required if you want to push your own changes):
-
-```bash
-python docker/build_docker.py        # builds linux/amd64, pushes to Docker Hub
-```
-
-Requires Docker Desktop with buildx. On Apple Silicon, buildx cross-compiles for `linux/amd64` automatically.
+The images are built in [flimkit-docker](https://github.com/FLIMKit/flimkit-docker), which lists the tags (Cellpose, CUDA, ROCm, the noVNC desktop and the headless bridge images), the settings, the compose file for a TrueNAS SCALE custom app, and how to build one yourself.
 
 ## Usage
 
