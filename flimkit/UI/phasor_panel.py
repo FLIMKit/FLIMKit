@@ -127,11 +127,12 @@ class PhasorViewPanel:
         row_filt = ttk.Frame(ctrl)
         row_filt.pack(side='top', fill='x', pady=(2, 0))
         ttk.Label(row_filt, text='Phasor filter:').pack(side='left')
-        ttk.Combobox(
+        combo = ttk.Combobox(
             row_filt, textvariable=self._filter_method,
-            values=['none', 'gaussian', 'median', 'wavelet'],
-            state='readonly', width=9,
-        ).pack(side='left', padx=(2, 6))
+            values=self._filter_choices(), state='readonly', width=16,
+        )
+        combo.configure(postcommand=lambda: combo.configure(values=self._filter_choices()))
+        combo.pack(side='left', padx=(2, 6))
         self._filter_method.trace_add('write', lambda *_: self._on_filter_method_change())
         self._filt_sigma_frame = ttk.Frame(row_filt)
         self._filt_sigma_frame.pack(side='left')
@@ -144,8 +145,8 @@ class PhasorViewPanel:
         ttk.Spinbox(self._filt_size_frame, textvariable=self._filter_size,
                     from_=3, to=15, increment=2, width=4).pack(side='left', padx=(2, 6))
         self._filt_size_frame.pack_forget()
-        ttk.Button(row_filt, text='Apply',
-                   command=self._on_filter_apply).pack(side='left', padx=(0, 4))
+        self._filt_apply_btn = ttk.Button(row_filt, text='Apply', command=self._on_filter_apply)
+        self._filt_apply_btn.pack(side='left', padx=(0, 4))
         ttk.Button(row_filt, text='Reset',
                    command=self._on_filter_reset).pack(side='left')
 
@@ -153,17 +154,37 @@ class PhasorViewPanel:
         self._radius_lbl.configure(text=f'{self._radius.get():.3f}')
         self._ratio_lbl.configure(text=f'{self._ratio.get():.2f}')
 
+    @staticmethod
+    def _filter_choices():
+        from flimkit.phasor.filters import phasor_filter_methods
+        return ['none'] + phasor_filter_methods()
+
+    @staticmethod
+    def _plugin_filter_params(method):
+        import inspect
+        from flimkit.plugins import registry
+        registered = registry.get_phasor_filter(method)
+        if registered is None:
+            return set()
+        params = inspect.signature(registered.fn).parameters
+        return {name for name in ('sigma', 'size') if name in params}
+
     def _on_filter_method_change(self):
         method = self._filter_method.get()
         if method == 'gaussian':
-            self._filt_sigma_frame.pack(side='left')
-            self._filt_size_frame.pack_forget()
+            shown = {'sigma'}
         elif method == 'median':
-            self._filt_sigma_frame.pack_forget()
-            self._filt_size_frame.pack(side='left')
+            shown = {'size'}
+        elif method in ('none', 'wavelet'):
+            shown = set()
         else:
-            self._filt_sigma_frame.pack_forget()
-            self._filt_size_frame.pack_forget()
+            shown = self._plugin_filter_params(method)
+        self._filt_sigma_frame.pack_forget()
+        self._filt_size_frame.pack_forget()
+        if 'sigma' in shown:
+            self._filt_sigma_frame.pack(side='left', before=self._filt_apply_btn)
+        if 'size' in shown:
+            self._filt_size_frame.pack(side='left', before=self._filt_apply_btn)
 
     def _on_filter_apply(self):
         if self._real_raw is None:
@@ -205,6 +226,9 @@ class PhasorViewPanel:
         if method == 'gaussian':
             kwargs['sigma'] = float(spec['sigma'])
         elif method == 'median':
+            kwargs['size'] = int(spec['size'])
+        elif method != 'wavelet':
+            kwargs['sigma'] = float(spec['sigma'])
             kwargs['size'] = int(spec['size'])
         self._real, self._imag = phasor_filter(
             self._real_raw.copy(), self._imag_raw.copy(), method,

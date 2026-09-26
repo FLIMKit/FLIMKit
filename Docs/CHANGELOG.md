@@ -8,6 +8,7 @@
 - Nine more FLIM colormaps: turbo, jet, rainbow, spectral, plasma, inferno, magma, cividis and coolwarm.
 - A default machine IRF in File > Preferences > Files. Pick an `.npy` anywhere, a shared drive or one per microscope, and it is used by every form and by the terminal tools. It is kept in `~/.flimkit/config.json`, so it survives a restart, and saving it updates the open forms at once. Save checks the file loads first, and a file that later goes missing is reported in the log and the built-in IRF is used instead.
 - A step-by-step guide in the documentation. It works through `Ado_1.ptu` from loading the file to exporting the maps, explains every option on the way, then covers the phasor, a project folder, a z-stack, the tile stitching form, and every file FLIMKit reads and writes. The screenshots are in `Docs/images/guide/`.
+- A page in the documentation for each add-on: the FLIMKit bridge, QuPath, Fiji, the z-stack explorer, the web UI and MuFLE unmixing, with what it adds, how to install it and screenshots of it running. Two more pages cover writing your own plugin, worked through the two examples in `examples/plugins/`, and troubleshooting one that does not load. The screenshots are in `Docs/images/plugins/`.
 
 ### Changed
 - `fitter_version` goes to 21. Z-stack and timelapse fits that use a fit window, exclusion bands, an IRF shift bound or binning now apply them, so their numbers differ from the same settings under 20. Fits with the defaults are unchanged.
@@ -21,6 +22,7 @@
 - The ROI action buttons, Fit ROI Decay among them, were pushed out of sight when the panel was short, because the spare room went to the button row instead of the region list. The list shrinks now.
 - OME-TIFF export rescaled the intensity to 16 bits against its own maximum, so the photon counts were lost, and filled unfitted lifetime pixels with 0 ns. Intensity is written as 32-bit counts and unfitted lifetimes as NaN, with the pixel size in the OME metadata when there is one. PNG and OME-TIFF exports are named after the scan, as OME-Zarr already was, so exporting several files into one folder no longer overwrites them.
 - The wavelet phasor filter showed a size box it doesn't use. It's hidden for wavelet now.
+- Phasor filters registered by a plugin never appeared in Phasor Analysis. The filter list was fixed at none, gaussian, median and wavelet, although sessions, the bridge and QuPath already accepted plugin filters. The list now includes them, and shows the sigma or size box when the plugin's filter takes one.
 - The lifetime bounds were labelled "Fit window (ns)", the name Expert Settings uses for the part of the decay that is fitted. They're labelled "τ bounds (ns)" now.
 - Saving Preferences reported `~/.flimkit/config.yaml`, which is not where they go. It names `config.json` now.
 - The fit log printed the channel that was asked for rather than the one read. A single-channel PTU asked for channel 1 reads its only channel, 0, and the log says so.
