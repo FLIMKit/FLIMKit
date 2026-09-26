@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.6] - 2026-09-26
 
 ### Added
 - Apply fit settings, under the project list. Fit one file the way you want it, press the button, tick the other files in the project, and each is fitted with the same model, components, IRF method, fit window, masking, corrections and expert settings, then saved with the same FLIM display range, gamma, colormap and τ weighting, and the same intensity range and colormap. The settings come from the fitted file's saved session, so what is copied is what that file was actually fitted with even if the form has been touched since. ROIs are not copied, since they belong to one field of view. A file whose IRF comes from a LAS X export uses its own export, and its output is named after itself. Single FOV files only for now; tile scans and z-stacks are left out of the list.
