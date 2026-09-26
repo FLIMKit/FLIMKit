@@ -274,6 +274,18 @@ def test_plugin_phasor_filter_only_gets_the_kwargs_it_asks_for(clean_registry):
     assert seen == {'sigma': 3.0}
 
 
+def test_phasor_panel_offers_plugin_filters(clean_registry):
+    pytest.importorskip('tkinter')
+    from flimkit.UI.phasor_panel import PhasorViewPanel
+
+    def smooth(real, imag, sigma=1.0):
+        return real, imag
+    plugins.register_phasor_filter('smooth', 'Smooth', smooth)
+    assert PhasorViewPanel._filter_choices() == ['none', 'gaussian', 'median', 'wavelet', 'smooth']
+    assert PhasorViewPanel._plugin_filter_params('smooth') == {'sigma'}
+    assert PhasorViewPanel._plugin_filter_params('gaussian') == set()
+
+
 def test_builtin_phasor_filters_still_win(clean_registry):
     import numpy as np
     from flimkit.phasor.filters import phasor_filter

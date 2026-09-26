@@ -89,6 +89,18 @@ def parse_exclude_ns(spec):
         bands.append((lo, hi))
     return bands or None
 
+def _channel_label(ptu, requested):
+    if requested is None or str(requested).strip() == '':
+        return 'auto'
+    try:
+        req = int(requested)
+    except (TypeError, ValueError):
+        return str(requested)
+    active = list(getattr(ptu, '_active', None) or [])
+    if len(active) == 1 and req not in active:
+        return f'{active[0]}, the only channel in the file ({req} was requested)'
+    return str(req)
+
 def _align_measured_irf(args, irf_prompt, irf_peak_bin, n_bins, tcspc_res):
     offset = int(np.argmax(irf_prompt)) - int(irf_peak_bin)
     if getattr(args, 'align_irf', False):
@@ -842,9 +854,9 @@ def _photon_budget_warning(stack, n_exp, min_photons, cur_binning,
 def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     _dt = getattr(args, 'dist_type', 'discrete')
     if _dt == 'discrete':
-        _model_label = f"{args.nexp}-exp"
+        _model_label = f'{args.nexp}-exp'
     elif _dt == 'tail':
-        _model_label = f"{args.nexp}-exp tail"
+        _model_label = f'{args.nexp}-exp tail'
     else:
         _model_label = f"{getattr(args, 'dist_n_components', 1)}-comp {_dt} dist."
     print(f"\n{'='*60}")
@@ -885,7 +897,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             print(f'    Combined with cell mask: {int(cell_mask.sum()):,} pixels kept')
         else:
             cell_mask = intensity_mask
-    print(f"\n[2] Building summed decay (channel={args.channel or 'auto'})")
+    print(f'\n[2] Building summed decay (channel={_channel_label(ptu, args.channel)})')
     if cell_mask is not None:
         stack_for_decay = ptu.raw_pixel_stack(channel=args.channel)
         stack_for_decay[~cell_mask] = 0
@@ -1636,6 +1648,8 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
+        ap.add_argument('--binning', type=int, default=1,
+                        help='spatial binning (NxN) before the per-pixel fit')
         ap.add_argument('--correct-pileup', action='store_true')
         ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--bg-in-model', action='store_true')
@@ -1784,6 +1798,8 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
+        ap.add_argument('--binning', type=int, default=1,
+                        help='spatial binning (NxN) before the per-pixel fit')
         ap.add_argument('--correct-pileup', action='store_true')
         ap.add_argument('--pileup-in-model', action='store_true')
         ap.add_argument('--bg-in-model', action='store_true')

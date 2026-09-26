@@ -15,6 +15,7 @@ class IRFWidget:
         ('Estimate from decay - parametric',             'parametric'),
         ('Gaussian (fallback)',                          'gaussian'),
     ]
+
     def __init__(self, parent, default='irf_xlsx', xlsx_var=None, machine_irf_default: str = ''):
         self.xlsx_var = xlsx_var
         self._machine_irf_default = machine_irf_default
@@ -42,6 +43,7 @@ class IRFWidget:
             foreground='grey')
         self._note.grid(row=r + 1, column=0, columnspan=3, sticky='w', padx=8, pady=3)
         self._update()
+
     def _browse_irf_path(self):
         if self.sv_method.get().startswith('machine_irf'):
             _browse_file(self.sv_path, 'Select machine IRF',
@@ -53,6 +55,14 @@ class IRFWidget:
                          [('FLIM / PCK / LAS X export',
                            _flim + ' *.pck *.xlsx *.csv *.tsv *.txt *.dat *.ascii *.asc'),
                           ('All', '*.*')])
+
+    def set_machine_irf_default(self, path):
+        old = self._machine_irf_default
+        self._machine_irf_default = str(path)
+        current = self.sv_path.get().strip()
+        if self.sv_method.get().startswith('machine_irf') and current in ('', str(old)):
+            self.sv_path.set(self._machine_irf_default)
+
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
@@ -63,16 +73,19 @@ class IRFWidget:
         self._path_e.grid()
         self._path_btn.grid()
         self._note.grid_remove()
+
     def _show_note(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid()
+
     def _hide_all(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid_remove()
+
     def _update(self):
         method = self.sv_method.get()
         if method == 'irf_xlsx':
@@ -81,11 +94,13 @@ class IRFWidget:
             self._show_browse()
         else:
             self._hide_all()
+
     def grid(self, **kw):
         self.frame.grid(**kw)
 
     def grid_remove(self):
         self.frame.grid_remove()
+
     def get_args(self, xlsx_fallback: Optional[str] = None) -> dict:
         method = self.sv_method.get()
         path = self.sv_path.get().strip() or None

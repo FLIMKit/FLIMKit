@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Apply fit settings, under the project list. Fit one file the way you want it, press the button, tick the other files in the project, and each is fitted with the same model, components, IRF method, fit window, masking, corrections and expert settings, then saved with the same FLIM display range, gamma, colormap and τ weighting, and the same intensity range and colormap. The settings come from the fitted file's saved session, so what is copied is what that file was actually fitted with even if the form has been touched since. ROIs are not copied, since they belong to one field of view. A file whose IRF comes from a LAS X export uses its own export, and its output is named after itself. Single FOV files only for now; tile scans and z-stacks are left out of the list.
+- Intensity display controls next to the FLIM ones: a minimum, a maximum, Auto, and a colormap (inferno, gray, magma, viridis, hot, bone, cividis, plasma). Blank keeps what it always did, 0 to the 99th percentile in inferno. The intensity image was drawn that way in five places with nothing to change it; they now share one routine, which the PNG export uses too, and the settings are saved in the session beside the FLIM ones.
+- Nine more FLIM colormaps: turbo, jet, rainbow, spectral, plasma, inferno, magma, cividis and coolwarm.
+- A default machine IRF in File > Preferences > Files. Pick an `.npy` anywhere, a shared drive or one per microscope, and it is used by every form and by the terminal tools. It is kept in `~/.flimkit/config.json`, so it survives a restart, and saving it updates the open forms at once. Save checks the file loads first, and a file that later goes missing is reported in the log and the built-in IRF is used instead.
+- A step-by-step guide in the documentation. It works through `Ado_1.ptu` from loading the file to exporting the maps, explains every option on the way, then covers the phasor, a project folder, a z-stack, the tile stitching form, and every file FLIMKit reads and writes. The screenshots are in `Docs/images/guide/`.
+- A page in the documentation for each add-on: the FLIMKit bridge, QuPath, Fiji, the z-stack explorer, the web UI and MuFLE unmixing, with what it adds, how to install it and screenshots of it running. Two more pages cover writing your own plugin, worked through the two examples in `examples/plugins/`, and troubleshooting one that does not load. The screenshots are in `Docs/images/plugins/`.
+
+### Changed
+- `fitter_version` goes to 21. Z-stack and timelapse fits that use a fit window, exclusion bands, an IRF shift bound or binning now apply them, so their numbers differ from the same settings under 20. Fits with the defaults are unchanged.
+
+### Fixed
+- hsv and twilight no longer wrap round. Both are cyclic: hsv ends on the red it starts on, and twilight ends on exactly its starting colour, so the shortest and longest lifetimes in a map looked the same. Only the stretch of each that does not come back round is used now, and sessions saved with those names still load.
+- Loading a session left the FLIM range boxes blank, so pressing Update afterwards reset a saved range to auto. The boxes are filled from the session now.
+- Loading a file in Phasor mode saved a fresh `<file>_phasor.npz` over the existing one, with no cursors, before anything was restored. It now puts the saved cursors and filter back on the freshly computed phasor and only then saves, the same way a fit session comes back. A session that can't be read, or that belongs to an image of a different size, is left alone.
+- Phasor sessions lost polygon cursors. Only ellipse centres were written, so a polygon made the save fail. Polygons are saved with their vertices now. Sessions also record the filter and keep the unfiltered G and S, where they used to store the filtered values as if they were raw, so applying a filter to a reopened session filtered it twice. Sessions saved before this still load.
+- The z-stack and timelapse fits ignored the fit window, the exclusion bands, the IRF shift bound and the binning. The GUI didn't pass them on from Expert Settings while showing "Custom expert settings active", and `fit_zstack` and `fit_timelapse` didn't read them, so `--exclude-ns` did nothing on those routes either. All four are applied now and both CLIs take `--binning`. With the defaults nothing changes.
+- The ROI action buttons, Fit ROI Decay among them, were pushed out of sight when the panel was short, because the spare room went to the button row instead of the region list. The list shrinks now.
+- OME-TIFF export rescaled the intensity to 16 bits against its own maximum, so the photon counts were lost, and filled unfitted lifetime pixels with 0 ns. Intensity is written as 32-bit counts and unfitted lifetimes as NaN, with the pixel size in the OME metadata when there is one. PNG and OME-TIFF exports are named after the scan, as OME-Zarr already was, so exporting several files into one folder no longer overwrites them.
+- The wavelet phasor filter showed a size box it doesn't use. It's hidden for wavelet now.
+- Phasor filters registered by a plugin never appeared in Phasor Analysis. The filter list was fixed at none, gaussian, median and wavelet, although sessions, the bridge and QuPath already accepted plugin filters. The list now includes them, and shows the sigma or size box when the plugin's filter takes one.
+- The lifetime bounds were labelled "Fit window (ns)", the name Expert Settings uses for the part of the decay that is fitted. They're labelled "τ bounds (ns)" now.
+- Saving Preferences reported `~/.flimkit/config.yaml`, which is not where they go. It names `config.json` now.
+- The fit log printed the channel that was asked for rather than the one read. A single-channel PTU asked for channel 1 reads its only channel, 0, and the log says so.
+
 ## [0.13.5] - 2026-09-15
 
 ### Changed

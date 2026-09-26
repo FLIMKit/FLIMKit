@@ -12,7 +12,8 @@
 2. [Supported Input Formats](#supported-input-formats)
 3. [Requirements & Installation](#requirements--installation)
 4. [Quick Start](#quick-start)
-5. [Workflows](#workflows)
+5. [Step-by-Step Guide](#step-by-step-guide)
+6. [Workflows](#workflows)
    - [Desktop GUI](#desktop-gui)
    - [Guided Terminal UI](#guided-terminal-ui-mainpy)
    - [Machine IRF Setup](#machine-irf-setup-required)
@@ -21,15 +22,23 @@
    - [Synthetic Data Generation (CLI)](#synthetic-data-generation-cli)
    - [Phasor Analysis (CLI)](#phasor-analysis-cli)
    - [Python API](#python-api)
-6. [Configuration Reference](#configuration-reference)
-7. [Module Reference](#module-reference)
-8. [Project Structure](#project-structure)
-9. [Compiled App](#compiled-app-macos--windows--linux)
-10. [Plugins](#plugins)
-11. [Testing](#testing)
-12. [Outputs & File Formats](#outputs--file-formats)
-13. [Troubleshooting](#troubleshooting)
-14. [Contact](#contact)
+7. [Configuration Reference](#configuration-reference)
+8. [Module Reference](#module-reference)
+9. [Project Structure](#project-structure)
+10. [Compiled App](#compiled-app-macos--windows--linux)
+11. [Plugins](#plugins)
+   - [FLIMKit Bridge](#flimkit-bridge)
+   - [QuPath Bridge](#qupath-bridge)
+   - [Fiji Bridge](#fiji-bridge)
+   - [Z-stack Explorer](#z-stack-explorer)
+   - [Web UI](#web-ui)
+   - [Spectral Unmixing (MuFLE)](#spectral-unmixing-mufle)
+   - [Writing Your Own Plugin](#writing-your-own-plugin)
+   - [Plugin Troubleshooting](#plugin-troubleshooting)
+12. [Testing](#testing)
+13. [Outputs & File Formats](#outputs--file-formats)
+14. [Troubleshooting](#troubleshooting)
+15. [Contact](#contact)
 
 ---
 
@@ -238,6 +247,378 @@ python phasor_cli.py --ptu data.ptu --irf irf.xlsx
 
 ---
 
+## Step-by-Step Guide
+
+A worked analysis of one field of view, `Ado_1.ptu`, from opening the file to exporting the maps, followed by a project folder with a z-stack, the tile stitching form, and a list of every file FLIMKit reads and writes. Every screenshot is the desktop GUI running from source (v0.13.5 plus the commits after it), and every number quoted was produced by those runs. Your numbers will differ with your data and your machine IRF, but the order of the steps and the reasons for each setting carry over.
+
+`Ado_1.ptu` is a single 1024 x 1024 px field of view: 1,714,555 photons in channel 1, 529 TCSPC bins of 96.97 ps, a 19.505 MHz laser (51.27 ns period) and 127.5 s of acquisition.
+
+### Step 1: Open the file
+
+Start the GUI (`python main.py`, or the compiled app) and stay in Single FOV Fit mode.
+
+![FLIMKit on start-up](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/01_start.jpg)
+
+The window has four areas. The Project list on the left fills when you open a folder ([Step 13](#step-13-work-from-a-project-folder)). The settings form sits in the middle, with the Progress log, Fit Summary and Images tabs underneath. The FOV Preview on the right shows the intensity image, the lifetime map and the summed decay.
+
+Input Files:
+
+| Option | What it does |
+|---|---|
+| Analysis: Single FOV | One file, one field of view. |
+| Analysis: Z-stack | A folder of `region_zX.ptu` slices fitted as one field of view ([Step 14](#step-14-fit-a-z-stack)). |
+| Data file | The FLIM file. Any format in [Supported Input Formats](#supported-input-formats) works. Browse, type the path, or drag the file onto the box. |
+| LAS X export (optional) | The `.xlsx` (or delimited text) exported from the LAS X FLIM window for this same file. It is only needed for the Analytical model IRF, and it lets you compare against the LAS X fit. |
+
+Load `Ado_1.ptu`. The preview draws the intensity image and the summed decay straight away, and the status line under the preview gives the image size and photon count.
+
+![Ado_1.ptu loaded](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/02_loaded.jpg)
+
+If a `Ado_1.roi_session.npz` already sits next to the file, FLIMKit restores the last fit, the ROIs and the form settings from it instead of starting clean. The log says `[Auto-Load] No session found` when there isn't one.
+
+Look at the decay before you change anything. This one rises at about 2.6 ns, decays over roughly three decades, and has a small peak at about 47 ns. That peak is the start of the next laser period, and FLIMKit finds it and cuts the fit window short of it on its own ([Step 6](#step-6-run-a-fast-fit-first)).
+
+### Step 2: Choose the IRF
+
+![IRF options](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/03_irf.jpg)
+
+The instrument response function is the largest single source of systematic error in a reconvolution fit, and it matters most for the shortest component. The ⓘ next to each section heading opens the same explanations inside the app.
+
+| Option | When to use it |
+|---|---|
+| Analytical model (LAS X export) | Builds the IRF from the LAS X export named in Input Files. The default for FALCON data when you have the export for this file. |
+| Machine IRF (.npy pre-built) | A stored IRF for your microscope, built once from matched pairs ([Machine IRF Setup](#machine-irf-setup-required)). Use it when the optical path hasn't changed since it was built. |
+| Machine IRF + full σ broadening | The same stored IRF, which the fit may broaden with a Gaussian of up to 3.0 bins. For when the stored IRF is narrower than the real response, after a change of objective or pinhole for example. |
+| Machine IRF + half σ broadening (σ≤0.5) | Broadening capped at 0.5 bins. For a stored IRF that is close, where a free σ would start absorbing the decay. |
+| Measured IRF file (scatter PTU or .pck) | An IRF recorded alongside the sample from a scattering solution or a reflective surface. The most defensible choice when you have one. |
+| Estimate from decay - raw | Takes 21 bins around the decay peak as the IRF. A last resort: it can't separate the instrument from the fastest part of the decay, so short lifetimes come out long. |
+| Estimate from decay - parametric | Fits a pulse shape to a 1.5 ns window around the peak. Smoother than raw, with the same bias. |
+| Gaussian (fallback) | A Gaussian of the configured width. |
+
+The Machine IRF path box appears under the options when a machine IRF method is picked, filled with your default. The default can be changed in File > Preferences... > Files ([Machine IRF Setup](#machine-irf-setup-required)). For `Ado_1.ptu` I used Machine IRF, since there is no LAS X export for this file.
+
+### Step 3: Set the fitting parameters
+
+![Fitting parameters and masking](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/04_fit_params.jpg)
+
+| Option | What it does |
+|---|---|
+| Fit model: n-exp | A sum of 1, 2 or 3 discrete exponentials convolved with the IRF. The right choice for most samples. |
+| Fit model: Gaussian dist. | One continuous distribution of lifetimes, reported as a centre and a width. For a fluorophore in a heterogeneous environment where a discrete fit needs too many components. Slower, since each evaluation integrates over a 200-point lifetime grid. |
+| Fit model: Lorentzian dist. | The same with heavier tails, so a small sub-population far from the centre doesn't drag the centre towards it. |
+| Fit model: n-exp tail | Discrete exponentials fitted past the decay peak with no IRF. Fast, and the IRF drops out as a source of error, but components shorter than about the IRF width come out biased. The IRF section is hidden when this is picked. |
+| Components | 1, 2 or 3 for n-exp and tail, or 1 (unimodal) / 2 (bimodal) for the distributions. Start low and add a component only when the residuals show structure ([Step 6](#step-6-run-a-fast-fit-first)). |
+| Fitting mode: Full | Fits the summed decay, then every pixel. This is what makes the lifetime map. |
+| Fitting mode: Fast | The summed decay only. Seconds instead of minutes, with no map. Use it to check the IRF, the model and the component count first. |
+| τ bounds (ns) | The lower and upper bounds on the fitted lifetimes (0.145 and 45 ns by default). The part of the decay that is fitted is set separately, in Expert Settings. |
+| Output prefix | Where the output files go and what they're called. It fills with the file name, so outputs land next to the data. A bare name is placed in the data folder; a full path is used as it is. |
+
+### Step 4: Masking and thresholding
+
+![Masking and the run buttons](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/05_masking_run.jpg)
+
+| Option | What it does |
+|---|---|
+| Apply cell mask (Cellpose-SAM) | Segments cells in the intensity image and fits only inside them, so background pixels don't add noise-dominated lifetimes to the statistics. It runs on the GPU when there is one. Needs the `segmentation` extra. |
+| Intensity threshold (min photons/px) | Skips pixels below this count. Blank means no threshold. |
+| Apply Coates pile-up correction | Corrects the early-photon bias at high count rates. The log prints the photons per pulse at the start of each fit: tick this above about 5%. The corrected decay is no longer Poisson, so χ²_r is unreliable with it on, though the lifetimes are not. |
+| Time-varying background PTU | A separate acquisition of a fluorophore-free region (medium, buffer). Its decay shape is fitted as a scaled background instead of a flat offset ([Time-varying background correction](#time-varying-background-correction)). |
+
+`Ado_1.ptu` ran at 0.0007 photons per pulse (0.07%), so pile-up correction stays off. I left the mask off for the first fits to show what it changes in [Step 8](#step-8-mask-out-the-background).
+
+### Step 5: Expert settings
+
+Expert Settings opens a dialog shared by the single FOV and tile pipelines. When anything in it differs from the defaults, an orange "Custom expert settings active" line appears above the run button.
+
+![Expert Fit Settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/06_expert.jpg)
+
+| Option | What it does |
+|---|---|
+| Optimizer: Differential Evolution (DE) | A global search over the bounded parameter space with a Levenberg-Marquardt polish at the end. It doesn't depend on a starting guess. The default. |
+| Optimizer: Levenberg-Marquardt (LM) | A local fit from several starting points. Much faster, and it can miss the global minimum on a multi-exponential decay with few restarts. |
+| DE population / DE max iterations | DE search size (30 and 5000). |
+| LM random restarts | Number of LM starting points (8). |
+| Spatial binning (NxN) | Sums N x N pixels before the per-pixel fit. 1 is no binning. See [Step 7](#step-7-full-fit-and-binning). |
+| CPU workers | Cores for DE. -1 uses all of them. The compiled app is limited to 1. |
+| Min photons/pixel | Pixels below this count are left out of the per-pixel fit (10). |
+| Cost function | Poisson deviance (default) or the legacy Neyman χ². Poisson is correct for photon counts, above all at low counts. |
+| Channel filter | Detector channel. Blank uses all channels. |
+| IRF FWHM (ns) | Width for the estimated and Gaussian IRFs. Blank is one TCSPC bin. |
+| IRF alignment | Where the IRF is anchored against the decay. Steepest rise (default) or the legacy decay peak. |
+| IRF shift bound (±bins) | How far the fit may shift the IRF in time. 2 is recommended; 5 is the old default. |
+| Align measured IRF peak to the decay rising edge | For a scatter PTU or `.pck` recorded in a separate acquisition, whose time zero won't match the sample's. |
+| Fit window start / end (ns) | The part of the decay that is fitted. Blank lets FLIMKit choose from the IRF onset and the end of the period. |
+| Exclude bands (ns) | Stretches of the decay to leave out, such as a reflection peak, written `7.2-8.8` or `7.2-8.8,11.0-11.5` ([Fit window and exclusion bands](#fit-window-and-exclusion-bands)). |
+| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. |
+| Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
+| Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
+| Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
+| Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |
+
+For `Ado_1.ptu` I left everything at the defaults until [Step 7](#step-7-full-fit-and-binning).
+
+### Step 6: Run a fast fit first
+
+With Fast mode and 2 components, Run Single-FOV Fit took a few seconds.
+
+![2-exponential fast fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/07_fast_2exp.jpg)
+
+The Progress log records every choice the fit made, so it's the first place to look when a result seems wrong.
+
+![Progress log for the fast fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/08_log.jpg)
+
+Section [1] reads the file header, and section [2] gives the count rate and photons per pulse used to decide on pile-up correction. Section [5] shows the fit window chosen: here FLIMKit found the next-period artefact at bin 484 (46.93 ns) and fitted bins 19-464 (1.84-44.99 ns) automatically.
+
+The 2-exponential result was τ₁ = 4.04 ns and τ₂ = 0.61 ns with χ²_r(tail) = 18.29, and the residuals have a clear wave across the first 20 ns. That structure means the model is missing something. Changing to 3 components and running again dropped χ²_r(tail) to 1.53 and flattened the residuals, so I kept three. A lower χ² on its own doesn't justify an extra component, since more parameters always fit better. Check that the new lifetimes are physically distinct and that the residuals improved.
+
+### Step 7: Full fit and binning
+
+With 3 components, switch Fitting mode to Full and run again. A progress window counts the pixels as they're fitted.
+
+![Per-pixel fit running](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/09_running.jpg)
+
+At binning 1 only 34,680 of 507,977 signal pixels (6.8%) reached the 10-photon minimum, which the log flags as `PHOTON-STARVED`. When most of the image is starved, FLIMKit says so when the fit finishes and suggests a binning.
+
+![Too few photons per pixel](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/10_photon_warning.jpg)
+
+Binning sums an N x N block of pixels into one decay before fitting, trading resolution for photons per pixel. With Spatial binning set to 8 in Expert Settings, the map filled in.
+
+![Full fit at 8 x 8 binning](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/11_binned_map.jpg)
+
+The per-pixel fit keeps the summed-fit lifetimes and fits only the amplitudes in each pixel, unless Free τ per pixel is on. The map is the amplitude-weighted mean lifetime per pixel. The background between the cells now fills with noise-dominated values, which the next step removes.
+
+### Step 8: Mask out the background
+
+Tick Apply cell mask (Cellpose-SAM) and run again.
+
+![Masked fit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/12_masked.jpg)
+
+The map now covers the segmented cells only. The summed decay is built from those pixels too, so the global fit changes with it: τ = 5.81, 1.94 and 0.398 ns and χ²_r(tail) = 1.244. Cellpose missed part of one cell at the top left here, so check the mask (saved as `<prefix>_cell_mask.png`) before trusting the per-cell statistics.
+
+Fit Summary tab, row by row:
+
+| Row | Meaning |
+|---|---|
+| τ1, τ2, τ3 | Component lifetimes from the summed fit, in ns. |
+| α1, α2, α3 | Component amplitudes, in counts. |
+| f1, f2, f3 (amp frac) | Amplitude fractions, αᵢ / Σα. |
+| τ_mean (amp-weighted) | Σαᵢτᵢ / Σαᵢ. Weighted towards the short, high-amplitude components (1.125 ns here). |
+| τ_mean (int-weighted) | Σαᵢτᵢ² / Σαᵢτᵢ. Weighted towards the long components, closer to what a phasor or a mean arrival time gives (2.834 ns here). |
+| Background (fitted) | Constant offset per bin. |
+| IRF shift | How far the IRF was moved to match the decay, in bins (0.913 bins, about 88 ps). |
+| IRF σ (broadening) | Extra Gaussian width. 0 unless a broadening IRF method is used. |
+| IRF FWHM (eff.) | Effective IRF width after any broadening. |
+| χ²_r(tail) Neyman / Pearson | Reduced χ² over the tail of the decay, kept for comparison with LAS X. See [Fit Diagnostics](#fit-diagnostics). |
+
+Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
+
+### Step 9: Adjust the display
+
+The FLIM Color Scale panel under the preview changes the picture, never the fitted values.
+
+![Display controls with the decay plot hidden](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/15_display.jpg)
+
+| Control | What it does |
+|---|---|
+| τ range Min / Max, Auto, Update | Colour limits in ns. Auto sets them to the 2nd and 98th percentiles of the map (0.90-1.90 ns for Ado_1). Type values and press Update to set them yourself. Values outside the range are clamped, not removed. |
+| Γ | Gamma on the colour scale. 1.0 is linear. |
+| Colormap | Colour map for the lifetime image. |
+| Show Decay Plot | Hides the decay and residuals so the images get the whole panel. |
+| View: FLIM / Intensity | With the decay plot hidden, which of the two images fills the panel. |
+| τ weighting: Amplitude / Intensity | Recomputes the map as the amplitude- or intensity-weighted mean lifetime from the stored per-pixel amplitudes. No refit. |
+| Intensity: Min / Max, Auto, colormap | The same for the intensity image. |
+
+The colour scale is saved into the session file, so it comes back when the file is reopened.
+
+### Step 10: Measure regions of interest
+
+Open the ROI Analysis tab, pick a drawing mode and drag on either image.
+
+![Two ROIs on Ado_1](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/13_roi.jpg)
+
+| Control | What it does |
+|---|---|
+| Select | Click a region on the image to select it. |
+| Rectangle / Ellipse | Drag a box. |
+| Polygon | Click the vertices, then right-click to close the shape (three points minimum). |
+| Freehand | Draw the outline. |
+| Clear All | Removes every region. |
+| Delete Selected / Rename... | Act on the region selected in the list. |
+| Import from GeoJSON | Loads regions drawn elsewhere, QuPath for example. Only the outer boundary of each shape is kept, so holes are lost. |
+| Export as CSV | The Regions table as a spreadsheet. |
+| Export as GeoJSON / Export All as GeoJSON | The selected or all regions, with their statistics, for QuPath. |
+| Fit ROI Decay / View Fit | Fits the summed decay of the selected region(s) on its own ([Per-ROI decay fitting](#per-roi-decay-fitting)). |
+| Send to a viewer | Added by the `flimkit-bridge` plugin. Checks that a viewer such as QuPath has connected and says which images it is being served ([FLIMKit Bridge](#flimkit-bridge)). |
+
+The table gives, per region, the mean, median and standard deviation of the pixel lifetimes and the photon count. The ellipse over the lower cell gave τ_mean = 1.22 ns (median 1.18, SD 0.21) from 163,093 photons, and the rectangle over the upper cell 1.22 ns (median 1.19, SD 0.23) from 138,519. Regions are written to the session file as soon as they're drawn.
+
+### Step 11: Export
+
+Export Images..., under the Fit Summary table, saves the images shown in the preview.
+
+![Export Results dialog](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/14_export.jpg)
+
+| Option | What it does |
+|---|---|
+| Images to Export | The images the fit produced, Intensity and Lifetime here. All / None tick or clear them. |
+| Include scale bar | Draws a µm scale bar when the file carries a pixel size. `Ado_1.ptu` doesn't, so the log said `No pixel size available - scale bar will be omitted`. |
+| Include ROI annotations | Draws the regions on the images. |
+| PNG | The images as displayed, with the current colour map and limits. For slides and quick looks. |
+| OME-TIFF | `<scan>_lifetime.ome.tiff` as 32-bit floats in ns, with unfitted pixels left as NaN, and `<scan>_intensity.ome.tiff` as 32-bit photon counts. The pixel size goes into the OME metadata when the file carries one. These are the ones to measure from in Fiji/ImageJ. |
+| OME-Zarr | One compressed store named after the scan, each image a channel ([OME-Zarr export](#ome-zarr-export)). |
+| Save Location | The folder. |
+
+Every export is named after the scan, so the PNG export of `Ado_1.ptu` writes `Ado_1_intensity.png`, `Ado_1_lifetime.png` and `Ado_1_summed_decay.png`, and exporting several files into one folder doesn't overwrite anything. What else the fit writes by itself is listed in [Step 16](#step-16-what-flimkit-reads-and-writes).
+
+### Step 12: Phasor analysis
+
+Switch the mode to Phasor Analysis. The file and the machine IRF carry over from the fit form.
+
+![Phasor settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/16_phasor_setup.jpg)
+
+| Option | What it does |
+|---|---|
+| Input Mode: New PTU file / Resume session (.npz) | Start from a file, or reopen a saved phasor session with its cursors. |
+| PTU file | The FLIM file. |
+| IRF XLSX (optional) / Machine IRF (optional) | The calibration. Phasors need an IRF to place the universal circle correctly. The XLSX wins if both are given. |
+| Min photons (fraction) | Pixels whose mean count per time bin is below this are left out of the plot. The default 0.01 is about 5 photons for a 529-bin decay. |
+| Max cursors | How many cursors can be placed. |
+| Load & Analyse | Computes and plots the phasor. |
+
+![Find Peaks and FRET settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/17_phasor_options.jpg)
+
+| Option | What it does |
+|---|---|
+| Find Peaks: Smooth σ, Threshold, Find Peaks | Smooths the phasor histogram and places cursors on the peaks above the threshold. |
+| FRET Analysis: Donor τ, Acceptor τ, Donor fretting | The donor lifetime, an optional acceptor lifetime (blank for donor-only), and the fraction of donors that transfer. |
+| Overlay Trajectory / Fit Donor FRET / Clear Overlay | Draw the FRET efficiency trajectory, fit it to the data, or remove it. |
+
+On the plot, a click places an elliptical cursor and the matching pixels light up in the image above. The toolbar above the plot has Clear all and Undo, Save session, Ellipse or Polygon cursors, the Radius and Minor/major sliders for the cursor shape, and Fit Cursor Decay / View Fit to fit the summed decay of the pixels under a cursor.
+
+`Ado_1.ptu` gave 48,357 valid pixels at 19.5 MHz. A cursor of radius 0.05 on the main cloud of the raw phasor took 6,259 pixels with a phase lifetime τ_φ of 2.20-2.71 ns (median 2.45 ns).
+
+![Unfiltered phasor](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/18_phasor_raw.jpg)
+
+The raw cloud is wide because each pixel carries few photons. Phasor filter smooths the G and S coordinates in image space, which pulls the cloud together without changing where it sits:
+
+| Filter | Parameter | What it does |
+|---|---|---|
+| none | | Raw phasor. |
+| gaussian | σ | Gaussian smoothing of G and S. |
+| median | size | Median filter of G and S. Removes outliers and keeps edges. |
+| wavelet | | Wavelet soft-thresholding (Daubechies db4). It takes no parameter. This is the filter closest to the LAS X phasor display. |
+
+Apply runs the filter and Reset goes back to the raw data. With the wavelet filter and the same cursor, the count went to 13,771 pixels and τ_φ to 2.20-2.70 ns (median 2.43 ns).
+
+![Wavelet-filtered phasor](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/19_phasor_wavelet.jpg)
+
+The phasor session is saved as `<file>_phasor.npz` next to the data whenever a cursor or the filter changes. Loading the same file again recomputes the phasor with the current IRF and then puts the saved cursors and filter back on it, the same way a fit session comes back, and the log says `[Auto-Load] Restored 1 cursor(s) and the wavelet filter from Ado_1_phasor.npz`. Clear all and Reset start again from nothing.
+
+### Step 13: Work from a project folder
+
+A project is a folder of acquisitions. File > Open Project Folder... lists every FLIM file in it, groups `region_zX` slices into z-stacks and picks up `.xlif` files for tiles. It writes a `project.json` into the folder to remember them. For this I made a folder holding `Ado_1.ptu`, `Ado_2.ptu` and the eight slices `Series008_z1.ptu` to `Series008_z8.ptu`.
+
+![Project with a z-stack selected](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/20_project_zstack_loaded.jpg)
+
+Each row shows a session mark (○ nothing saved, ● a fit, ◐ a phasor, ◉ both) and the scan type (F for a field of view, Z for a z-stack, T for tiles from an XLIF). The footer counts scans and saved sessions. Clicking a row loads it into the right form, restoring its fit and ROIs when there is a session.
+
+To fit several files the same way, fit one, keep it selected, and press Apply fit settings... under the list.
+
+![Apply Fit Settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/23_apply_settings.jpg)
+
+The dialog shows the model, IRF, lifetime bounds and display scales it will copy, and lists the other single-FOV files. Files that already have a fit are marked ● and their fit is replaced; ROIs aren't copied. I refitted Ado_1 in the project (3 components, machine IRF, cell mask, 8 x 8 binning) and applied it to Ado_2, which fitted to τ = 5.43, 1.58 and 0.264 ns with χ²_r(tail) = 2.29.
+
+![Settings applied](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/24_apply_done.jpg)
+
+Clicking Ado_2 afterwards reloads its saved fit. The residual plot isn't stored in the session, so it stays empty until the file is refitted, but the values are all there.
+
+![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
+
+### Step 14: Fit a z-stack
+
+Selecting the Z row switches Analysis to Z-stack and fills the folder. The slider under the preview steps through the slices. The fit pools every slice to fit one set of lifetimes, then fits each slice per pixel with those lifetimes locked, so only the amplitudes change with depth ([Timelapse and Z-stack Fitting](#timelapse-and-z-stack-fitting)). The form is the same as for a single FOV, and the button reads Run Z-stack Fit.
+
+With the machine IRF and 2 components, the eight 256 x 256 slices (1,731,281 photons pooled) gave τ₁ = 3.48 ns and τ₂ = 0.572 ns, and per-slice amplitude-weighted means of 1.90-2.00 ns.
+
+![Z-stack result](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/21_zstack_result.jpg)
+
+![Z-stack log](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/22_zstack_log.jpg)
+
+The residuals show why χ²_r(tail) came out at 688.9: this 25.7 ns period has a reflection peak at about 20 ns, and the whole period was fitted (bins 0-265).
+
+Expert Settings apply to z-stacks the same way as to a single FOV. Setting Exclude bands to `19.6-21.2` dropped those bins from the fit, 248 of 265 fitted, and moved the pooled lifetimes to τ₁ = 3.66 ns and τ₂ = 0.604 ns. The calibrated tail χ² in `Series008_reference_fit.json` went from 159.6 to 21.1. It isn't near 1, so look at the residuals for what is left before trusting the absolute values. Spatial binning applies to every slice as well. The Images tab steps through the per-slice maps.
+
+### Step 15: Stitch tiles from an XLIF
+
+Tile Stitch/Fit mode takes a tiled acquisition: the `.xlif` from the LAS X project's Metadata folder and the folder of PTU tiles exported with it.
+
+![Tile Stitch/Fit form](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/26_stitch_form.jpg)
+
+| Option | What it does |
+|---|---|
+| XLIF metadata | Tile positions and layout. |
+| PTU tile directory | The folder of tiles. Tiles from several scans in one folder are sorted out by name. |
+| Base output dir | A sub-folder named after the ROI is made inside it. |
+| Rotate tiles 90° CW | Rotates each tile 90° clockwise before it is placed. On by default and recommended for Leica FLIM data. |
+| Stitch tiles only | Registers and stitches the intensity image and the decay cube, without fitting. |
+| Stitch then fit full ROI | Fits the whole mosaic at once. Needs tens of GB of RAM on large mosaics. |
+| Per-tile fit | Fits a global decay for the lifetimes, then each tile with those lifetimes locked, and stitches the maps. The recommended option. |
+| Multidimensional series | Per-tile fitting repeated over z and/or time, one stitched plane per (t, z) ([Multidimensional Series](#multidimensional-series-stitched-tiles-over-z-and-time)). |
+
+Below the pipeline choice come the same IRF, model and masking sections as for a single FOV, then:
+
+| Option | What it does |
+|---|---|
+| Per-pixel fitting | Needed for the lifetime maps and for ROI analysis on the mosaic. |
+| Export τ-weighted / intensity-weighted / amplitude-weighted map | 32-bit TIFF lifetime maps. |
+| Save individual component maps | One TIFF per τᵢ. |
+| Lifetime display / Intensity display | Display limits for the exported images. Blank is automatic. |
+| Phase-correlation registration, Max shift (px) | Corrects stage drift before stitching ([Tile registration](#tile-stitching-and-fitting)). Raise the shift above 120 px if the drift is larger. |
+| Pool decay every N timepoints | Multidimensional series only. Subsamples the files used for the pooled lifetime fit. |
+| IRF XLSX dir | A folder with one `<tile_name>.xlsx` per tile. Blank uses the IRF method above. The machine IRF is safer, since per-tile exports vary. |
+
+### Step 16: What FLIMKit reads and writes
+
+Files FLIMKit reads, apart from the FLIM data in [Supported Input Formats](#supported-input-formats):
+
+| File | Where it's read | What it carries |
+|---|---|---|
+| `.xlsx`, `.csv`, `.tsv`, `.txt`, `.dat`, `.ascii`, `.asc` | LAS X export box, IRF XLSX, per-tile XLSX folder | The LAS X decay export: the IRF for the analytical model and the LAS X fit for comparison. |
+| `.npy` machine IRF | Machine IRF path | The stored instrument response ([Machine IRF Setup](#machine-irf-setup-required)). |
+| Scatter `.ptu` or `.pck` | Measured IRF file | A recorded IRF. |
+| Background `.ptu` | Time-varying background PTU | A fluorophore-free decay fitted as background. |
+| `.xlif` (or `.lif`) | Tile Stitch/Fit, project folders | Tile positions and layout. |
+| `<file>.roi_session.npz` | Automatically when the file is opened, or File > Restore NPZ... | A saved fit, its ROIs, form settings and display scales. |
+| `<file>_phasor.npz` | Phasor > Resume session | A saved phasor with its cursors. |
+| `.geojson` | ROI Analysis > Import from GeoJSON, File > Import GeoJSON... | Regions from QuPath or any GeoJSON source. |
+| `project.json` | File > Open Project Folder... | The project's scan list and output folder. |
+
+Files FLIMKit writes:
+
+| File | Written by | What's in it |
+|---|---|---|
+| `<prefix>_summed_<n>exp.png` | Every fit | Summed decay, IRF, fitted curve and residuals. |
+| `<prefix>_pixelmaps_<n>exp.png` | Full fits | A figure of the per-pixel maps. |
+| `<prefix>_lifetime_hist_<n>exp.png` | Full fits | Histogram of the per-pixel lifetimes. |
+| `<prefix>_cell_mask.png` | Fits with the cell mask on | The Cellpose mask used. |
+| `<file>.roi_session.npz` | Every fit, every ROI change, colour-scale changes | Fit results (summed and per-pixel arrays, decay, IRF, time axis, intensity, lifetime map), form settings, display scales and ROIs. Reopening the file restores all of it. File > Save NPZ / Save NPZ As... writes it on demand. |
+| `<file>_phasor.npz` | Phasor mode, automatically, or Save session | Calibrated G and S before filtering, the mean intensity, frequency, the cursors (ellipses and polygons), their size and the filter applied. Restored when the file is loaded again. |
+| `<scan>_intensity.png`, `<scan>_lifetime.png`, `<scan>_summed_decay.png` | Export Images..., PNG | The images as displayed, for slides. |
+| `<scan>_intensity.ome.tiff`, `<scan>_lifetime.ome.tiff` | Export Images..., OME-TIFF | Intensity as 32-bit photon counts, lifetime as 32-bit floats in ns with NaN where nothing was fitted, and the pixel size when known. |
+| `<scan>.ome.zarr` | Export Images..., OME-Zarr | One compressed store, each image a channel, the fit summary in the metadata. |
+| ROI `.csv` | Export as CSV, File > Export > Export ROI Table CSV | Per region: ID, name, type, τ mean/median/SD, photons and photon SD, and the per-ROI fit (τ_mean, χ²_r, τᵢ and αᵢ) when there is one. |
+| ROI `.geojson` | Export as GeoJSON / Export All as GeoJSON, and the File > Export menu | Each region as a GeoJSON feature with its name, type, colour and statistics (τ median and SD, photons and SD). Self-intersecting outlines are repaired and flagged. Opens in QuPath. |
+| Fit summary `.csv` | File > Export > Export Summed Fit CSV | The Fit Summary table. |
+| `project.json` | Opening a project folder | Scan list, types, source paths and output folder. |
+| `<stack>_reference_fit.json` | Z-stack fits | The pooled lifetimes, bounds, photons and slices used. |
+| `<stack>_intensity_stack.npy`, `_tau_mean_amp_stack.npy`, `_alpha_<i>_stack.npy`, `_chi2_r_stack.npy`, `_calibrated_chi2_r_stack.npy` | Z-stack fits | `(Z, H, W)` arrays, one plane per slice. |
+| `<stack>_zseries.csv` / `.json` / `.png` | Z-stack fits | Per-slice summary: mean amplitudes, mean τ and its SD, χ²_r and pixels fitted, with a plot. |
+| `reference_decay.npz` | Z-stack fits | The pooled decay the reference lifetimes were fitted to. |
+| `z0001/`, `z0002/`, ... | Z-stack fits | Per-slice fit plots and maps. |
+| Stitched `.npy` cube, intensity and τ TIFFs, CSV summary | Tile Stitch/Fit and Batch ROI | See [Tile stitching and fitting](#tile-stitching-and-fitting). |
+
+---
+
 ## Workflows
 
 ### Desktop GUI
@@ -313,10 +694,10 @@ Note: GeoJSON import currently only preserves the outer boundary of shapes, donu
 
 ##### Per-ROI decay fitting
 
-The **⚗ Fit ROI Decay** button fits the summed decay from the selected region(s) independently, rather than using the whole-FOV fit.
+The **Fit ROI Decay** button fits the summed decay from the selected region(s) independently, rather than using the whole-FOV fit.
 
 **Selecting regions:**
-- Single region: click it in the list, then click **⚗ Fit ROI Decay**.
+- Single region: click it in the list, then click **Fit ROI Decay**.
 - Multiple regions: Shift-click or Cmd-click to select several; they are combined into one union mask and treated as a single merged region for the fit.
 
 **Fit Options dialog:** Before the fit runs, a small dialog appears pre-filled with the current global fit parameters. You can change any of the following without touching the main form:
@@ -415,7 +796,11 @@ Don't go below 10 unless your data is very homogeneous.
 | Compiled app (macOS/Linux) | `~/.flimkit/machine_irf/` |
 | Compiled app (Windows) | `C:\Users\<name>\.flimkit\machine_irf\` |
 
-After saving, restart the app so it picks up the new default.
+To use an IRF kept somewhere else, a shared drive or one per microscope for example, set it in File > Preferences... > Files > Default machine IRF (.npy). Browse picks the file, Use the built-in IRF clears the setting, and Save checks the file loads before accepting it. The choice is stored in `~/.flimkit/config.json`, so it applies to every form straight away and stays set after a restart. The terminal tools read the same setting. If the chosen file later goes missing, FLIMKit says so in the log and falls back to the built-in one.
+
+![Default machine IRF in Preferences](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/27_prefs_machine_irf.jpg)
+
+A newly built `machine_irf_default` is picked up after a restart, unless a different default is set in Preferences.
 
 #### Python API
 
@@ -534,6 +919,7 @@ Expected filename patterns: `region_tX[_sY][_zZ].ptu` for timelapse, `region_zX.
 | `--fit-end-ns FLOAT` | Fit window end in ns (default: auto) |
 | `--exclude-ns SPEC` | Bands to drop from the fit, e.g. `"7.2-8.8"` or `"7.2-8.8,11.0-11.5"` |
 | `--correct-pileup` | Coates pile-up correction |
+| `--binning INT` | Spatial binning (NxN) before the per-slice per-pixel fit (default: 1) |
 | `--no-stack` | Skip saving the `(T,H,W)` / `(Z,H,W)` map stacks |
 | `--bound-fraction` | Z-stack only: compute bound fraction α₂/(α₁+α₂) |
 
@@ -802,7 +1188,7 @@ Pixel values outside the range are clamped to the boundary, not zeroed.
 | Parameter | Default | Description |
 |---|---|---|
 | `MACHINE_IRF_DIR` | `flimkit/machine_irf` (source) / `~/.flimkit/machine_irf` (compiled) | Storage directory |
-| `MACHINE_IRF_DEFAULT_PATH` | User copy if present, else bundled default | Resolved at startup |
+| `MACHINE_IRF_DEFAULT_PATH` | The Preferences choice if set, else the user copy if present, else the bundled default | Resolved at startup, and again when Preferences are saved |
 | `MACHINE_IRF_ALIGN_ANCHOR` | `'peak'` | Alignment landmark during IRF construction |
 | `MACHINE_IRF_REDUCER` | `'median'` | Aggregation method across paired IRFs |
 | `MACHINE_IRF_FIT_STRATEGY` | `'fixed'` | Runtime fitting strategy |
@@ -1183,20 +1569,472 @@ All output files are saved to the same directory as the input PTU file. The work
 
 ### Machine IRF
 
-Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app.
+Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). The app ships with a bundled default until you build your own. After saving a new machine IRF, restart the app, or point File > Preferences... > Files > Default machine IRF (.npy) at it, which takes effect at once.
 
 ---
 
 ## Plugins
 
-Analysis tools reach the Tools menu through a registry, `flimkit.plugins`. FLIMKit's own tools are registered the same way an add-on is, so the file a contributor writes is the file a third party writes.
+A plugin adds something to FLIMKit without changing FLIMKit itself: a Tools menu entry, a button in the ROI panel, a file format, a phasor filter, or a service that starts with the app. FLIMKit's own tools are registered the same way, so turning plugins off entirely also empties the Tools menu.
 
-A plugin is a Python module that decorates a function:
+These add-ons are maintained alongside FLIMKit, each with its own page:
+
+| Add-on | Package | What it adds | Page |
+|---|---|---|---|
+| FLIMKit bridge | `flimkit-bridge` | A local HTTP server that QuPath and Fiji talk to, plus a headless `flimkit-bridge` command | [FLIMKit Bridge](#flimkit-bridge) |
+| QuPath extension | a jar for QuPath | Images, ROIs, fits and a phasor window inside QuPath | [QuPath Bridge](#qupath-bridge) |
+| Fiji plugin | a jar from the FLIMKit-Bridge update site | The same exchange for Fiji's ROI Manager | [Fiji Bridge](#fiji-bridge) |
+| Z-stack explorer | `flimkit-zstack-explorer` | A 3D point-cloud viewer of a z-stack's intensity and lifetime | [Z-stack Explorer](#z-stack-explorer) |
+| Web UI | `flimkit-web-ui` | Every desktop mode in a browser page | [Web UI](#web-ui) |
+| MuFLE unmixing | `flimkit-mufle` | Spectral-temporal unmixing of multi-channel decays | [Spectral Unmixing (MuFLE)](#spectral-unmixing-mufle) |
+
+[Writing Your Own Plugin](#writing-your-own-plugin) covers the hooks, and [Plugin Troubleshooting](#plugin-troubleshooting) covers what to do when one does not show up or fails.
+
+With all of them installed, plus the two examples from `examples/plugins/`, the Tools menu looks like this. Unmixing, Batch Processing and Add-on Demo are submenus.
+
+![Tools menu with every add-on installed](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/01_tools_menu.jpg)
+
+### Installing add-ons
+
+There are three routes, and which one to use depends on how you run FLIMKit.
+
+- **From source or pip**: `pip install` the package into the same environment FLIMKit runs from. It declares a `flimkit.plugins` entry point and registers on the next start. A package installed into another environment, or with a different `pip`, installs cleanly and is never seen.
+- **Compiled app**: the app has no `pip`, so download the add-on's `.whl` from its releases and drop it into `~/.flimkit/plugins/`. The wheel has to be pure Python (`py3-none-any`), and its dependencies have to be ones the app already bundles (`numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile`, `zarr` and tkinter). The z-stack explorer's viewer needs PyVista, which the app does not bundle, so it only works from source.
+- **A single script**: put the `.py` file, or a folder with an `__init__.py`, in `~/.flimkit/plugins/`. FLIMKit does not load from that folder until you enable it (below).
+
+QuPath and Fiji need their own half as well, a jar on their side. Their pages say where it goes.
+
+### Checking what loaded
+
+`Help > Plugins...` lists every plugin that loaded, how many things it registered, and anything that failed, with the reason. The checkboxes decide what loads on the next start.
+
+![Help > Plugins](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/02_help_plugins.jpg)
+
+Names starting `plugins:` came from an installed package's entry point. A path means a file in a plugin folder. `core_tools` is FLIMKit's own Tools menu.
+
+This window reports import failures. A plugin that imports fine but fails when it starts (a server that cannot get its port, say) is listed as loaded, and the failure is printed in the Progress log instead. See [Plugin Troubleshooting](#plugin-troubleshooting).
+
+### Plugin preferences
+
+`File > Preferences... > Plugins` holds the three settings that decide what gets loaded. They take effect on the next start.
+
+![Preferences, Plugins tab](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/03_prefs_plugins.jpg)
+
+| Setting | Config key | Default | What it does |
+|---|---|---|---|
+| Load plugins at startup | `plugins.enabled` | `true` | Off skips everything, built-ins included, the same as `--no-plugins` |
+| Load from `~/.flimkit/plugins` | `plugins.allow_user_plugins` | `false` | The switch for the user folder. If the folder already has files the first time FLIMKit starts, you get asked once |
+| Extra plugin folders | `plugins.paths` | empty | More folders to scan, loaded without the user-folder switch since adding one is already a deliberate choice |
+
+Loading order is built-ins, then installed packages, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH`, then `plugins.paths`. Ids have to be unique across all of them and the first registration wins, so a later plugin cannot take over an earlier one's menu entry.
+
+### Turning one off
+
+Untick it in `Help > Plugins...`. That adds it to `plugins.disabled` in `~/.flimkit/config.json` and it stops loading on the next start. Built-ins can be turned off the same way.
+
+From the command line:
+
+```bash
+python main.py --no-plugins              # load nothing, built-ins included
+python main.py --plugins /path/to/dir    # extra folder, repeatable
+```
+
+`--no-plugins` is the same switch as `FLIMKIT_NO_PLUGINS=1`, which gives a reproducible baseline for a published analysis.
+
+### Trust
+
+A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.
+
+---
+
+## FLIMKit Bridge
+
+[flimkit-bridge](https://github.com/FLIMKit/flimkit-bridge) is a small HTTP server that runs inside FLIMKit and lets other programs use it. The [QuPath extension](#qupath-bridge) and the [Fiji plugin](#fiji-bridge) are both clients of it, so there is one server, one port and one place a fix has to land. It serves the images and ROIs FLIMKit has open, and runs FLIMKit's fits, phasor, tile stitching and z-stack pipelines on request.
+
+The wire protocol was designed and first implemented in flimkit-fiji-bridge by Zhen Yuan Yeo ([10.5281/zenodo.21951612](https://doi.org/10.5281/zenodo.21951612)).
+
+### Installing the bridge
+
+```bash
+pip install flimkit-bridge
+```
+
+into the environment FLIMKit runs from. Nothing else is needed on the Python side. `zarr` and `ome-zarr` come with it, since z-stack results are returned as OME-Zarr.
+
+### Using the bridge
+
+The server starts with FLIMKit. The Progress log shows where:
+
+```
+[FLIMKit bridge] listening on http://127.0.0.1:8765
+[FLIMKit bridge] details written to /Users/you/.flimkit/bridge.json
+```
+
+`Tools > FLIMKit Bridge...` shows the address, whether a viewer has connected, and where the pairing file is.
+
+![Tools > FLIMKit Bridge...](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/04_bridge_dialog.jpg)
+
+Pairing is automatic. The server writes its address and a freshly generated token to `~/.flimkit/bridge.json`, and QuPath and Fiji read that file when you choose Connect, so there is nothing to type in. Each start mints a new token, and the clients re-read the file before every call, so restarting FLIMKit does not break a connection.
+
+It also writes `~/.flimkit/qupath-bridge.json` with the same address, for QuPath extensions built before the server moved out. That second file goes once those versions are retired.
+
+If port 8765 is taken, the bridge picks a free one and records it in the same file. To pin a different port, set it in `~/.flimkit/config.json`:
+
+```json
+{
+  "plugin:flimkit_bridge": {"port": 8770}
+}
+```
+
+The ROI panel gains a **Send to a viewer** button. It checks that a viewer has connected and that there is something fitted to send, then tells you which images are being served and what to choose in QuPath to fetch them.
+
+### Without the FLIMKit window
+
+`flimkit-bridge` runs the same server with no window and no display, which is what you want on a headless machine or when QuPath or Fiji is the only front end:
+
+```bash
+flimkit-bridge                 # 127.0.0.1:8765, or a free port if that is taken
+flimkit-bridge --port 9000
+flimkit-bridge --no-announce   # serve alongside another bridge, print the token instead
+flimkit-bridge --force         # take over from a bridge that was left running
+```
+
+It serves everything except the routes that read the open desktop session, since there is none. Opening files, fitting regions, the phasor, stitching and z-stacks work the same either way. Note that `flimkit` is the desktop app and always opens a window; `flimkit-bridge` is the headless one.
+
+It refuses to start while another bridge is serving, because both would write the same pairing file and a client would pair with whichever wrote last.
+
+### What it serves
+
+| Route | Purpose |
+|---|---|
+| `GET /v1/status` | Protocol, bridge and FLIMKit versions. The only route that needs no token |
+| `/v1/datasets`, `/v1/datasets/{id}/...` | Open a file, list what is open, fetch planes and per-region statistics |
+| `/v1/images/...` | The current intensity (photons) and lifetime (ns) images as float32 TIFF |
+| `/v1/rois` | The Regions table as GeoJSON, in and out |
+| `/v1/fit/defaults`, `/v1/jobs/{id}` | Fit settings, and progress or cancellation of a running fit |
+| `/v1/phasor/settings` | What the phasor window can set: filters, including plugin ones, and IRF calibration |
+| `/v1/pipeline` | Stitch and fit a tiled `.lif`, `.xlif` or `.xlef` |
+| `/v1/zstack`, `/v1/zstack/scan`, `/v1/zstack/export` | Fit a folder of `region_zN.ptu` slices as one FOV, and rewrite a finished run as OME-Zarr or OME-TIFF |
+
+A client checks `protocol_version` in the status reply to decide whether the two can talk. `bridge_version` is for display: the server and each client are versioned independently, so a difference there is normal.
+
+### Bridge security
+
+The server listens on `127.0.0.1` only, and refuses any request whose `Host` header is not localhost, which stops a web page reaching it by resolving its own hostname to your machine. Every route except the status check needs the token.
+
+Both programs therefore have to be on the same machine. If they are not, forward the port over SSH rather than exposing it:
+
+```bash
+ssh -L 8765:127.0.0.1:8765 you@the-flimkit-machine
+```
+
+Over a forwarded port, paths the bridge returns mean nothing locally. For z-stacks, `GET /v1/zstack/volume.ome.tif` streams the finished volume instead, and QuPath falls back to it on its own.
+
+---
+
+## QuPath Bridge
+
+ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The [QuPath extension](https://github.com/FLIMKit/flimkit-qupath-bridge) removes that step: it talks to the [FLIMKit bridge](#flimkit-bridge), so QuPath reads and writes FLIMKit's images and ROIs directly, and can run FLIMKit's fits on the image you have open.
+
+It runs inside a live QuPath session rather than as a script, so it works with the image you have open and the annotations you have drawn.
+
+### Installing
+
+Two halves, one on each side.
+
+1. `pip install flimkit-bridge` into the environment FLIMKit runs in ([FLIMKit Bridge](#flimkit-bridge)).
+2. Put `qupath-extension-flimkit-bridge-*.jar` in QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`. Alternatively, in `Extensions > Manage extensions`, add `https://github.com/FLIMKit/flimkit-qupath-bridge` as a catalog and QuPath installs it and offers each new release.
+
+`pip install flimkit-qupath-bridge` used to be step 1 and still works, but that package is being sunset. It is a shim that re-exports `flimkit-bridge`, warns on import, and is removed in 0.7.0.
+
+QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer.
+
+### Using it
+
+Everything is under `Extensions > FLIMKit bridge`:
+
+![QuPath Extensions > FLIMKit bridge](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/05_qupath_menu.jpg)
+
+| Command | What it does |
+|---|---|
+| Connect | Pair with the running FLIMKit, or a headless `flimkit-bridge`, by reading `~/.flimkit/bridge.json`. A notice confirms the address |
+| Connect to a different address... | For a bridge whose pairing file QuPath cannot read, such as one in a container or at the far end of an SSH tunnel |
+| Add FLIMKit images to project | Puts FLIMKit's intensity and lifetime maps into the open project in real units, intensity as 16-bit photon counts when they fit and lifetime as 32-bit float in ns, so they sit beside a brightfield or mIF image |
+| Stitch and fit a mosaic... | Runs FLIMKit's tile pipeline on a `.lif`, `.xlif` or `.xlef` and adds the maps to the project |
+| Fit a z-stack... | Fits a folder of `region_zN.ptu` slices as one FOV and opens the result as an OME-Zarr z-stack |
+| Fit ROI decays... | Fits the decay summed over each annotation |
+| Fit per-pixel lifetimes... | Per-pixel fit of the open FLIM image, added to the project as one image with a channel per map |
+| Phasor plot... | Opens the phasor window for the image in view |
+| Send annotations to FLIMKit | Posts the annotations on the current image to FLIMKit's Regions table |
+| Fetch ROIs from FLIMKit | Pulls FLIMKit's regions in as annotations |
+| Reconnect this project to FLIMKit | After FLIMKit restarts, reopens on the FLIMKit side every file this project recorded |
+
+QuPath also opens FLIM files itself. Opening or dropping a `.ptu` makes QuPath ask the bridge whether FLIMKit recognises it, so the file opens through FLIMKit without connecting first. Pass `-Dflimkit.bridge.imageserver=false` to QuPath to turn that off.
+
+From FLIMKit, the **Send to a viewer** button in the ROI panel reports whether QuPath has connected and what is being served.
+
+### The phasor window
+
+`Phasor plot...` draws the same density plot the desktop app does, for whichever time-domain file QuPath has open. The header gives the laser frequency and the binning the phasor was computed at. This is `Ado_1.ptu` with the machine IRF calibration applied:
+
+![QuPath phasor window](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/06_qupath_phasor.jpg)
+
+Click on the plot to place an elliptical cursor and drag to move one. Each cursor reports its pixel count, phase and modulation lifetimes (`tau_phi`, `tau_m`), and six is the limit because that is how many colours the palette has. **Remove selected** deletes the cursor highlighted in the list.
+
+**Draw region** switches the plot to tracing. Drag to draw an outline and it becomes a cursor when you let go, so a population that is not an ellipse can still be selected. The outline goes to FLIMKit as a polygon in G and S, points closer than three pixels apart are dropped, and fewer than three points is not a region. Drawn regions cannot be dragged afterwards; remove and redraw instead.
+
+**Create annotations** turns the cursors into QuPath annotations, one per cursor, classified as `Phasor` and carrying the same measurements the list shows. The phasor is computed on binned pixels, so the outlines are traced at that resolution and scaled back to full-resolution image coordinates.
+
+**Settings...** picks the filter and the calibration:
+
+![QuPath phasor settings](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/07_qupath_phasor_settings.jpg)
+
+| Setting | Values | What it does |
+|---|---|---|
+| Phasor filter | `none`, `gaussian`, `median`, `wavelet`, plus anything a plugin registers | Spatial smoothing of G and S. The screenshot shows `demo_passthrough`, registered by `examples/plugins/demo_plugin.py` |
+| IRF calibration | `none`, or a machine IRF `.npy` picked with Choose... | Rotates and scales the phasor onto the calibrated frame |
+| Gaussian sigma (px) | 0.1 to 10, under Show advanced settings | Width of the gaussian kernel |
+| Median window (px) | 3 to 15, under Show advanced settings | Size of the median window |
+
+Calibration runs before filtering, the same order the desktop app and `phasor_cli.py` use, so the same file gives the same coordinates whichever front end you drive it from.
+
+Nothing is calibrated by default. Without calibration the cloud sits off the semicircle, which is still useful for comparing populations within one image, but the absolute lifetimes it reports are not. A machine IRF describes one microscope, so you have to build your own under `Tools > Machine IRF Builder` ([Machine IRF Setup](#machine-irf-setup-required)).
+
+Changing a setting recomputes the phasor. The bridge caches per dataset and per setting, so switching back to a combination you have already looked at is immediate.
+
+### Stitching and z-stacks from QuPath
+
+`Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side. The tiles do not have to sit beside it: the bridge looks in the folder you name, beside the container, and in the folders next to it, which is where Leica puts them.
+
+The **Pipeline** setting picks how. `tile_fit`, the default, fits each tile after a global summed fit and assembles the maps. `stitch_fit` stitches the raw photons into one canvas and fits that, which means writing the whole photon cube to disk first: 124 tiles at 512 square make a 5581 square canvas, which is 57 GB at 459 bins. Pick `stitch_fit` when you want the stitched photon cube itself, and `tile_fit` otherwise.
+
+`Fit a z-stack...` asks for a folder of slices, says how many stacks and slices it found before offering any settings, and then fits each stack as one FOV: the decay is pooled over every slice, the lifetimes are fitted once and locked, and each slice gets a per-pixel fit with only the amplitudes free. The result opens in QuPath as a real z-stack, one OME-Zarr store per stack with a channel per map (intensity, `tau_mean_int`, `tau_mean_amp`, an `alpha_N` per component). `ome-tiff` is the other output choice, for a viewer that will not read the store.
+
+### Co-registration
+
+FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on another image has to be transformed into that space first. That happens on the QuPath side.
+
+This needs QuPath's [alignment extension](https://github.com/qupath/qupath-extension-align), which QuPath does not ship and which has to be installed separately. The bridge deliberately contains no alignment code of its own.
+
+Align on the intensity image rather than the lifetime map. The alignment extension cannot render 32-bit float and throws rather than declining, and the lifetime map has to be float to carry nanoseconds. Photon counts are whole numbers, so intensity crosses as 16-bit whenever that is lossless, which the extension opens without complaint. The transform is valid for the lifetime map as well, since every image of that field shares one pixel grid.
+
+1. Open the brightfield or mIF image and add the FLIMKit images to the same project.
+2. Align the brightfield against the intensity image and transfer the annotations onto it.
+3. Send the annotations on the aligned image to FLIMKit.
+
+Without the alignment extension you can still exchange images and ROIs, but only between images that already share a coordinate system.
+
+---
+
+## Fiji Bridge
+
+The [Fiji plugin](https://github.com/FLIMKit/flimkit-fiji-bridge) is the other client of the [FLIMKit bridge](#flimkit-bridge). It moves images and ROIs between FLIMKit and Fiji's ROI Manager, and runs FLIMKit's fits from Fiji. It was written by Zhen Yuan Yeo ([10.5281/zenodo.21951612](https://doi.org/10.5281/zenodo.21951612)).
+
+### Installing the Fiji plugin
+
+Two things, and the plugin does nothing without both.
+
+1. `pip install flimkit-bridge` into the environment FLIMKit runs from.
+2. In Fiji, `Help > Update...`, then `Manage update sites`. Tick **FLIMKit-Bridge**, or if it is not listed, `Add unlisted site` with the name `FLIMKit-Bridge` and the URL `https://sites.imagej.net/FLIMKit-Bridge/`. `Apply changes` and restart Fiji.
+
+The updater keeps it current, so that is the route to prefer. Failing that, put `flimkit-fiji-bridge-<version>.jar` from the [releases](https://github.com/FLIMKit/flimkit-fiji-bridge/releases) into Fiji's `plugins/jars/` folder, which is where the update site puts it.
+
+Fiji 2.16 or newer is required, with its bundled JDK 21. An older Fiji fails to load the plugin with `UnsupportedClassVersionError`, or `Module javafx.base not found`, and neither message says to upgrade Fiji.
+
+### Using the Fiji plugin
+
+Ten commands appear under `Plugins > FLIMKit`:
+
+![Fiji Plugins > FLIMKit](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/08_fiji_menu.jpg)
+
+| Command | What it does |
+|---|---|
+| Connect | Pair with the running FLIMKit or a headless `flimkit-bridge` |
+| Fetch FLIMKit images | Pull the current intensity and lifetime images, with their units in the calibration |
+| Fetch ROIs from FLIMKit | Load FLIMKit's Regions table into the ROI Manager |
+| Fit ROI decays... | Fit the decay summed over each ROI |
+| Fit a z-stack... | Fit a folder of `region_zN.ptu` slices as one FOV |
+| Fit per-pixel lifetimes... | Run a per-pixel fit and return the maps |
+| Open FLIM file... | Open `.ptu`, `.sdt`, `.photons` and the other formats FLIMKit reads |
+| Phasor plot... | An interactive phasor window |
+| Send ROIs to FLIMKit | Push the ROI Manager contents back as GeoJSON |
+| Stitch and fit a mosaic... | Stitch a multi-position acquisition and fit it |
+
+`File > Open` handles the FLIM formats directly too.
+
+Connect reports the bridge and FLIMKit versions it found:
+
+![Fiji connected](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/09_fiji_connected.jpg)
+
+`Fetch FLIMKit images` opens two windows, `FLIMKit intensity` (16-bit photon counts) and `FLIMKit lifetime` (32-bit, ns). This is the Series008 z-stack from [Step 14](#step-14-fit-a-z-stack) with the `mpl-viridis` lookup table applied in Fiji:
+
+![Lifetime image fetched into Fiji](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/10_fiji_lifetime.jpg)
+
+Only fitted lifetime and photon-count intensity cross. Raw per-pixel decay histograms do not; that would need a separate data and metadata contract. Fiji rejects ROIs from an image of different dimensions rather than silently rescaling them, and registration stays a Fiji-side job.
+
+---
+
+## Z-stack Explorer
+
+[flimkit-zstack-explorer](https://github.com/FLIMKit/flimkit-zstack-explorer) takes a z-stack loaded in FLIMKit, stacks its per-slice intensity and lifetime maps into two volumes, saves them as one OME-Zarr store, and opens a 3D viewer with the two side by side.
+
+### Installing the explorer
+
+```bash
+pip install 'flimkit-zstack-explorer[gui]'
+```
+
+Quote it: in zsh, the macOS default shell, an unquoted `[gui]` is a glob and the command fails with "no matches found". `[gui]` adds PyVista, which draws the 3D view. Without it the volume is still built and saved, and the viewer step tells you what is missing. Check the install from the terminal you start FLIMKit from:
+
+```bash
+python -c "import flimkit_zstack_explorer, pyvista; print('ok')"
+```
+
+### Using the explorer
+
+1. Load a z-stack in Single FOV Fit with Analysis set to Z-stack, and fit it, or pick a Z row in a project folder that already has a fit ([Step 14](#step-14-fit-a-z-stack)).
+2. `Tools > 3D Z-stack Explorer...` asks where to save the store (`zstack_volume.zarr` by default) and opens the viewer when it is written. A store already at that path is overwritten.
+
+![3D Z-stack Explorer](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/11_zstack_explorer.jpg)
+
+This is the Series008 stack, 8 slices. Intensity is on the left and lifetime on the right, and the two cameras are linked, so dragging either rotates both. Scrolling zooms.
+
+- Each voxel with data is one point. A voxel with no photons or no per-pixel fit has no point at all, which is why the lifetime pane only shows the fitted cells. This is deliberately not volume rendering: a volume renderer resamples onto a dense grid and fills isolated gaps from their neighbours, which would draw lifetimes where nothing was fitted.
+- Intensity is clipped at its 99th percentile, the same clip the 2D view uses, so a few hot pixels do not wash out the scale.
+- **lifetime min (ns)** and **lifetime max (ns)** set the colour range, starting at the 2nd and 98th percentiles like the Auto button in the 2D view. The third slider picks the colormap from the same set as the 2D FLIM view.
+
+The volumes are built from the preview panel's own display code, the same path the z-slider uses, so each slice matches what the 2D view shows for it.
+
+`Tools > Open Saved 3D Volume...` reopens a `.zarr` store from an earlier run without a z-stack loaded. Outside FLIMKit:
+
+```bash
+python -m flimkit_zstack_explorer.viewer --zarr zstack_volume.zarr
+```
+
+The store has two channels, intensity and lifetime in ns (NaN where a slice had no per-pixel fit), so it also opens in anything else that reads OME-Zarr.
+
+The viewer runs as its own process. FLIMKit's window is Tk and PyVista's is VTK, and on macOS both expect to own the main thread, so they are kept apart.
+
+---
+
+## Web UI
+
+[flimkit-web-ui](https://github.com/FLIMKit/flimkit-web-ui) puts every desktop mode in a browser page: Single FOV with ROI analysis, Tile Stitch, Phasor, Batch and the Machine IRF builder, plus the project browser, synthetic data, preferences and the plugin list.
+
+It is not a second copy of the app. The page drives the desktop window's own form and presses its own buttons, so a fit started from the browser runs through exactly the same code as one started on the desktop, and the two stay in sync.
+
+### Installing the web UI
+
+```bash
+pip install flimkit-web-ui
+```
+
+into the environment FLIMKit runs from. On the next start the server comes up with FLIMKit, the Progress log says where, and `Tools > Open Web UI` opens it in your browser:
+
+![Startup log with the bridge and the web UI](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/21_startup_log.jpg)
+
+### Using the web UI
+
+The page opens on Single FOV, laid out like the desktop form:
+
+![Web UI, Single FOV](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/12_webui_fov.jpg)
+
+Here is the Phasor tab after loading `Ado_1.ptu`. The desktop window behind it shows the same file and settings:
+
+![Web UI, Phasor](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/13_webui_phasor.jpg)
+
+Things to know:
+
+- **One app, shared state.** Several tabs or people can open the page, but they all control the same form and the same results, and the last edit wins. Only one fit runs at a time.
+- **Files are on the FLIMKit machine.** The Browse buttons list folders on the computer FLIMKit runs on, not the one the browser is on. Anything the desktop would save through a dialog is written to the path you give or downloaded by the browser.
+- **Dialogs move to the page while you use it.** While a page is open and has been used in the last 30 minutes, FLIMKit's pop-ups (errors, missing input, channel and frequency prompts) appear as notices in the page instead of blocking the desktop. Close the tab and the desktop behaves normally again.
+- **Progress windows still appear on the desktop.** The page mirrors their progress and can cancel them.
+
+### Port and password
+
+The address comes from `~/.flimkit/config.json`:
+
+```json
+{
+  "plugin:web_ui": {"host": "127.0.0.1", "port": 8766}
+}
+```
+
+The default is 8766, since 8765 belongs to the [FLIMKit bridge](#flimkit-bridge). If 8766 is taken, the web UI moves to a free port and logs it, and `Tools > Open Web UI` opens wherever it ended up. A port you set here or in `FLIMKIT_WEB_PORT` is used as given, and a clash there is an error rather than a quiet move. Web UI 0.1.0 defaulted to 8765 and had no fallback, so with the bridge installed it failed to start until given another port.
+
+By default the server listens on `127.0.0.1` only and has no password. Anyone who can reach it can browse your files and run FLIMKit, so set a password before exposing it to any network. For a server or container, environment variables override the config:
+
+| Variable | Effect |
+|---|---|
+| `FLIMKIT_WEB_HOST` | Address to listen on, for example `0.0.0.0` inside a container |
+| `FLIMKIT_WEB_PORT` | Port to listen on |
+| `FLIMKIT_WEB_PASSWORD` | Require HTTP Basic authentication for every page and API call |
+| `FLIMKIT_WEB_USER` | The user name for that login, `flimkit` by default |
+| `FLIMKIT_WEB_HEADLESS` | Set to `1` when nobody can see the desktop, so every dialog goes to the page instead of waiting on an invisible window |
+
+FLIMKit still needs an X display to start its window, so run it under Xvfb on a server. `GET /healthz` answers `ok` without a password once the server is up, for container health checks. The FLIMKit Docker images are set up this way.
+
+---
+
+## Spectral Unmixing (MuFLE)
+
+[flimkit-mufle](https://github.com/FLIMKit/flimkit-mufle) unmixes multi-channel time-resolved emission, in the style of MuFLE (Adams et al., IEEE TBME 2023; Biomed. Opt. Express 17(4):2176, 2026). It fits a stack of decays, one per wavelength channel, with a small number of components, each an emission spectrum times a single-exponential lifetime, and returns the spectra and lifetimes.
+
+Each spectrum is a smooth cubic B-spline over wavelength. The lifetimes are fitted by non-linear least squares with the IRF reconvolved, and the spectral amplitudes are solved by non-negative least squares inside each step, so spectra come out non-negative without extra constraints. Poisson weighting is used throughout.
+
+### Installing MuFLE
+
+```bash
+pip install flimkit-mufle
+```
+
+into the environment FLIMKit runs from. It appears under `Tools > Unmixing` on the next start.
+
+![Tools > Unmixing](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/14_unmixing_menu.jpg)
+
+### Using MuFLE
+
+**Synthetic Unmixing Demo** generates two components with known answers, fits them and shows the result, so you can check it works without a file:
+
+![MuFLE synthetic demo](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/15_mufle_demo.jpg)
+
+The fitted spectra are the solid lines, the truth is dashed. It recovered 0.500 ns and 3.010 ns against a truth of 0.500 ns and 3.000 ns, with reduced χ² 1.041. The abundances are each component's share of the total signal.
+
+**Spectral-Temporal Unmixing...** picks a multi-channel file, asks how many components, fits and shows the same window. It needs a file with one detection channel per wavelength band; a single-channel `.ptu` such as `Ado_1.ptu` has nothing to unmix.
+
+From code:
+
+```python
+from flimkit_mufle import unmixFile
+
+result = unmixFile('scan.ptu', n_components=2)
+print(result['taus'], result['chi2_reduced'])
+```
+
+`fitMufle(data, wavelengths, tcspc_res, irf, n_components)` is the core and returns `taus`, `spectra`, `amplitudes`, `background`, `model`, `residual` and `chi2_reduced`.
+
+### MuFLE limits
+
+- Channel numbering follows the reader: PTU channels start at 0, Becker & Hickl at 1. Pass `channels=` if the defaults pick the wrong ones.
+- The IRF for a real file is currently a Gaussian placeholder, not FLIMKit's machine or measured IRF.
+- Wavelength calibration is not read from file metadata yet, so the channel index is used as the axis.
+- It fits one summed spectrum at a time, for a whole field or an ROI. Per-pixel maps would need the GPU path.
+
+---
+
+## Writing Your Own Plugin
+
+A plugin is a Python module that decorates functions with the hooks in `flimkit.plugins`. FLIMKit's own tools are registered the same way (`flimkit/plugins/builtin/`), so the file a contributor writes is the file a third party writes.
+
+### A first plugin
+
+This is `examples/plugins/hello_tool.py`, a Tools menu entry that opens a message box:
 
 ```python
 from flimkit.plugins import tool
 
 FLIMKIT_PLUGIN_API = 1
+
 
 @tool(id='hello_example', label='Hello Plugin...', menu='Tools', order=900)
 def open_hello(app):
@@ -1204,23 +2042,50 @@ def open_hello(app):
     messagebox.showinfo('Hello', 'This window came from an add-on, not from FLIMKit.')
 ```
 
-`id` has to be unique across everything loaded. `menu` is a slash path, so `'Tools/Batch Processing'` nests one level down and any depth works. `order` sorts entries within a menu, low first, ties broken by label. The function is called with the GUI object, and `app.root` is the Tk parent to hang a window off. Keep the tkinter import inside the body so the module still imports on a headless machine.
+To try it:
 
-Declare `FLIMKIT_PLUGIN_API` to match `flimkit.plugins.API_VERSION`. A mismatch is refused rather than half-loaded.
+1. Copy it into `~/.flimkit/plugins/`. Create the folder if it is not there; FLIMKit never creates it.
+2. Tick `Load from ~/.flimkit/plugins` in `File > Preferences... > Plugins` ([Plugin preferences](#plugin-preferences)).
+3. Restart FLIMKit. `Tools > Hello Plugin...` is at the bottom of the menu, and `Help > Plugins...` lists `hello_tool.py (1 registration(s))`.
 
-The registrations that ship with FLIMKit live in `flimkit/plugins/builtin/` and are listed in `BUILTIN`. A working example is in `examples/plugins/hello_tool.py`.
+What each part does:
+
+- `FLIMKIT_PLUGIN_API` declares the plugin API the file was written against, currently 1. A plugin declaring another version is refused rather than half-loaded. Leaving it out means "whatever this FLIMKit provides", so declare it.
+- `id` has to be unique across everything loaded, and the first registration of an id wins.
+- `menu` is a slash path, so `'Tools/Batch Processing'` nests one level down, and any depth works.
+- `order` sorts entries within a menu, low first, ties broken by label. FLIMKit's own entries use 10 to 130 and the add-ons above use 500 to 900.
+- The function receives the GUI object. `app.root` is the Tk window to parent your own windows to.
+- Keep the tkinter import inside the function, so the module still imports on a headless machine where the bridge or the tests load it.
+
+### A fuller example
+
+`examples/plugins/demo_plugin.py` uses most of the hooks at once: two Tools entries, a nested submenu, a file format, a sniffer, a phasor filter and its own settings. Copy it next to `hello_tool.py` and restart.
+
+`Tools > Add-on Self Test...` opens a window listing everything registered, by whom, and the load report:
+
+![Add-on Self Test](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/16_selftest.jpg)
+
+`menu='Tools/Add-on Demo'` is enough for FLIMKit to build the submenu:
+
+![Nested menu](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/17_nested_menu.jpg)
+
+and its `@phasor_filter` shows up in the Phasor Analysis filter list, after the three built-in filters:
+
+![Plugin filter in the phasor filter list](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/18_phasor_filter_dropdown.jpg)
+
+The same filter is offered in QuPath's phasor settings ([QuPath Bridge](#the-phasor-window)) and in the web UI's Phasor tab, since both ask FLIMKit for the list.
+
+`Break On Purpose...` raises inside its callback, to show what a failing plugin looks like. FLIMKit keeps running and reports which plugin failed:
+
+![A plugin tool raising](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/19_tool_error.jpg)
 
 ### Current images and ROIs
 
-Plugins can exchange the images and regions currently shown by FLIMKit without reading private GUI fields:
+Plugins can read the images and regions FLIMKit is showing without reaching into private GUI fields:
 
 ```python
-from flimkit.plugins import (
-    export_rois_geojson,
-    get_current_images,
-    import_rois_geojson,
-    tool,
-)
+from flimkit.plugins import export_rois_geojson, get_current_images, import_rois_geojson, tool
+
 
 @tool(id='bridge_example', label='Bridge Example...', menu='Tools', order=900)
 def open_bridge(app):
@@ -1228,33 +2093,27 @@ def open_bridge(app):
     intensity = current['images'].get('intensity')
     lifetime = current['images'].get('lifetime')
     lifetime_unit = current['units'].get('lifetime')
-
     rois = export_rois_geojson(app)
     imported_ids = import_rois_geojson(app, rois, mode='append')
 ```
 
-`get_current_images(app)` returns separate `images` and `units` dictionaries so metadata cannot collide with an image name. The available image names are `intensity` and `lifetime`; their units are `photons` and `ns`, respectively. Arrays are 2D copies. Intensity maps with trailing dimensions are reduced to 2D by summing those axes; lifetime maps must already be 2D. An image that has not been calculated is omitted from both dictionaries. Changing a returned array does not change the image held by FLIMKit.
+`get_current_images(app)` returns separate `images` and `units` dictionaries so metadata cannot collide with an image name. The image names are `intensity` and `lifetime`, in `photons` and `ns`. Arrays are 2D copies: intensity maps with trailing dimensions are summed down to 2D, and lifetime maps must already be 2D. An image that has not been calculated is left out of both dictionaries, and changing a returned array does not change FLIMKit's.
 
-This binding is limited to fitted lifetime and photon-count intensity images. Raw per-pixel decay histograms are not included. They require a separate transfer and metadata contract for the time-bin width, repetition rate and instrument response function.
+Raw per-pixel decay histograms are not included. They need a separate transfer and metadata contract for the bin width, repetition rate and IRF.
 
-`export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order with the origin at the top-left. Fractional coordinates are preserved. ROI measurements are stored once under each feature's `statistics` property; import also accepts older payloads with flattened statistic fields. Rectangles and ellipses include their exact FLIMKit bounds in the feature properties; ellipse geometry is also represented by a 64-point polygon for other programs.
+`export_rois_geojson(app)` returns a GeoJSON `FeatureCollection`. Coordinates are image pixels in `[x, y]` order from the top-left, and fractional coordinates are kept. ROI measurements are stored once under each feature's `statistics` property. Rectangles and ellipses carry their exact FLIMKit bounds in the properties, and ellipses are also drawn as a 64-point polygon for other programs.
 
-`import_rois_geojson(app, payload, mode='append')` accepts a GeoJSON `Feature` or `FeatureCollection` and returns the new FLIMKit region IDs. A plain GeoJSON polygon without FLIMKit properties becomes a polygon ROI, which is the normal path for data from Fiji. `mode='replace'` validates the whole payload before clearing existing regions. Invalid or unsupported geometry raises `ValueError` without partly importing the payload.
+`import_rois_geojson(app, payload, mode='append')` accepts a `Feature` or `FeatureCollection` and returns the new region ids. A plain polygon without FLIMKit properties becomes a polygon ROI, which is the normal path for data from Fiji. `mode='replace'` validates the whole payload before clearing the existing regions, and invalid geometry raises `ValueError` without importing anything.
 
-These functions may be called from a plugin's background thread. FLIMKit moves access to its GUI thread and blocks the calling thread until the GUI operation completes or raises an error. Plugin callers that need cancellation should manage it outside these synchronous bindings.
-
-Loading order is built-ins, then installed packages that declare a `flimkit.plugins` entry point, then `~/.flimkit/plugins`, then `FLIMKIT_PLUGIN_PATH` and the folders in `plugins.paths`. Ids have to be unique across all of them, and the first registration of an id wins, so a later plugin cannot take an id off an earlier one.
-
-Loading is isolated per plugin. If one raises on import, its registrations are rolled back, the traceback is kept in `flimkit.plugins.load_report()`, and the rest still load. A plugin that calls `sys.exit()` cannot take the app down with it.
-
-`FLIMKIT_NO_PLUGINS=1` skips loading entirely, which gives a reproducible baseline for a published analysis.
+These can be called from a background thread. FLIMKit moves the work to its GUI thread and blocks the caller until it finishes or raises.
 
 ### File formats
 
-A reader class registers with `@file_format`, and FLIMKit's own readers keep working exactly as they did:
+A reader class registers with `@file_format`, and FLIMKit's own readers keep working as they did:
 
 ```python
 from flimkit.plugins import file_format
+
 
 @file_format(id='mine', label='My Format', exts=('.mine',), modality='time')
 class MyReader:
@@ -1262,14 +2121,13 @@ class MyReader:
         ...
 ```
 
-`modality` is `time`, `frequency` or `intensity`, and it is what `file_modality()` reports. The extension then works everywhere a path is accepted, including `FLIMFile(path)` and the file dialogs.
+`modality` is `time`, `frequency` or `intensity`, and it is what `file_modality()` reports. The extension then works everywhere a path is accepted, including `FLIMFile(path)` and the file dialogs. A built-in extension always wins, so registering `.ptu` does not take `.ptu` away from the PicoQuant reader.
 
-A built-in extension always wins. Registering `.ptu` does not take `.ptu` away from the PicoQuant reader.
-
-For a format that has no extension of its own, register a sniffer:
+For a format with no extension of its own, register a sniffer:
 
 ```python
 from flimkit.plugins import format_sniffer
+
 
 @format_sniffer(tier='magic')
 def sniff(path):
@@ -1279,67 +2137,50 @@ def sniff(path):
     return None
 ```
 
-`tier='magic'` runs after the built-in extension table and the built-in magic-byte checks, which is the safe place. `tier='extension'` runs before the extension table and can therefore take a file away from a built-in reader, so use it only for a format that genuinely shares an extension with something else. A sniffer that raises is reported and skipped.
+`tier='magic'` runs after the built-in extension table and magic-byte checks, which is the safe place. `tier='extension'` runs before the extension table and can take a file away from a built-in reader, so use it only for a format that genuinely shares an extension with something else. A sniffer that raises is reported and skipped.
 
 ### Phasor filters
 
 ```python
 from flimkit.plugins import phasor_filter
 
+
 @phasor_filter(id='mine', label='My Filter')
 def mine(real, imag, sigma=1.0):
     return real, imag
 ```
 
-The filter is then usable anywhere the `gaussian`, `median` and `wavelet` methods are, and `flimkit.phasor.filters.phasor_filter_methods()` lists it. Only the keyword arguments your function declares get passed to it. The three built-in methods cannot be overridden.
+The filter is then usable anywhere `gaussian`, `median` and `wavelet` are: the Phasor Analysis filter list, saved phasor sessions, the bridge, and `flimkit.phasor.filters.phasor_filter_methods()`. Only the keyword arguments your function declares are passed to it, out of `mean`, `sigma`, `size`, `wavelet`, `level` and `threshold_mode`. If it declares `sigma` or `size`, the Phasor Analysis panel shows that box when your filter is selected. The three built-in methods cannot be overridden.
 
 ### Running at startup
 
-A plugin that needs to be doing something from the moment FLIMKit opens, rather than waiting for a menu click, registers a startup callback:
+A plugin that needs to be doing something from the moment FLIMKit opens registers a startup callback:
 
 ```python
 from flimkit.plugins import startup
+
 
 @startup('my_server', order=200)
 def start(app):
     ...
 ```
 
-The callback runs once, with the GUI object, after the window is built. `order` sorts them low first. A startup that raises is reported on the console and the remaining ones still run, so a broken plugin cannot stop FLIMKit opening.
+It runs once, with the GUI object, after the window is built, lowest `order` first. A startup that raises is printed in the Progress log and the rest still run, so a broken plugin cannot stop FLIMKit opening.
 
-Do not block in a startup callback. It runs on the UI thread before the window is handed to the user, so anything long-lived belongs on a daemon thread that the callback starts and returns from.
+Do not block here. It runs on the UI thread before the window is handed to the user, so anything long-lived belongs on a daemon thread that the callback starts and returns from.
 
 ### Buttons in the ROI panel
 
-Some actions belong beside the controls they relate to rather than in a menu. A plugin can add a button to the ROI panel's action grid:
-
 ```python
 from flimkit.plugins import panel_button
+
 
 @panel_button('send_somewhere', 'Send to Somewhere', panel='roi', order=200)
 def send(app):
     ...
 ```
 
-`panel` currently accepts `'roi'` only, and an unknown panel is refused at registration rather than ignored. Buttons appear under FLIMKit's own, three to a row, sorted by `order` then label. The callback receives the same GUI object a `@tool` callback does.
-
-`id` has to be unique across everything loaded, the same as tools. Registering an id twice is refused, and the error names the plugin that got there first.
-
-### Installing a plugin
-
-Put the `.py` file in `~/.flimkit/plugins/`. A folder with an `__init__.py` works too, if the plugin needs more than one file. Names starting with `_` or `.` are skipped, and the rest load in alphabetical order after the built-ins.
-
-FLIMKit never creates that folder and does not load from it until you say so. Open `Help > Plugins...` and press Enable, or set `plugins.allow_user_plugins` to `true` in `~/.flimkit/config.json`. If the folder already has files in it the first time you start FLIMKit, you get asked once. Enabling takes effect on the next start.
-
-`Help > Plugins...` lists what loaded, what failed and why, so a plugin that raises on import can be diagnosed without going near the log files.
-
-`FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned last. It is meant for development, and it is not covered by the enable setting: setting an environment variable is already a deliberate act.
-
-A wheel works in that folder too, which is the only way to install a packaged add-on into the compiled app, since it has no `pip`. Download the `.whl` from the add-on's releases, drop it in, and restart. FLIMKit puts it on the import path before it looks for entry points, so the add-on registers exactly as it would if it had been pip installed.
-
-Two limits on that route. The wheel has to be pure Python, tagged `py3-none-any`; one built for a specific platform cannot be imported from a zip and is refused with that reason rather than failing later. And its dependencies have to be ones FLIMKit already bundles, because there is nothing in the compiled app to fetch the rest with. `numpy`, `scipy`, `matplotlib`, `pandas`, `tifffile`, `zarr` and tkinter are there.
-
-Running from source, `pip install` is the better route and this is unnecessary.
+`panel` accepts `'roi'` only for now, and an unknown panel is refused at registration. Buttons appear under FLIMKit's own, three to a row, sorted by `order` then label, and the callback receives the same GUI object a `@tool` does. Ids have to be unique, the same as tools.
 
 ### Settings a plugin owns
 
@@ -1354,153 +2195,98 @@ threshold = cfg.get('threshold', 10)
 
 That writes to a `plugin:my_plugin` section of `~/.flimkit/config.json`, which FLIMKit itself never reads. A plugin cannot reach the `expert` or `preferences` sections through this, so it cannot change how the fitters behave behind your back.
 
+### Figures in a plugin window
+
+FLIMKit's dark theme sets matplotlib's text, label and tick colours to white for the whole process, and that includes your figures. A `Figure()` with the default white background then has invisible axes. Give the figure and axes a dark facecolor, as FLIMKit's own panels do:
+
+```python
+fig = Figure(figsize=(7, 4.5), dpi=100, facecolor='black')
+ax = fig.add_subplot(111, facecolor='black')
+```
+
 ### Shipping a plugin as a package
 
-A plugin that has dependencies of its own, or that you want people to install with `pip`, declares an entry point in its own `pyproject.toml`:
+A plugin with dependencies of its own, or one other people will install, declares an entry point in its `pyproject.toml`:
 
 ```toml
 [project.entry-points.'flimkit.plugins']
 my_plugin = 'my_plugin.register'
 ```
 
-The module named on the right is imported at startup, so put the decorated functions there. Installed packages load after the built-ins and before anything in `~/.flimkit/plugins`, and they are not gated by the user-folder switch, since `pip install` is already a deliberate act. They do respect the master switch and the per-plugin disable list, under the entry point name.
+The module on the right is imported at startup, so put the decorated functions there and keep its imports cheap. Installed packages load after the built-ins and before `~/.flimkit/plugins`, and are not gated by the user-folder switch, since `pip install` is already a deliberate act. They do respect the master switch and the disable list, under the entry point name.
 
-This is how a plugin distributed to other people should be shipped. The folder is for a script you wrote yourself.
+The frozen macOS and Windows builds cannot see entry points, since there is no site-packages. For them, publish a pure-Python wheel that people drop into `~/.flimkit/plugins/` ([Installing add-ons](#installing-add-ons)); FLIMKit puts it on the import path and reads its entry point as if it had been pip installed.
 
-The frozen macOS and Windows builds cannot see entry points at all, since there is no site-packages to look in. A plugin that has to work in the compiled app goes in the folder.
-
-### Preferences
-
-`File > Preferences...` has a Plugins tab with the three settings that decide what gets loaded:
-
-| Setting | Config key | Default |
-|---|---|---|
-| Load plugins at startup | `plugins.enabled` | `true` |
-| Load from `~/.flimkit/plugins` | `plugins.allow_user_plugins` | `false` |
-| Extra plugin folders | `plugins.paths` | empty |
-
-Turning the first one off skips everything, built-ins included, which is the config equivalent of `--no-plugins`. Folders in `plugins.paths` are scanned after `FLIMKIT_PLUGIN_PATH` and are subject to the same treatment: they are an explicit choice, so they load without the `~/.flimkit/plugins` switch. All three take effect on the next start.
-
-### Turning one off
-
-`Help > Plugins...` has a checkbox per plugin. Unticking one adds it to `plugins.disabled` in the config and it stops loading on the next start. Built-ins can be turned off the same way, so ticking `core_tools` off empties the Tools menu.
-
-From the command line:
-
-```bash
-python main.py --no-plugins              # load nothing, built-ins included
-python main.py --plugins /path/to/dir    # extra folder, repeatable
-```
-
-`--no-plugins` is the same switch as `FLIMKIT_NO_PLUGINS=1`.
+`FLIMKIT_PLUGIN_PATH` takes a colon-separated list of extra folders, scanned after `~/.flimkit/plugins`. It is meant for development and is not covered by the user-folder switch.
 
 ### Compatibility
 
-`FLIMKIT_PLUGIN_API` is 1 and the hooks documented above are frozen at that version. New hooks get added; the ones here keep their arguments and their meaning. `flimkit_tests/tests/fixtures/plugin_api_v1/` holds a plugin written against v1 that the test suite loads on every run, so a change that would break an installed plugin fails the build rather than reaching a release.
-
-### Trust
-
-A plugin is ordinary Python. It runs inside FLIMKit with your account's access to your files and your network, and there is no sandbox between the two. The trust decision is the same one you make installing a Fiji plugin or a pytest plugin: read it, or get it from someone you would trust with the machine.
+`FLIMKIT_PLUGIN_API` is 1 and the hooks above are frozen at that version. New hooks get added; the ones here keep their arguments and their meaning. `flimkit_tests/tests/fixtures/plugin_api_v1/` holds a plugin written against v1 that the test suite loads on every run, so a change that would break an installed plugin fails the build rather than reaching a release.
 
 ---
 
-## QuPath Bridge
+## Plugin Troubleshooting
 
-ROIs can already be exported as GeoJSON and imported back, which is enough if you are happy moving files by hand. The [QuPath bridge](https://github.com/FLIMKit/flimkit-qupath-bridge) removes that step: FLIMKit serves its images and ROIs over a loopback HTTP connection, and QuPath reads and writes them directly.
+Start with `Help > Plugins...` ([Checking what loaded](#checking-what-loaded)) and the Progress log. Between them they say whether a plugin was found, whether it imported, and whether its startup ran.
 
-It runs inside a live QuPath session rather than as a script, so it works with the image you have open and the annotations you have drawn.
+### It is not in the list at all
 
-### Installing
+- **Installed into another environment.** The package has to be in the Python FLIMKit runs from. Check from the same terminal you launch FLIMKit from, for example `python -c "import flimkit_web_ui; print('ok')"`. With conda, activate the FLIMKit environment first.
+- **User plugins are off.** A file in `~/.flimkit/plugins/` is ignored until `Load from ~/.flimkit/plugins` is ticked in Preferences, and the change takes effect on the next start.
+- **Its name starts with `_` or `.`.** Those files are skipped.
+- **It is disabled.** A plugin unticked in `Help > Plugins...` is listed in `plugins.disabled` in `~/.flimkit/config.json`.
+- **Plugins are off entirely.** `--no-plugins`, `FLIMKIT_NO_PLUGINS=1` or an unticked `Load plugins at startup` load nothing, not even FLIMKit's own Tools entries.
+- **The compiled app.** It cannot see pip-installed packages. Drop the add-on's pure-Python wheel into `~/.flimkit/plugins/` instead; a platform-specific wheel is refused with that reason.
 
-Two halves, one on each side.
+### It is listed as failed
 
-1. `pip install flimkit-bridge` into the environment FLIMKit runs in. That also gives you the `flimkit-bridge` command, which is how you run the bridge without the desktop app. The wheel is attached to the release as well, for offline installs or for `~/.flimkit/plugins/`.
-2. Drop `qupath-extension-flimkit-bridge-*.jar` into QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`.
+The line in `Help > Plugins...` gives the exception. The usual ones:
 
-`pip install flimkit-qupath-bridge` used to be step 1 and still works, but that package is being sunset. There is nothing QuPath-specific left in it: it is a shim that re-exports `flimkit-bridge`, warns on import, and is removed in 0.7.0. Install `flimkit-bridge` instead.
+| Message | Cause |
+|---|---|
+| `ModuleNotFoundError` | A dependency is missing from FLIMKit's environment, or from the compiled app, which cannot fetch it |
+| `declares FLIMKIT_PLUGIN_API ...` | The plugin was written for another plugin API. Update the plugin, or FLIMKit |
+| `... already registered by ...` | Two plugins use the same id. The first one loaded keeps it, and the error names it |
+| `unknown panel` | A `@panel_button` asked for a panel other than `'roi'` |
 
-QuPath 0.7.0 or newer is required, and FLIMKit 0.13.0 or newer, which pip pulls in.
+A failed plugin has its registrations rolled back, and the others still load.
 
-### Using it
+### It loaded, but its startup failed
 
-The server itself is a separate package, [flimkit-bridge](https://github.com/FLIMKit/flimkit-bridge). The QuPath extension and the Fiji add-on are both clients of it, so there is one server, one port and one place a fix has to land.
+Startup callbacks run after loading, so a failure there does not show in `Help > Plugins...`. Look in the Progress log for a line like
 
-The bridge starts with FLIMKit. There is nothing to launch and no port to configure. FLIMKit writes its address and a generated token to `~/.flimkit/qupath-bridge.json`, and QuPath reads that file, so `Extensions > FLIMKit bridge > Connect` needs nothing typed in. If port 8765 is busy an ephemeral one is used and recorded in the same file.
-
-QuPath also pairs itself. Opening or dropping any file makes QuPath ask the bridge whether FLIMKit recognises it, so a `.ptu` opens through FLIMKit without connecting first. Pass `-Dflimkit.bridge.imageserver=false` to QuPath to turn that off.
-
-From QuPath:
-
-- **Add FLIMKit images to project** puts the intensity and lifetime maps into the open project as float32 images, in real units rather than a colourmapped render, so they can sit beside a brightfield or mIF image in the viewer grid.
-- **Send annotations to FLIMKit** posts the annotations on the current image.
-- **Fetch ROIs from FLIMKit** pulls FLIMKit's regions in.
-- **Phasor** opens the phasor window for the image in view.
-
-From FLIMKit, the **Send to QuPath** button in the ROI panel reports whether QuPath has connected and what is being served. If no QuPath has paired it says so rather than failing quietly.
-
-### The phasor window
-
-The phasor window draws the same density plot the desktop app does, for whichever time-domain file QuPath has open. Click on it to place an elliptical cursor and drag to move one. Each cursor reports its pixel count, phase and modulation lifetimes, and mean G and S, and six is the limit because that is how many colours the palette has.
-
-**Draw region** switches the plot to tracing. Drag to draw an outline and it becomes a cursor when you let go, so a population that is not an ellipse can still be selected. The outline goes to FLIMKit as a polygon in G and S, points closer than three pixels apart are dropped, and fewer than three points is not a region. Drawn regions cannot be dragged afterwards. Remove and redraw instead. The button releases itself after each outline, so the plot goes back to placing ellipses.
-
-**Create annotations** turns the cursors into QuPath annotations on the image, one per cursor, classified as `Phasor` and carrying the same measurements the cursor list shows. The phasor is computed on binned pixels, so the label image comes back at that resolution and is traced with the binning as its downsample, which puts the outlines in full-resolution image coordinates.
-
-**Settings** picks the filter and the IRF.
-
-| Setting | Values | What it does |
-|---|---|---|
-| Phasor filter | `none`, `gaussian`, `median`, `wavelet`, plus anything a plugin registers | Spatial smoothing of the G and S coordinates |
-| Gaussian sigma | 0.1 to 10 px | Width of the gaussian kernel |
-| Median window | 3 to 15 px | Size of the median window |
-| IRF calibration | `none`, plus every machine IRF installed | Rotates and scales the phasor onto the calibrated frame |
-
-Calibration runs before filtering, the same order the desktop app and `phasor_cli.py` use, so the same file gives the same coordinates whichever front end you drive it from.
-
-The IRF list is empty on a fresh install. A machine IRF describes one microscope, so none are distributed with FLIMKit, and you have to measure your own under **Tools > Machine IRF Builder** in the desktop app before it appears here. An uncalibrated phasor is still useful for comparing populations within one image, but the absolute lifetimes it reports are not.
-
-Changing a setting recomputes the phasor rather than reusing what was already on screen. The bridge caches per dataset and per setting, so switching back to a combination you have already looked at is immediate.
-
-### Without the FLIMKit window
-
-QuPath does not need the FLIMKit desktop app. `flimkit-bridge` starts the same server on its own, with no window and no display, which is what you want on a headless machine or when QuPath is the only front end you use.
-
-```bash
-pip install flimkit-bridge
-flimkit-bridge
+```
+[Plugin] startup web_ui (flimkit.plugins:flimkit_web_ui) raised OSError: [Errno 48] Address already in use
 ```
 
-Note that `flimkit` is the desktop app and always opens a window. `flimkit-bridge` is the headless one.
+That one is a port clash: web UI 0.1.0 used 8765, the bridge's port. Update the web UI, which now defaults to 8766 and moves to a free port if that is taken, or give it a port in `~/.flimkit/config.json` ([Port and password](#port-and-password)). A clash on a port you set yourself is still reported this way, on purpose.
 
-It writes the same `~/.flimkit/bridge.json`, so `Extensions > FLIMKit bridge > Connect` finds it exactly as it finds a running FLIMKit. Extensions built before the server moved out read `qupath-bridge.json`, which is written alongside it until those versions are retired. `--port` and `--token` are there if you need them, `--force` takes over the discovery file from a bridge that has been left running, and `--no-announce` serves alongside one instead.
+### It fails when you use it
 
-QuPath drives everything in this mode, stitching and fitting included, over the same HTTP API. `Extensions > FLIMKit bridge > Stitch and fit a mosaic...` takes the `.lif`, `.xlif` or `.xlef` that holds the tile positions and runs the whole pipeline on the FLIMKit side.
+A plugin that raises in a menu entry or a button gets a message box naming the plugin and the error, and FLIMKit carries on ([A fuller example](#a-fuller-example)). An error from a window the plugin opened itself goes to the error log. `Help > View Error Logs` shows the current session with the full traceback, including the file and line in the plugin:
 
-The **Pipeline** setting in that dialog picks how. `tile_fit`, the default, fits each tile after a global summed fit and assembles the maps. `stitch_fit` stitches the raw photons into one canvas and fits that, which means writing the whole photon cube to disk first: 124 tiles at 512 square make a 5581 square canvas, which is 57 GB at 459 bins. Pick `stitch_fit` when you want the stitched photon cube itself, and `tile_fit` otherwise.
+![Error log with a plugin traceback](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/plugins/20_error_log.jpg)
 
-### Co-registration
+`Help > Export Error Logs` saves the same report to send with a bug report.
 
-FLIMKit expects ROIs in FLIM image-pixel coordinates, so anything drawn on another image has to be transformed into that space first. That happens on the QuPath side.
+### The bridge
 
-This needs QuPath's [alignment extension](https://github.com/qupath/qupath-extension-align), which QuPath does not ship and which has to be installed separately. The bridge deliberately contains no alignment code of its own.
+- **QuPath or Fiji says FLIMKit is not running.** The pairing file names a FLIMKit that has quit. Start FLIMKit or `flimkit-bridge`, then Connect again.
+- **`flimkit-bridge` refuses to start.** Another bridge is serving. Stop it, or pass `--force` to take over, or `--no-announce` to run alongside it.
+- **Every request fails with 401.** The token changed because FLIMKit restarted. Current clients re-read `~/.flimkit/bridge.json` before every call; an old QuPath jar may not, so Connect again or update it.
+- **QuPath and FLIMKit on different machines.** The bridge only listens on `127.0.0.1`. Forward the port with `ssh -L` ([Bridge security](#bridge-security)).
+- **Fiji does not show `Plugins > FLIMKit`.** Fiji is older than 2.16 or is running a JDK older than 21 ([Installing the Fiji plugin](#installing-the-fiji-plugin)).
 
-Align on the intensity image rather than the lifetime map. The alignment extension cannot render 32-bit float and throws rather than declining, and the lifetime map has to be float to carry nanoseconds. Photon counts are whole numbers, so intensity crosses as 16-bit whenever that is lossless, which the extension opens without complaint. The transform is valid for the lifetime map as well, since every image of that field shares one pixel grid, and intensity is the better registration target anyway because it carries the structure a lifetime map often lacks.
+### Other add-ons
 
-1. Open the brightfield or mIF image and add the FLIMKit images to the same project.
-2. Align the brightfield against the intensity image and transfer the annotations onto it.
-3. Send the annotations on the aligned image to FLIMKit.
+- **Z-stack explorer says to load a z-stack first.** It only works with Analysis set to Z-stack and a stack loaded. The lifetime pane is empty until the stack has been fitted.
+- **Z-stack explorer saves but no viewer opens.** PyVista is missing; install the `[gui]` extra.
+- **Web UI page does not load.** Check the Progress log for the startup line and the port it is using, and whether a password is set.
+- **A plugin's figure has no axis labels.** It is drawn on a white background while FLIMKit's theme makes text white ([Figures in a plugin window](#figures-in-a-plugin-window)).
 
-Without the alignment extension you can still exchange images and ROIs, but only between images that already share a coordinate system.
+### Reporting a problem
 
-### Security
-
-The bridge listens on `127.0.0.1` only, and refuses any request whose `Host` header is not localhost, which stops a web page reaching it by resolving its own hostname to your machine. Every endpoint except the status check requires the token.
-
-Both programs therefore have to be on the same machine. If they are not, forward the port over SSH rather than exposing it:
-
-```bash
-ssh -L 8765:127.0.0.1:8765 you@the-flimkit-machine
-```
+Include the `Help > Plugins...` list, the Progress log from startup, and the exported error log. Start once with `python main.py --no-plugins` too: if the problem goes away, it is in a plugin rather than in FLIMKit.
 
 ---
 
@@ -1578,7 +2364,7 @@ does nothing rather than writing a partial store.
 Right-click → Open on first launch. After that it should run normally.
 
 **Machine IRF not found after saving**  
-Restart the app - the default IRF path is resolved at startup and won't update mid-session.
+Restart the app, since a newly built default is picked up at startup, or set it in File > Preferences... > Files, which applies at once.
 
 **Per-pixel fitting is very slow**  
 That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.
@@ -1593,6 +2379,9 @@ Known limitation... Only the outer boundary is imported. Donut-shaped ROIs with 
 
 **Phasor calibration looks off**  
 Make sure the IRF file is from the same acquisition session. XLSX-based IRFs from FLIM microscope software can vary between sessions, which is why the machine IRF exists.
+
+**A plugin is missing, fails to load, or its window misbehaves**  
+See [Plugin Troubleshooting](#plugin-troubleshooting). `Help > Plugins...` lists what loaded and why anything failed.
 
 **Lifetimes are slightly higher than FLIM microscope software for the same data**  
 This is expected and systematic. FLIMKit anchors the IRF at the steepest-rise point of the leading edge, which differs from how FLIM microscope software places the IRF. The offset is consistent across acquisitions and does not indicate a fitting problem.

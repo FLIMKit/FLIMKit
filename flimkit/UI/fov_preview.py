@@ -86,7 +86,7 @@ class FOVPreviewPanel:
                                  state='readonly', width=10)
         self._cmap_combo.grid(row=1, column=4, sticky='w', padx=2)
         self._cmap_combo['values'] = list(display.COLORMAPS.keys())
-        ttk.Button(ctrl_frame, text='Update', width=8, command=self._update_flim_display).grid(row=1, column=5, sticky='w', padx=2)
+        ttk.Button(ctrl_frame, text='Update', width=8, command=self._on_update_display).grid(row=1, column=5, sticky='w', padx=2)
         self._bv_show_decay = tk.BooleanVar(value=True)
         ttk.Checkbutton(ctrl_frame, text='Show Decay Plot',
                         variable=self._bv_show_decay,
@@ -108,6 +108,22 @@ class FOVPreviewPanel:
                         value='amplitude', command=self._on_weighting_changed).pack(side='left')
         ttk.Radiobutton(wt_frame, text='Intensity', variable=self._sv_tau_weighting,
                         value='intensity', command=self._on_weighting_changed).pack(side='left')
+        int_frame = ttk.Frame(ctrl_frame)
+        int_frame.grid(row=4, column=0, columnspan=6, sticky='w', pady=(4, 0))
+        ttk.Label(int_frame, text='Intensity:').pack(side='left', padx=(0, 4))
+        ttk.Label(int_frame, text='Min').pack(side='left')
+        self._sv_int_min = tk.StringVar()
+        ttk.Entry(int_frame, textvariable=self._sv_int_min, width=7).pack(side='left', padx=2)
+        ttk.Label(int_frame, text='Max').pack(side='left', padx=(6, 0))
+        self._sv_int_max = tk.StringVar()
+        ttk.Entry(int_frame, textvariable=self._sv_int_max, width=7).pack(side='left', padx=2)
+        ttk.Button(int_frame, text='Auto', width=6,
+                   command=self._auto_intensity_scale).pack(side='left', padx=2)
+        self._sv_int_cmap = tk.StringVar(value='inferno')
+        int_combo = ttk.Combobox(int_frame, textvariable=self._sv_int_cmap, state='readonly',
+                                 width=9, values=display.INTENSITY_COLORMAPS)
+        int_combo.pack(side='left', padx=(6, 2))
+        int_combo.bind('<<ComboboxSelected>>', lambda _e: self._on_update_display())
         self._ptu_path = None
         self._lifetime_map = None
         self._pixel_maps = None
@@ -119,6 +135,7 @@ class FOVPreviewPanel:
             'gamma': 1.0,
             'cmap': 'viridis',
         }
+        self._int_display = {'vmin': None, 'vmax': None, 'cmap': 'inferno'}
         self._n_exp = 1
         self._irf_prompt = None
         self._roi_manager = RoiManager()
@@ -140,6 +157,7 @@ class FOVPreviewPanel:
         if not _keep_zstack:
             self._hide_zstack()
         self._lifetime_map = None
+        self._intensity_map = None
         self._pixel_maps = None
         self._cached_resid_data = None
         if not ptu_path or not Path(ptu_path).exists():
@@ -158,8 +176,8 @@ class FOVPreviewPanel:
             if is_image:
                 stack = ptu.pixel_stack(channel=None, binning=1)
                 intensity = stack.sum(axis=2)
-                intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-                self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+                self._intensity_map = intensity
+                self._draw_intensity(self._ax_img, intensity)
             else:
                 intensity = None
                 self._ax_img.text(0.5, 0.5, 'Point measurement\nno image to reconstruct',
@@ -187,6 +205,9 @@ class FOVPreviewPanel:
             self._ax_resid.grid(True, alpha=0.3)
             self._cached_resid_data = None
             self._redraw_region_overlays()
+            if is_image:
+                self._sync_intensity_controls()
+                self._ctrl_frame.grid()
             self._canvas_mpl.draw_idle()
             n_photons = int(decay.sum())
             if is_image:
@@ -275,8 +296,7 @@ class FOVPreviewPanel:
             taus_fit = global_summary.get('taus_ns', [])
             model = global_summary.get('model')
             self._ax_img.clear()
-            intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-            self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+            self._draw_intensity(self._ax_img, intensity)
             self._ax_img.set_title('Intensity', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
             self._ax_flim.clear()
@@ -492,8 +512,7 @@ class FOVPreviewPanel:
                 return
             intensity = tifffile.imread(str(intensity_files[0]))
             self._ax_img.clear()
-            intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-            self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+            self._draw_intensity(self._ax_img, intensity)
             self._ax_img.set_title('Stitched ROI', fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
             lifetime_data = None
@@ -595,6 +614,75 @@ class FOVPreviewPanel:
                 pass
         self._lifetime_map = lifetime_map
         self._update_flim_display()
+    def _intensity_limits(self, intensity):
+        import numpy as np
+        lo = self._int_display.get('vmin')
+        hi = self._int_display.get('vmax')
+        if lo is None:
+            lo = 0.0
+        if hi is None:
+            finite = np.asarray(intensity)[np.isfinite(intensity)]
+            hi = float(np.percentile(finite, 99)) if finite.size > 0 else 1.0
+        if hi <= lo:
+            hi = lo + 1.0
+        return lo, hi
+
+    def _draw_intensity(self, ax, intensity):
+        lo, hi = self._intensity_limits(intensity)
+        cmap = display.get_colormap(self._int_display.get('cmap', 'inferno'))
+        return ax.imshow(intensity, cmap=cmap, origin='upper', vmin=lo, vmax=hi)
+
+    def _read_intensity_controls(self):
+        def num(var):
+            text = var.get().strip()
+            if text == '':
+                return None
+            try:
+                return float(text)
+            except ValueError:
+                return None
+        self._int_display = {
+            'vmin': num(self._sv_int_min),
+            'vmax': num(self._sv_int_max),
+            'cmap': self._sv_int_cmap.get() or 'inferno',
+        }
+
+    def _sync_intensity_controls(self):
+        cs = self._int_display
+        self._sv_int_min.set('' if cs.get('vmin') is None else f"{cs['vmin']:g}")
+        self._sv_int_max.set('' if cs.get('vmax') is None else f"{cs['vmax']:g}")
+        self._sv_int_cmap.set(cs.get('cmap', 'inferno'))
+
+    def _sync_flim_controls(self):
+        cs = self._flim_color_scale
+        self._sv_tau_min.set('' if cs.get('vmin') is None else f"{cs['vmin']:.2f}")
+        self._sv_tau_max.set('' if cs.get('vmax') is None else f"{cs['vmax']:.2f}")
+        self._sv_gamma.set(str(cs.get('gamma', 1.0)))
+        self._sv_cmap.set(cs.get('cmap', 'viridis'))
+
+    def _update_intensity_display(self):
+        if self._intensity_map is None or not self._ax_img.get_visible():
+            return
+        title = self._ax_img.get_title() or 'Intensity'
+        self._ax_img.clear()
+        self._draw_intensity(self._ax_img, self._intensity_map)
+        self._ax_img.set_title(title, fontsize=9, fontweight='bold', color='white')
+        self._strip_image_axes(self._ax_img)
+        self._redraw_region_overlays()
+        self._canvas_mpl.draw_idle()
+
+    def _auto_intensity_scale(self):
+        self._sv_int_min.set('')
+        self._sv_int_max.set('')
+        self._on_update_display()
+
+    def _on_update_display(self):
+        self._read_intensity_controls()
+        self._update_intensity_display()
+        self._update_flim_display()
+        if self._lifetime_map is None:
+            self._save_color_scale_update()
+
     def _auto_detect_scale(self):
         import numpy as np
         if self._lifetime_map is None:
@@ -677,6 +765,7 @@ class FOVPreviewPanel:
             session_data = {key: existing_data[key].item() if existing_data[key].ndim == 0 else existing_data[key]
                            for key in existing_data.files}
             session_data['fov_color_scale'] = json.dumps(self._flim_color_scale)
+            session_data['fov_intensity_scale'] = json.dumps(self._int_display)
             np.savez_compressed(session_file, **session_data)
             print(f"[Color Scale] ✓ Saved to {session_file.name}")
         except Exception as e:
@@ -706,6 +795,7 @@ class FOVPreviewPanel:
                 if self._intensity_map is not None:
                     session_data['fov_intensity_map'] = self._intensity_map
                 session_data['fov_color_scale'] = json.dumps(self._flim_color_scale)
+                session_data['fov_intensity_scale'] = json.dumps(self._int_display)
                 session_data['fov_n_exp'] = self._n_exp
                 if self._ptu_path:
                     session_data['fov_ptu_path'] = self._ptu_path
@@ -927,9 +1017,7 @@ class FOVPreviewPanel:
             _ax.set_facecolor('black')
         if self._ax_img.get_visible() and self._intensity_map is not None:
             import numpy as np
-            intensity_clipped = np.clip(self._intensity_map, 0,
-                                        np.percentile(self._intensity_map, 99))
-            self._ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+            self._draw_intensity(self._ax_img, self._intensity_map)
             self._ax_img.set_title(img_title, fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_img)
         elif self._ax_img.get_visible():

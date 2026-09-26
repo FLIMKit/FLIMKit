@@ -18,14 +18,14 @@ def _show_fit_result_window(result: dict):
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-    summary    = result['summary']
-    decay      = result['decay']
-    time_ns    = result['time_ns']
+    summary = result['summary']
+    decay = result['decay']
+    time_ns = result['time_ns']
     irf_prompt = result['irf_prompt']
-    model      = summary.get('model')
-    taus       = summary.get('taus_ns', [])
-    amps       = summary.get('amps',    [])
-    chi2       = summary.get('reduced_chi2_tail')
+    model = summary.get('model')
+    taus = summary.get('taus_ns', [])
+    amps = summary.get('amps',    [])
+    chi2 = summary.get('reduced_chi2_tail')
     win = tk.Toplevel()
     win.title(f"ROI Fit - {result['region_name']}")
     win.geometry('660x560')
@@ -163,10 +163,10 @@ def _ask_roi_fit_options(params: dict):
                                     'Need 0 < τ_min < τ_max.', parent=dlg)
             return
         result['ok'] = True
-        result['n_exp']          = sv_nexp.get()
-        result['tau_min']        = tau_min
-        result['tau_max']        = tau_max
-        result['cost_function']  = sv_cost.get()
+        result['n_exp'] = sv_nexp.get()
+        result['tau_min'] = tau_min
+        result['tau_max'] = tau_max
+        result['cost_function'] = sv_cost.get()
         dlg.destroy()
 
     def _cancel():
@@ -182,9 +182,9 @@ def _ask_roi_fit_options(params: dict):
     if not result.get('ok'):
         return None
     merged = dict(params)
-    merged['n_exp']         = result['n_exp']
-    merged['tau_min']       = result['tau_min']
-    merged['tau_max']       = result['tau_max']
+    merged['n_exp'] = result['n_exp']
+    merged['tau_min'] = result['tau_min']
+    merged['tau_max'] = result['tau_max']
     merged['cost_function'] = result['cost_function']
     return merged
 
@@ -195,7 +195,7 @@ class RoiAnalysisPanel:
         from tkinter import ttk
         self.frame = ttk.Frame(parent, padding=4)
         self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(2, weight=1)
+        self.frame.rowconfigure(1, weight=1)
         self.fov_preview = fov_preview
         self.app = None
         self._current_mode = tk.StringVar(value='select')
@@ -415,7 +415,7 @@ class RoiAnalysisPanel:
             feature = payload['features'][0]
             with open(geojson_file, 'w', encoding='utf-8') as f:
                 json.dump(feature, f, indent=2)
-            messagebox.showinfo('Export Success', f"Region exported to:\n{Path(geojson_file).name}")
+            messagebox.showinfo('Export Success', f'Region exported to:\n{Path(geojson_file).name}')
             print(f'[Export] Region GeoJSON: {geojson_file}')
         except Exception as e:
             import traceback
@@ -451,15 +451,15 @@ class RoiAnalysisPanel:
                 name = region.get('name', '')
                 tool = region.get('tool', '')
                 stats = region.get('statistics', {})
-                tau_mean    = stats.get('tau_mean',    'N/A')
-                tau_median  = stats.get('tau_median',  'N/A')
-                tau_stdev   = stats.get('tau_stdev',   'N/A')
+                tau_mean = stats.get('tau_mean',    'N/A')
+                tau_median = stats.get('tau_median',  'N/A')
+                tau_stdev = stats.get('tau_stdev',   'N/A')
                 photon_count = stats.get('photon_count', 'N/A')
                 photon_stdev = stats.get('photon_stdev', 'N/A')
                 tau_mean_fit = stats.get('tau_mean_fit', 'N/A')
-                taus_fit     = stats.get('taus_ns_fit',  [])
-                amps_fit     = stats.get('amps_fit',     [])
-                chi2_r_fit   = stats.get('chi2_r_fit',   'N/A')
+                taus_fit = stats.get('taus_ns_fit',  [])
+                amps_fit = stats.get('amps_fit',     [])
+                chi2_r_fit = stats.get('chi2_r_fit',   'N/A')
                 row = [region_id, name, tool,
                        tau_mean, tau_median, tau_stdev, photon_count, photon_stdev,
                        tau_mean_fit, chi2_r_fit]
@@ -480,7 +480,7 @@ class RoiAnalysisPanel:
                 writer = csv.writer(f)
                 writer.writerow(header)
                 writer.writerows(rows)
-            messagebox.showinfo('Export Success', f"ROI data exported to:\n{Path(csv_file).name}")
+            messagebox.showinfo('Export Success', f'ROI data exported to:\n{Path(csv_file).name}')
             print(f'[Export] ROI CSV: {csv_file}')
         except Exception as e:
             import traceback
@@ -511,7 +511,7 @@ class RoiAnalysisPanel:
                 return
             with open(geojson_file, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, indent=2)
-            messagebox.showinfo('Export Success', f"ROI data exported to:\n{Path(geojson_file).name}\n({len(features)} regions)")
+            messagebox.showinfo('Export Success', f'ROI data exported to:\n{Path(geojson_file).name}\n({len(features)} regions)')
             print(f'[Export] ROI GeoJSON: {geojson_file}')
         except Exception as e:
             import traceback
@@ -647,7 +647,7 @@ class RoiAnalysisPanel:
                                        'The selected region could not be found. '
                                        'Try refreshing the region list.')
                 return
-            region_id   = regions[0]['id']
+            region_id = regions[0]['id']
             region_name = (regions[0]['name'] if len(regions) == 1
                            else f'{len(regions)} regions (merged)')
             if not callable(getattr(self, 'get_fit_params', None)) or \
@@ -665,14 +665,14 @@ class RoiAnalysisPanel:
                 return
         except Exception as _setup_exc:
             messagebox.showerror('Fit ROI Decay - Setup Error',
-                                 f"Could not prepare parameters:\n{_setup_exc}")
+                                 f'Could not prepare parameters:\n{_setup_exc}')
             import traceback as _tb
             _tb.print_exc()
             return
         region_name = (regions[0].get('name', f'Region {region_id}')
                        if len(regions) == 1
                        else f'{len(regions)} regions (merged)')
-        irf_cached  = getattr(self.fov_preview, '_irf_prompt', None)
+        irf_cached = getattr(self.fov_preview, '_irf_prompt', None)
         params = _ask_roi_fit_options(params)
         if params is None:
             return
@@ -681,9 +681,9 @@ class RoiAnalysisPanel:
             from flimkit.formats import FLIMFile
             from flimkit.FLIM.fitters import fit_summed
             ptu = FLIMFile(ptu_path, verbose=False)
-            n_bins    = ptu.n_bins
+            n_bins = ptu.n_bins
             tcspc_res = ptu.tcspc_res
-            channel   = params.get('channel')
+            channel = params.get('channel')
             if progress_callback:
                 progress_callback(1, 4)
             stack = ptu.pixel_stack(channel=channel, binning=1)
@@ -704,7 +704,7 @@ class RoiAnalysisPanel:
             if irf_prompt is None or len(irf_prompt) != n_bins:
                 from flimkit.FLIM.irf_tools import gaussian_irf
                 decay_peak = int(np.argmax(roi_decay))
-                fwhm_bins  = max(1.0, 0.2e-9 / tcspc_res)
+                fwhm_bins = max(1.0, 0.2e-9 / tcspc_res)
                 irf_prompt = gaussian_irf(n_bins, decay_peak, fwhm_bins)
                 irf_source = 'gaussian (no IRF cached)'
             else:
@@ -747,10 +747,10 @@ class RoiAnalysisPanel:
                                    if r['id'] == rid), None)
                 if region_obj is not None:
                     stats = region_obj.get('statistics', {})
-                    stats['tau_mean_fit']  = tau_mean_fit
-                    stats['taus_ns_fit']   = taus
-                    stats['amps_fit']      = amps
-                    stats['chi2_r_fit']    = summary.get('reduced_chi2_tail')
+                    stats['tau_mean_fit'] = tau_mean_fit
+                    stats['taus_ns_fit'] = taus
+                    stats['amps_fit'] = amps
+                    stats['chi2_r_fit'] = summary.get('reduced_chi2_tail')
                     region_obj['statistics'] = stats
             key = tuple(sorted(result.get('region_ids', [result['region_id']])))
             self._last_fit_results[key] = result

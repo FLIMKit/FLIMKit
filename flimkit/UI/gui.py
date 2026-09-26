@@ -429,7 +429,7 @@ class _UIBuilder:
         prefs = cfg.get_section('preferences')
         pref_win = tk.Toplevel(self.root)
         pref_win.title('Preferences')
-        pref_win.geometry('500x400')
+        pref_win.geometry('540x480')
         pref_win.resizable(False, False)
         main_frame = ttk.Frame(pref_win, padding=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -465,6 +465,18 @@ class _UIBuilder:
         ttk.Label(files_frame, text='Auto-save NPZ:', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
         autosave_var = tk.BooleanVar(value=prefs.get('auto_save_npz', True))
         ttk.Checkbutton(files_frame, text='Enable auto-save', variable=autosave_var).pack(anchor='w', pady=(0, 10))
+        from flimkit.configs import FACTORY_MACHINE_IRF_DEFAULT_PATH
+        ttk.Label(files_frame, text='Default machine IRF (.npy):', font=('TkDefaultFont', 10)).pack(anchor='w', pady=(5, 0))
+        mirf_var = tk.StringVar(value=prefs.get('machine_irf_path', '') or '')
+        mirf_row = ttk.Frame(files_frame)
+        mirf_row.pack(anchor='w', fill='x', pady=(0, 4))
+        ttk.Entry(mirf_row, textvariable=mirf_var, width=40).pack(side='left')
+        ttk.Button(mirf_row, text='Browse...', width=10,
+                   command=lambda: self._pick_machine_irf(mirf_var)).pack(side='left', padx=(4, 0))
+        ttk.Button(files_frame, text='Use the built-in IRF',
+                   command=lambda: mirf_var.set('')).pack(anchor='w')
+        ttk.Label(files_frame, text=f'Blank uses the built-in {FACTORY_MACHINE_IRF_DEFAULT_PATH}',
+                  foreground='grey', wraplength=480).pack(anchor='w', pady=(4, 0))
         from flimkit import plugins
         plug_frame = ttk.Frame(note, padding=10)
         note.add(plug_frame, text='Plugins')
@@ -487,6 +499,13 @@ class _UIBuilder:
         btn_frame.pack(fill=tk.X, pady=(0, 0))
 
         def save_prefs():
+            mirf = mirf_var.get().strip()
+            if mirf:
+                problem = self._machine_irf_problem(mirf)
+                if problem:
+                    note.select(files_frame)
+                    messagebox.showerror('Default machine IRF', problem, parent=pref_win)
+                    return
             plugins.set_plugins_enabled(enabled_var.get())
             plugins.allow_user_plugins(user_var.get())
             plugins.set_config_dirs(
@@ -498,11 +517,55 @@ class _UIBuilder:
                 'export_format': fmt_var.get(),
                 'output_directory': output_var.get(),
                 'auto_save_npz': autosave_var.get(),
+                'machine_irf_path': mirf,
             })
-            print(f'[Preferences] Saved to {cfg._CONFIG_FILE if hasattr(cfg, '_CONFIG_FILE') else '~/.flimkit/config.yaml'}')
+            self._apply_machine_irf_default(Path(mirf).expanduser() if mirf else FACTORY_MACHINE_IRF_DEFAULT_PATH)
+            from flimkit.utils.config_manager import _CONFIG_FILE
+            print(f'[Preferences] Saved to {_CONFIG_FILE}')
             pref_win.destroy()
         ttk.Button(btn_frame, text='Save', command=save_prefs).pack(side='right', padx=5)
         ttk.Button(btn_frame, text='Cancel', command=pref_win.destroy).pack(side='right', padx=5)
+
+    def _pick_machine_irf(self, var):
+        start = var.get().strip() or str(_C()['MACHINE_IRF_DIR'])
+        chosen = filedialog.askopenfilename(
+            title='Default machine IRF',
+            initialdir=str(Path(start).parent if Path(start).suffix else start),
+            filetypes=[('NumPy array', '*.npy'), ('All files', '*.*')])
+        if chosen:
+            var.set(chosen)
+
+    @staticmethod
+    def _machine_irf_problem(path):
+        p = Path(path).expanduser()
+        if not p.is_file():
+            return f'{p} does not exist.'
+        try:
+            arr = np.load(p, allow_pickle=False)
+        except Exception as exc:
+            return f'{p.name} could not be read as a machine IRF: {exc}'
+        if np.asarray(arr).size < 2:
+            return f'{p.name} holds no IRF samples.'
+        return None
+
+    def _apply_machine_irf_default(self, new_path):
+        import flimkit.configs as _configs
+        new_path = Path(new_path)
+        snapshot = _C()
+        old = str(snapshot.get('MACHINE_IRF_DEFAULT_PATH', ''))
+        _configs.MACHINE_IRF_DEFAULT_PATH = new_path
+        snapshot['MACHINE_IRF_DEFAULT_PATH'] = new_path
+        interactive = sys.modules.get('flimkit.interactive')
+        if interactive is not None:
+            interactive.MACHINE_IRF_DEFAULT_PATH = new_path
+        for widget in (getattr(self, '_irf_fov', None), getattr(self, '_irf_st', None)):
+            if widget is not None:
+                widget.set_machine_irf_default(new_path)
+        for name in ('sv_ph_mirf', 'sv_batch_mirf'):
+            var = getattr(self, name, None)
+            if var is not None and var.get().strip() in ('', old):
+                var.set(str(new_path))
+        print(f'[Preferences] Default machine IRF: {new_path}')
 
     def _add_plugin_folder(self, paths_box):
         chosen = filedialog.askdirectory()
@@ -618,7 +681,6 @@ class _UIBuilder:
                 import traceback
                 traceback.print_exc()
                 status.set(f'Error: {e}')
-
         btns = ttk.Frame(dlg)
         btns.pack(fill='x', padx=12, pady=(0, 12))
         ttk.Button(btns, text='Generate...', command=do_generate).pack(side='left', padx=4)
@@ -1365,6 +1427,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if self._fov_preview._intensity_map is not None:
                 session_data['fov_intensity_map'] = self._fov_preview._intensity_map
             session_data['fov_color_scale'] = json.dumps(self._fov_preview._flim_color_scale)
+            session_data['fov_intensity_scale'] = json.dumps(self._fov_preview._int_display)
             session_data['fov_n_exp'] = self._fov_preview._n_exp
             session_data['fov_regions'] = self._fov_preview._roi_manager.to_json()
             np.savez_compressed(session_file, **session_data)
@@ -1469,6 +1532,17 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                 if isinstance(cs, bytes):
                                     cs = cs.decode('utf-8')
                                 self._fov_preview._flim_color_scale = json.loads(cs)
+                                self._fov_preview._sync_flim_controls()
+                            except Exception:
+                                pass
+                        if 'fov_intensity_scale' in session_data:
+                            try:
+                                import json
+                                ics = session_data['fov_intensity_scale']
+                                if isinstance(ics, bytes):
+                                    ics = ics.decode('utf-8')
+                                self._fov_preview._int_display = json.loads(ics)
+                                self._fov_preview._sync_intensity_controls()
                             except Exception:
                                 pass
                         if 'fov_n_exp' in session_data:
@@ -1624,6 +1698,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     if isinstance(cs, bytes):
                         cs = cs.decode('utf-8')
                     self._fov_preview._flim_color_scale = json.loads(cs)
+                    self._fov_preview._sync_flim_controls()
+                except Exception:
+                    pass
+            if 'fov_intensity_scale' in loaded:
+                try:
+                    ics = loaded['fov_intensity_scale']
+                    if isinstance(ics, bytes):
+                        ics = ics.decode('utf-8')
+                    self._fov_preview._int_display = json.loads(ics)
+                    self._fov_preview._sync_intensity_controls()
                 except Exception:
                     pass
             if 'fov_n_exp' in loaded:
@@ -1783,6 +1867,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         if isinstance(cs, bytes):
                             cs = cs.decode('utf-8')
                         self._fov_preview._flim_color_scale = json.loads(cs)
+                        self._fov_preview._sync_flim_controls()
+                    except Exception:
+                        pass
+                if 'fov_intensity_scale' in fit_result:
+                    try:
+                        ics = fit_result['fov_intensity_scale']
+                        if isinstance(ics, bytes):
+                            ics = ics.decode('utf-8')
+                        self._fov_preview._int_display = json.loads(ics)
+                        self._fov_preview._sync_intensity_controls()
                     except Exception:
                         pass
             except Exception:
@@ -1817,8 +1911,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     ax_cbar = self._fov_preview._ax_cbar
                     fig = self._fov_preview._fig
                     ax_img.clear()
-                    intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-                    ax_img.imshow(intensity_clipped, cmap='inferno', origin='upper')
+                    self._fov_preview._draw_intensity(ax_img, intensity)
                     ax_img.set_title('Intensity Image', fontsize=10, fontweight='bold')
                     ax_img.set_xlabel('X (pixels)')
                     ax_img.set_ylabel('Y (pixels)')
@@ -2041,6 +2134,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             output_path.mkdir(parents=True, exist_ok=True)
             exported_count = 0
             pixel_size_um = self._get_pixel_size_um()
+            scan_stem = self._current_scan_stem() or 'results'
+            ome_meta = {'axes': 'YX'}
+            if pixel_size_um:
+                ome_meta.update(PhysicalSizeX=float(pixel_size_um), PhysicalSizeXUnit='µm',
+                                PhysicalSizeY=float(pixel_size_um), PhysicalSizeYUnit='µm')
             if with_scalebar and pixel_size_um is None:
                 print('[Export] No pixel size available - scale bar will be omitted')
                 with_scalebar = False
@@ -2087,24 +2185,21 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     import tifffile
                     if 'intensity' in image_dict and isinstance(image_dict['intensity'], np.ndarray):
                         try:
-                            intensity = image_dict['intensity']
-                            intensity_16bit = (intensity / intensity.max() * 65535).astype(np.uint16) if intensity.max() > 0 else intensity.astype(np.uint16)
-                            output_file = output_path / 'intensity.ome.tiff'
-                            tifffile.imwrite(output_file, intensity_16bit, photometric='minisblack',
-                                           metadata={'description': 'FLIM Intensity Image'})
+                            intensity = np.asarray(image_dict['intensity'], dtype=np.float32)
+                            output_file = output_path / f'{scan_stem}_intensity.ome.tiff'
+                            tifffile.imwrite(output_file, intensity, photometric='minisblack',
+                                             metadata=dict(ome_meta, Name='FLIM intensity (photons)'))
                             print(f'✓ Exported OME-TIFF intensity: {output_file.name} ({intensity.shape})')
                             exported_count += 1
                         except Exception as e:
                             print(f'[Export] Error exporting intensity TIFF: {e}')
                     if 'lifetime' in image_dict and isinstance(image_dict['lifetime'], np.ndarray):
                         try:
-                            lifetime = image_dict['lifetime']
-                            lifetime = np.nan_to_num(lifetime, nan=0.0)
-                            lifetime_32bit = lifetime.astype(np.float32)
-                            output_file = output_path / 'lifetime.ome.tiff'
+                            lifetime_32bit = np.asarray(image_dict['lifetime'], dtype=np.float32)
+                            output_file = output_path / f'{scan_stem}_lifetime.ome.tiff'
                             tifffile.imwrite(output_file, lifetime_32bit, photometric='minisblack',
-                                           metadata={'description': 'FLIM Lifetime Map (ns)'})
-                            print(f'✓ Exported OME-TIFF lifetime: {output_file.name} ({lifetime.shape})')
+                                             metadata=dict(ome_meta, Name='FLIM lifetime (ns)'))
+                            print(f'✓ Exported OME-TIFF lifetime: {output_file.name} ({lifetime_32bit.shape})')
                             exported_count += 1
                         except Exception as e:
                             print(f'[Export] Error exporting lifetime TIFF: {e}')
@@ -2120,12 +2215,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')
                         ax = fig.add_axes([0, 0, 1, 1])
                         ax.set_facecolor('black')
-                        intensity_clipped = np.clip(intensity, 0, np.percentile(intensity, 99))
-                        im = ax.imshow(intensity_clipped, cmap='inferno', origin='upper', aspect='auto')
+                        from flimkit.utils import display as _display
+                        _lo, _hi = self._fov_preview._intensity_limits(intensity)
+                        _icmap = _display.get_colormap(self._fov_preview._int_display.get('cmap', 'inferno'))
+                        im = ax.imshow(intensity, cmap=_icmap, origin='upper', aspect='auto', vmin=_lo, vmax=_hi)
                         ax.axis('off')
                         if with_scalebar:
                             self._draw_scale_bar(ax, w, h, pixel_size_um)
-                        output_file = output_path / 'intensity.png'
+                        output_file = output_path / f'{scan_stem}_intensity.png'
                         fig.savefig(output_file, dpi=100, bbox_inches='tight', pad_inches=0, facecolor='black')
                         plt.close(fig)
                         print(f'✓ Exported PNG intensity: {output_file.name} ({intensity.shape})')
@@ -2165,7 +2262,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                     ax.add_patch(patch)
                                 except Exception as e:
                                     print(f'[Export] Could not add ROI {region_id}: {e}')
-                        output_file = output_path / 'lifetime.png'
+                        output_file = output_path / f'{scan_stem}_lifetime.png'
                         fig.savefig(output_file, dpi=100, bbox_inches='tight', pad_inches=0, facecolor='black')
                         plt.close(fig)
                         print(f'✓ Exported PNG lifetime: {output_file.name} ({lifetime.shape})')
@@ -2191,7 +2288,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     ax.tick_params(colors='black')
                     ax.legend(fontsize=12, loc='upper right', framealpha=0.9, labelcolor='black')
                     ax.grid(True, alpha=0.3, color='gray')
-                    output_file = output_path / 'summed_decay.png'
+                    output_file = output_path / f'{scan_stem}_summed_decay.png'
                     fig.savefig(output_file, dpi=150, bbox_inches='tight', facecolor='white')
                     plt.close(fig)
                     print(f'✓ Exported decay plot: {output_file.name}')
@@ -2317,8 +2414,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         from flimkit.UI.modes.stitch_mode import StitchMode
         StitchMode(self).build_fit(parent)
 
-    def _apply_expert_overrides(self, a):
-        ex = self._expert_overrides
+    def _apply_expert_overrides(self, a, ex=None):
+        if ex is None:
+            ex = self._expert_overrides
         if not ex:
             return
         if 'optimizer' in ex:
@@ -3168,6 +3266,195 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             task_name='Single-FOV Fit'
         )
 
+    def _apply_fit_settings_source(self):
+        project = getattr(getattr(self, '_proj_browser', None), '_project', None)
+        if project is None:
+            return None, 'Open a project folder first.'
+        if getattr(self, 'sv_fov_analysis', None) is not None and self.sv_fov_analysis.get() != 'single':
+            return None, 'Apply fit settings works on single FOV fits, not z-stacks.'
+        src = self._fov_preview._ptu_path
+        if not src or not Path(src).exists():
+            return None, 'Load and fit a file first, then apply its settings to the others.'
+        if not (self._res._fit_result or {}):
+            return None, f'{Path(src).name} has not been fitted yet. Fit it first.'
+        return src, ''
+
+    def _open_apply_fit_settings_dialog(self):
+        from flimkit.utils.apply_settings import fov_targets, read_session_settings, settings_summary
+        src, problem = self._apply_fit_settings_source()
+        if problem:
+            messagebox.showinfo('Apply fit settings', problem)
+            return
+        targets = fov_targets(self._proj_browser._project, src)
+        if not targets:
+            messagebox.showinfo('Apply fit settings', 'There are no other single FOV files in this project.')
+            return
+        src_path = Path(src)
+        form_state, _ = read_session_settings(src_path.parent / f'{src_path.stem}.roi_session.npz')
+        if not form_state:
+            form_state = self._capture_form_state()
+        dlg = tk.Toplevel(self.root)
+        dlg.title('Apply Fit Settings')
+        dlg.transient(self.root)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill='both', expand=True)
+        ttk.Label(frm, text=f'Fit these files the way {src_path.name} was fitted:',
+                  font=('TkDefaultFont', 10, 'bold')).pack(anchor='w')
+        ttk.Label(frm, text=settings_summary(form_state, self._fov_preview._flim_color_scale,
+                                             self._fov_preview._int_display),
+                  foreground='grey', justify='left').pack(anchor='w', pady=(4, 8))
+        outer, inner = self._make_scroll_frame(frm)
+        outer.pack(fill='both', expand=True)
+        outer.configure(height=min(360, 26 * len(targets) + 20))
+        outer.pack_propagate(False)
+        chosen = {}
+        for stem, rec in targets:
+            var = tk.BooleanVar(value=False)
+            mark = '●' if rec.has_session else '○'
+            ttk.Checkbutton(inner, text=f'{mark} {stem}', variable=var).pack(anchor='w')
+            chosen[stem] = var
+        sel = ttk.Frame(frm)
+        sel.pack(fill='x', pady=(6, 0))
+        ttk.Button(sel, text='All', width=6,
+                   command=lambda: [v.set(True) for v in chosen.values()]).pack(side='left', padx=(0, 4))
+        ttk.Button(sel, text='None', width=6,
+                   command=lambda: [v.set(False) for v in chosen.values()]).pack(side='left')
+        ttk.Label(frm, text='Files marked ● already have a fit, which is replaced. ROIs are not copied.',
+                  foreground='grey').pack(anchor='w', pady=(6, 0))
+
+        def go():
+            stems = [s for s, v in chosen.items() if v.get()]
+            if not stems:
+                messagebox.showinfo('Apply fit settings', 'Tick at least one file.', parent=dlg)
+                return
+            dlg.destroy()
+            self._apply_fit_settings(stems)
+        btns = ttk.Frame(frm)
+        btns.pack(fill='x', pady=(10, 0))
+        ttk.Button(btns, text='Cancel', command=dlg.destroy).pack(side='right', padx=(4, 0))
+        ttk.Button(btns, text='Fit selected', command=go).pack(side='right')
+
+    def _apply_fit_settings(self, stems):
+        from flimkit.utils.apply_settings import fov_targets, read_session_settings, target_args
+        src, problem = self._apply_fit_settings_source()
+        if problem:
+            messagebox.showerror('Apply fit settings', problem)
+            return
+        if str(self._btn_fov.cget('state')) == 'disabled':
+            messagebox.showerror('Apply fit settings', 'Wait for the current fit to finish.')
+            return
+        wanted = set(stems)
+        targets = [(s, r) for s, r in fov_targets(self._proj_browser._project, src) if s in wanted]
+        if not targets:
+            messagebox.showerror('Apply fit settings', 'None of those are single FOV files in this project.')
+            return
+        src_path = Path(src)
+        session = src_path.parent / f'{src_path.stem}.roi_session.npz'
+        form_state, _ = read_session_settings(session)
+        if form_state:
+            self._restore_form_state(form_state)
+        irf_method = self._irf_fov.sv_method.get()
+        try:
+            src_args = self._controller.fov_args()
+        except ValueError as exc:
+            messagebox.showerror('Apply fit settings', f'The fit settings are not valid: {exc}')
+            return
+        color_scale = dict(self._fov_preview._flim_color_scale)
+        int_scale = dict(self._fov_preview._int_display)
+        weighting = self._fov_preview._sv_tau_weighting.get()
+        restore = {'ptu': src, 'xlsx': self.sv_xlsx.get(), 'out': self.sv_out_fov.get(), 'session': str(session)}
+        results = {'ok': [], 'failed': []}
+        from flimkit.interactive import _run_flim_fit
+        import gc
+
+        def on_ui(fn):
+            done = threading.Event()
+            outcome = {}
+
+            def run():
+                try:
+                    fn()
+                except Exception as exc:
+                    outcome['error'] = exc
+                finally:
+                    done.set()
+            self.root.after(0, run)
+            done.wait()
+            if 'error' in outcome:
+                raise outcome['error']
+
+        def task(progress_callback, cancel_event):
+            n = len(targets)
+            rule = '=' * 50
+            for i, (stem, rec) in enumerate(targets):
+                if cancel_event.is_set():
+                    print('\nApply fit settings cancelled.')
+                    break
+                progress_callback(i, n)
+                print(f'\n{rule}\n  [{i + 1}/{n}] {stem}\n{rule}')
+                try:
+                    a = target_args(src_args, rec.source_path, rec.xlsx_path, irf_method)
+                    fit_result = _run_flim_fit(a)
+                    on_ui(lambda: self._store_applied_fit(stem, rec, fit_result, color_scale, int_scale, weighting))
+                    results['ok'].append(stem)
+                    print(f'  OK: {stem}')
+                except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
+                    results['failed'].append((stem, str(exc)))
+                gc.collect()
+            progress_callback(n, n)
+            return results
+
+        def on_done(result):
+            self._set_buttons('normal')
+            self._restore_apply_source(restore)
+            ok, failed = results['ok'], results['failed']
+            self._res.set_status(f'✓  Applied {src_path.name} settings to {len(ok)} file(s).')
+            if failed:
+                detail = '\n'.join(f'{s}: {e[:80]}' for s, e in failed)
+                messagebox.showwarning('Apply fit settings',
+                                       f'Fitted {len(ok)} of {len(ok) + len(failed)}. These failed:\n\n{detail}')
+            else:
+                messagebox.showinfo('Apply fit settings', f'Fitted {len(ok)} file(s) with the settings from {src_path.name}.')
+        self._set_buttons('disabled')
+        self.run_with_progress(task, task_name=f'Apply fit settings ({len(targets)} files)', on_done=on_done)
+
+    def _store_applied_fit(self, stem, rec, fit_result, color_scale, int_scale, weighting):
+        p = self._fov_preview
+        p._roi_manager.clear_all()
+        p._roi_patches.clear()
+        p._ptu_path = rec.source_path
+        self._last_loaded_ptu = rec.source_path
+        self.sv_ptu.set(rec.source_path)
+        self.sv_xlsx.set(rec.xlsx_path or '')
+        self.sv_out_fov.set(stem)
+        p._sv_tau_weighting.set(weighting)
+        p._flim_color_scale = dict(color_scale)
+        p._sync_flim_controls()
+        p._int_display = dict(int_scale)
+        p._sync_intensity_controls()
+        p.display_fit_results(rec.source_path, fit_result)
+        rows = self._extract_summary_rows(fit_result.get('global_summary', {}), fit_result.get('global_popt'))
+        self._save_roi_progress(rec.source_path, fit_result, rows)
+        if getattr(self, '_proj_browser', None) is not None:
+            self._proj_browser.on_fit_done(stem, output_prefix=stem)
+
+    def _restore_apply_source(self, restore):
+        self._last_loaded_ptu = restore['ptu']
+        self.sv_ptu.set(restore['ptu'])
+        self.sv_xlsx.set(restore['xlsx'])
+        self.sv_out_fov.set(restore['out'])
+        self._fov_preview._roi_manager.clear_all()
+        self._fov_preview._roi_patches.clear()
+        if Path(restore['session']).exists():
+            self._load_fitted_data_from_file(restore['session'], suppress_popups=True)
+        else:
+            self._fov_preview.load_fov(restore['ptu'])
+        if hasattr(self, '_roi_analysis_panel'):
+            self._roi_analysis_panel._refresh_region_list()
+
     def _populate_zstack_summary_from_dir(self, group_dir):
         import json
         import numpy as np
@@ -3258,6 +3545,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 save_stack=True,
                 no_plots=False,
             )
+            self._apply_expert_overrides(a, expert)
             return fit_zstack(
                 ptu_dir=ptu_dir,
                 output_dir=out_dir,
@@ -3373,7 +3661,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             elif pipeline == 'series_fit' and isinstance(result, dict):
                 planes = result.get('planes', [])
                 taus = result.get('consensus_taus_ns', [])
-                print(f"\n  {len(planes)} plane(s) written under {a.output_dir}")
+                print(f'\n  {len(planes)} plane(s) written under {a.output_dir}')
                 print(f"  Manifest: {result.get('base', '')}_series_index.json")
                 if taus:
                     print(f"  Consensus τ = {[f'{t:.3f}' for t in taus]} ns")
@@ -3476,7 +3764,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             xlsx_irf = self.sv_ph_irf.get().strip() or None
             mach_irf = self.sv_ph_mirf.get().strip() or None
             irf_path = xlsx_irf or mach_irf
-
             from flimkit.formats import file_modality
             modality = file_modality(ptu)
 
@@ -3505,7 +3792,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 )
                 self._phasor_panel._ptu_path = ptu
                 self._phasor_panel._channel = channel
-                self._auto_save_phasor(ptu)
+                if self._restore_saved_phasor_state(ptu):
+                    self._auto_save_phasor(ptu)
                 self._res.set_status(
                     f'✓  Phasor data loaded from channel {channel} - click the phasor to place cursors.')
             self._phasor_thread(_worker, _done,
@@ -3583,6 +3871,30 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         t = threading.Thread(target=_run, daemon=True)
         t.start()
 
+    def _restore_saved_phasor_state(self, ptu_path: str) -> bool:
+        p = Path(ptu_path)
+        session_path = p.parent / f'{p.stem}_phasor.npz'
+        if not session_path.exists():
+            print(f'[Auto-Load] No phasor session found for {p.name}')
+            return True
+        try:
+            from flimkit.phasor_launcher import load_session
+            sess = load_session(str(session_path))
+        except Exception as exc:
+            print(f'[Auto-Load] Could not read {session_path.name}, leaving it untouched: {exc}')
+            return False
+        saved_shape = np.shape(sess['mean'])
+        loaded_shape = np.shape(self._phasor_panel._mean)
+        if saved_shape != loaded_shape:
+            print(f'[Auto-Load] {session_path.name} holds a {saved_shape} image, '
+                  f'not {loaded_shape}, leaving it untouched')
+            return False
+        n = self._phasor_panel.restore_state(sess)
+        method = (sess.get('phasor_filter') or {}).get('method', 'none')
+        extra = '' if method == 'none' else f' and the {method} filter'
+        print(f'[Auto-Load] Restored {n} cursor(s){extra} from {session_path.name}')
+        return True
+
     def _auto_save_phasor(self, ptu_path: str):
         try:
             sd = self._phasor_panel.get_session_dict()
@@ -3600,7 +3912,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 cursors=sd['cursors'],
                 params=sd['params'],
                 ptu_file=ptu_path,
+                irf_file=(self.sv_ph_irf.get().strip() or self.sv_ph_mirf.get().strip() or None),
                 display_image=sd.get('display_image'),
+                phasor_filter=sd.get('phasor_filter'),
             )
             print(f'[Phasor] Auto-saved session → {save_path}')
             if hasattr(self, '_proj_browser'):
