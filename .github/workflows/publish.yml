@@ -46,3 +46,22 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+  docker:
+    needs: pypi
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask flimkit-docker to build this version
+        env:
+          TOKEN: ${{ secrets.FLIMKIT_DOCKER_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::FLIMKIT_DOCKER_DISPATCH_TOKEN is not set, so the images for ${GITHUB_REF_NAME#v} wait for the weekly build"
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/FLIMKit/flimkit-docker/dispatches \
+            -d "{\"event_type\": \"flimkit-release\", \"client_payload\": {\"version\": \"${GITHUB_REF_NAME#v}\"}}"

@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- The Docker build files and `docker.yml` are gone from this repository. The images have been built in [flimkit-docker](https://github.com/FLIMKit/flimkit-docker) since 16 September, and the leftover workflow still fired on version tags, set to push the old images over the new ones. A release now asks flimkit-docker to build that version, once a `FLIMKIT_DOCKER_DISPATCH_TOKEN` secret is set; without it the images wait for the weekly build.
+
 ## [0.13.6] - 2026-09-26
 
 ### Added
