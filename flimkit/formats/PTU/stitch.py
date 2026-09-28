@@ -47,31 +47,31 @@ def stitch_flim_tiles(
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
     roi_prefix = ptu_basename.replace(' ', '_')
-    output_intensity = output_dir / f"{roi_prefix}_stitched_intensity.tif"
-    output_flim = output_dir / f"{roi_prefix}_stitched_flim_counts.npy"
-    output_time = output_dir / f"{roi_prefix}_time_axis_ns.npy"
-    output_weight = output_dir / f"{roi_prefix}_weight_map.npy"
-    output_meta = output_dir / f"{roi_prefix}_metadata.json"
+    output_intensity = output_dir / f'{roi_prefix}_stitched_intensity.tif'
+    output_flim = output_dir / f'{roi_prefix}_stitched_flim_counts.npy'
+    output_time = output_dir / f'{roi_prefix}_time_axis_ns.npy'
+    output_weight = output_dir / f'{roi_prefix}_weight_map.npy'
+    output_meta = output_dir / f'{roi_prefix}_metadata.json'
     if verbose:
         print(f"{'='*60}")
-        print(f"FLIM TILE STITCHING")
+        print(f'FLIM TILE STITCHING')
         print(f"{'='*60}")
-        print(f"Metadata: {xlif_path}")
-        print(f"PTUs: {ptu_dir}")
-        print(f"Output: {output_dir}")
+        print(f'Metadata: {xlif_path}')
+        print(f'PTUs: {ptu_dir}')
+        print(f'Output: {output_dir}')
         print()
         print('Parsing tile metadata...')
     if tile_positions is None:
         tile_positions = parse_tile_positions(xlif_path, ptu_basename)
     pixel_size_m, n_pixels = get_pixel_size(xlif_path, ptu_basename)
     if verbose:
-        print(f"  Found {len(tile_positions)} tiles")
-        print(f"  Pixel size: {pixel_size_m * 1e6:.4f} µm")
+        print(f'  Found {len(tile_positions)} tiles')
+        print(f'  Pixel size: {pixel_size_m * 1e6:.4f} µm')
     first_tile_path = ptu_dir / tile_positions[0]['file']
     if not first_tile_path.exists():
-        raise FileNotFoundError(f"First tile not found: {first_tile_path}")
+        raise FileNotFoundError(f'First tile not found: {first_tile_path}')
     if verbose:
-        print(f"  Loading first tile: {first_tile_path.name}")
+        print(f'  Loading first tile: {first_tile_path.name}')
     first_hist, first_meta = get_flim_histogram_from_ptufile(
         first_tile_path, rotate_cw=rotate_tiles, binning=1, channel=None)
     tile_y, tile_x = first_meta['tile_shape']
@@ -79,9 +79,9 @@ def stitch_flim_tiles(
     tcspc_resolution = first_meta['tcspc_resolution']
     time_axis_ns = create_time_axis(n_time_bins, tcspc_resolution)
     if verbose:
-        print(f"  Tile shape: ({tile_y}, {tile_x}, {n_time_bins})")
-        print(f"  TCSPC: {tcspc_resolution * 1e12:.2f} ps/bin")
-        print(f"  Time range: 0 - {time_axis_ns[-1]:.2f} ns")
+        print(f'  Tile shape: ({tile_y}, {tile_x}, {n_time_bins})')
+        print(f'  TCSPC: {tcspc_resolution * 1e12:.2f} ps/bin')
+        print(f'  Time range: 0 - {time_axis_ns[-1]:.2f} ns')
     _positions_precomputed = ('pixel_x' in tile_positions[0] and
                               'pixel_y' in tile_positions[0])
     if not _positions_precomputed:
@@ -92,7 +92,7 @@ def stitch_flim_tiles(
         canvas_height = max(t['pixel_y'] for t in tile_positions) + tile_y
     cube_gb = canvas_height * canvas_width * n_time_bins * 4 / 1e9
     if verbose:
-        print(f"  Canvas: {canvas_height} × {canvas_width} pixels")
+        print(f'  Canvas: {canvas_height} × {canvas_width} pixels')
         print()
         print(f'Allocating a {cube_gb:.1f} GB photon cube at {output_flim}')
         if not sparse_files_supported(Path(output_flim).parent):
@@ -110,7 +110,7 @@ def stitch_flim_tiles(
         print(f'  Allocated in {time.time() - allocation_started:.1f}s')
     _hists = []
     if verbose:
-        print(f"Stitching {len(tile_positions)} tiles...")
+        print(f'Stitching {len(tile_positions)} tiles...')
         print()
     tiles_processed = tiles_skipped = 0
     total_tiles = len(tile_positions)
@@ -171,7 +171,7 @@ def stitch_flim_tiles(
             continue
     if register_tiles and tiles_processed > 1 and tile_results:
         if verbose:
-            print(f"\nRunning tile registration (phase correlation)...")
+            print(f'\nRunning tile registration (phase correlation)...')
         tile_results = _register_tile_columns(
             tile_results,
             max_shift_px=reg_max_shift_px,
@@ -206,9 +206,9 @@ def stitch_flim_tiles(
         if new_canvas_height > canvas_height or new_canvas_width > canvas_width:
             if verbose:
                 print(
-                    f"  Registration expanded canvas: "
-                    f"{canvas_height}×{canvas_width} → "
-                    f"{new_canvas_height}×{new_canvas_width} px"
+                    f'  Registration expanded canvas: '
+                    f'{canvas_height}×{canvas_width} → '
+                    f'{new_canvas_height}×{new_canvas_width} px'
                 )
             intensity_canvas = np.zeros(
                 (new_canvas_height, new_canvas_width), dtype=np.float64)
@@ -236,7 +236,7 @@ def stitch_flim_tiles(
             canvas_width = new_canvas_width
     if verbose:
         blending_mode = 'with registration' if (register_tiles and tiles_processed > 1) else 'no blending'
-        print(f"  Writing canvas (nearest-centre, {blending_mode})...")
+        print(f'  Writing canvas (nearest-centre, {blending_mode})...')
     for ti, y0, x0, h in _hists:
         y1 = y0 + h.shape[0]
         x1 = x0 + h.shape[1]
@@ -248,9 +248,9 @@ def stitch_flim_tiles(
     del _min_dist2
     n_covered = int((_owner >= 0).sum())
     if verbose:
-        print(f"  {n_covered:,} pixels covered  "
-              f"({100*n_covered/(canvas_height*canvas_width):.1f}% of canvas)  "
-              f"nearest-centre selection, no blending")
+        print(f'  {n_covered:,} pixels covered  '
+              f'({100*n_covered/(canvas_height*canvas_width):.1f}% of canvas)  '
+              f'nearest-centre selection, no blending')
         print('Saving outputs...')
     max_val = intensity_canvas.max()
     intensity_scaled = (
@@ -258,7 +258,10 @@ def stitch_flim_tiles(
         if max_val > 0 else
         np.zeros_like(intensity_canvas, dtype=np.uint16)
     )
-    tifffile.imwrite(str(output_intensity), intensity_scaled)
+    from flimkit.utils.export_png import field_area_um2, tiff_resolution
+    tifffile.imwrite(str(output_intensity), intensity_scaled,
+                     **tiff_resolution(intensity_scaled, field_area_um2(
+                         pixel_size_m * 1e6, (canvas_height, canvas_width))))
     np.save(str(output_time), time_axis_ns)
     np.save(str(output_weight), (_owner + 1).astype(np.uint16))
     flim_canvas.flush()
@@ -279,14 +282,14 @@ def stitch_flim_tiles(
     if verbose:
         for name in (output_intensity, output_flim, output_time,
                      output_weight, output_meta):
-            print(f"  {name.name}")
+            print(f'  {name.name}')
         print()
         print(f"{'='*60}")
-        print(f"STITCHING COMPLETE")
+        print(f'STITCHING COMPLETE')
         print(f"{'='*60}")
-        print(f"Processed: {tiles_processed}/{len(tile_positions)} tiles")
-        print(f"Canvas: {canvas_height} × {canvas_width} × {n_time_bins}")
-        print(f"Time: 0 - {time_axis_ns[-1]:.2f} ns")
+        print(f'Processed: {tiles_processed}/{len(tile_positions)} tiles')
+        print(f'Canvas: {canvas_height} × {canvas_width} × {n_time_bins}')
+        print(f'Time: 0 - {time_axis_ns[-1]:.2f} ns')
     return {
         'intensity_path': output_intensity,
         'flim_path': output_flim,
@@ -294,6 +297,7 @@ def stitch_flim_tiles(
         'weight_map_path': output_weight,
         'metadata_path': output_meta,
         'canvas_shape': (canvas_height, canvas_width),
+        'pixel_size_um': float(pixel_size_m * 1e6),
         'n_time_bins': n_time_bins,
         'tiles_processed': tiles_processed,
         'tiles_skipped': tiles_skipped,
@@ -312,7 +316,7 @@ def load_stitched_flim(
         meta_path = output_dir / 'metadata.json'
         roi_prefix = None
     else:
-        raise FileNotFoundError(f"No metadata.json found in {output_dir}")
+        raise FileNotFoundError(f'No metadata.json found in {output_dir}')
     with open(meta_path, 'r') as f:
         metadata = json.load(f)
     canvas_shape = tuple(metadata['canvas_shape'])
@@ -321,9 +325,9 @@ def load_stitched_flim(
         p = output_dir / prefixed
         return p if p.exists() else output_dir / generic
     if roi_prefix:
-        time_path = _find(f"{roi_prefix}_time_axis_ns.npy", 'time_axis_ns.npy')
-        int_path = _find(f"{roi_prefix}_stitched_intensity.tif", 'stitched_intensity.tif')
-        flim_path = _find(f"{roi_prefix}_stitched_flim_counts.npy",'stitched_flim_counts.npy')
+        time_path = _find(f'{roi_prefix}_time_axis_ns.npy', 'time_axis_ns.npy')
+        int_path = _find(f'{roi_prefix}_stitched_intensity.tif', 'stitched_intensity.tif')
+        flim_path = _find(f'{roi_prefix}_stitched_flim_counts.npy','stitched_flim_counts.npy')
     else:
         time_path = output_dir / 'time_axis_ns.npy'
         int_path = output_dir / 'stitched_intensity.tif'
@@ -370,7 +374,7 @@ def _resolve_tile_irf(ptu_name, irf_xlsx_dir=None, irf_xlsx_map=None):
         if stem in irf_xlsx_map:
             return irf_xlsx_map[stem]
     if irf_xlsx_dir is not None:
-        candidate = Path(irf_xlsx_dir) / f"{stem}.xlsx"
+        candidate = Path(irf_xlsx_dir) / f'{stem}.xlsx'
         if candidate.exists():
             return candidate
     return None
@@ -380,7 +384,7 @@ def _load_machine_irf(path):
     irf = np.maximum(irf, 0.0)
     s = irf.sum()
     if s <= 0:
-        raise ValueError(f"Machine IRF is all-zero: {path}")
+        raise ValueError(f'Machine IRF is all-zero: {path}')
     irf /= s
     return irf, int(np.argmax(irf))
 
@@ -659,7 +663,7 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
     timepoints = index['timepoints'][::max(1, stride)]
     planes = [k for k in sorted(index['planes']) if k[0] in set(timepoints)]
     if verbose:
-        print(f'Pooling decay over {len(planes)} of {len(index["planes"])} planes '
+        print(f'Pooling decay over {len(planes)} of {len(index['planes'])} planes '
               f'(every {stride} timepoint(s))...')
     pooled_decay = None
     n_bins_ref = None
@@ -821,6 +825,16 @@ def fit_flim_series(
     n_exp_ = getattr(args, 'nexp', 2)
     roi_base = index['base'].replace(' ', '_')
     planes = sorted(index['planes'])
+    from flimkit.utils.export_png import field_area_um2, tag_pixel_size_um
+    series_pixel_um = None
+    try:
+        from .reader import PTUFile
+        first_tile = index['planes'][planes[0]][0]['file']
+        series_pixel_um = tag_pixel_size_um(PTUFile(str(ptu_dir / first_tile), verbose=False).tags)
+    except Exception as exc:
+        print(f'  No pixel size for the series TIFFs: {exc}')
+    if series_pixel_um is not None:
+        series_pixel_um = series_pixel_um * (getattr(args, 'binning', 1) or 1)
     written = []
     for i, key in enumerate(planes):
         if cancel_event is not None and cancel_event.is_set():
@@ -833,7 +847,7 @@ def fit_flim_series(
         plane_positions = plane_tile_positions(tile_positions, index['planes'][key])
         plane_name = f'{roi_base}_t{t_index}_z{z_index}'
         if verbose:
-            print(f"\n[{i+1}/{len(planes)}] t={t_index} z={z_index}")
+            print(f'\n[{i+1}/{len(planes)}] t={t_index} z={z_index}')
         (tile_results, canvas_h, canvas_w, corrected_positions,
          _, _, _, _, plane_summary) = fit_flim_tiles(
             xlif_path = None,
@@ -866,6 +880,7 @@ def fit_flim_series(
             n_exp = n_exp_,
             tau_display_min = getattr(args, 'tau_display_min', None),
             tau_display_max = getattr(args, 'tau_display_max', None),
+            field_area_um2 = field_area_um2(series_pixel_um, (canvas_h, canvas_w)),
         )
         written.append({
             't': t_index,
@@ -973,7 +988,7 @@ def fit_flim_tiles(
         _tvb_bg_raw = _tvb_ref.summed_decay(channel=_tvb_chan)
         _tvb_bg_res = _tvb_ref.tcspc_res
         if verbose:
-            print(f"  TVB background from: {_tvb_ptu_path} ({float(_tvb_bg_raw.sum()):,.0f} photons)")
+            print(f'  TVB background from: {_tvb_ptu_path} ({float(_tvb_bg_raw.sum()):,.0f} photons)')
     _fit_tvb = _tvb_bg_raw is not None
     if tile_positions is None:
         tile_positions = parse_tile_positions(xlif_path, ptu_basename)
@@ -989,13 +1004,13 @@ def fit_flim_tiles(
             _peek_tile_width(ptu_dir, tile_positions, rotate_tiles) // binning)
     if verbose:
         print(f"\n{'='*60}")
-        print(f"  PER-TILE FLIM FITTING - POOLED MACHINE IRF")
+        print(f'  PER-TILE FLIM FITTING - POOLED MACHINE IRF')
         print(f"{'='*60}")
-        print(f"  Metadata:    {xlif_path}")
-        print(f"  PTUs:        {ptu_dir}")
-        print(f"  Tiles:       {len(tile_positions)}")
-        print(f"  Canvas:      {canvas_h} × {canvas_w} px")
-        print(f"  Machine IRF: {mach_path}  (peak bin {pi_machine})\n")
+        print(f'  Metadata:    {xlif_path}')
+        print(f'  PTUs:        {ptu_dir}')
+        print(f'  Tiles:       {len(tile_positions)}')
+        print(f'  Canvas:      {canvas_h} × {canvas_w} px')
+        print(f'  Machine IRF: {mach_path}  (peak bin {pi_machine})\n')
     total_steps = 2 * len(tile_positions)
     if pooled is not None:
         pooled_decay = pooled['pooled_decay']
@@ -1071,8 +1086,8 @@ def fit_flim_tiles(
         pooled_peak = int(np.argmax(pooled_decay))
         pooled_irf = _get_tile_irf(machine_irf, pi_machine, pooled_peak, n_bins_ref)
         if verbose:
-            print(f"\n  Pooled: {len(tile_meta)} tiles  "
-                  f"{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}")
+            print(f'\n  Pooled: {len(tile_meta)} tiles  '
+                  f'{pooled_decay.sum():,.0f} photons  peak bin {pooled_peak}')
             print('\n  Running consensus fit_summed on pooled decay...')
         _tvb_pooled = (tvb_from_decay(_tvb_bg_raw, n_bins_ref,
                                       src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc_ref)
@@ -1104,9 +1119,9 @@ def fit_flim_tiles(
     for i, tc in enumerate(tqdm(tile_meta,
                                  desc='  Pass 2', disable=True, leave=False)):
         if i == 0 and verbose:
-            tqdm.write(f"Pass 2: per-pixel fit ({len(tile_meta)} tiles)...")
-            tqdm.write(f"  Fixed τ   = {[f'{t:.3f}' for t in consensus_taus_ns]} ns")
-            tqdm.write(f"  Fixed IRF = pooled_irf (peak bin {pooled_peak})\n")
+            tqdm.write(f'Pass 2: per-pixel fit ({len(tile_meta)} tiles)...')
+            tqdm.write(f"  Fixed τ = {[f'{t:.3f}' for t in consensus_taus_ns]} ns")
+            tqdm.write(f'  Fixed IRF = pooled_irf (peak bin {pooled_peak})\n')
         if cancel_event is not None and cancel_event.is_set():
             break
         if progress_callback is not None:
@@ -1169,7 +1184,7 @@ def fit_flim_tiles(
                 tqdm.write(
                     f"    {tc['t']['file']:<30}  "
                     f"{pixel_maps['intensity'].sum():>10,.0f} ph  "
-                    f"fitted={n_fitted}")
+                    f'fitted={n_fitted}')
         except Exception as e:
             import traceback, sys
             if verbose:
@@ -1178,8 +1193,8 @@ def fit_flim_tiles(
             tiles_skipped += 1
             continue
     if verbose:
-        print(f"\n  {len(tile_results)}/{len(tile_meta)} tiles fitted "
-              f"({tiles_skipped} errors)")
+        print(f'\n  {len(tile_results)}/{len(tile_meta)} tiles fitted '
+              f'({tiles_skipped} errors)')
     if register_tiles and len(tile_results) > 1:
         tile_results = _register_tile_columns(
             tile_results,

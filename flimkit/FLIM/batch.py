@@ -9,6 +9,7 @@ from flimkit.formats import FLIMFile
 from ..FLIM.fitters import fit_summed, fit_per_pixel
 from ..FLIM.fit_tools import find_irf_peak_bin
 from ..utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
+from ..utils.export_png import flim_field_area_um2, tiff_resolution
 from ..utils.plotting import plot_summed
 from ..configs import (
     MIN_PHOTONS_PERPIX, lm_restarts, de_population, de_maxiter, n_workers,
@@ -200,6 +201,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 )
                 redox = compute_redox_metrics(pixel_maps, args.nexp,
                                               compute_bound_fraction=compute_bound_fraction)
+                area_um2 = flim_field_area_um2(ptu)
                 pos_dir = frame_dir / f's{s}'
                 pos_dir.mkdir(exist_ok=True)
                 intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
@@ -218,6 +220,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                             canvas=pixel_maps, output_dir=pos_dir, roi_name=roi_name,
                             tau_min_ns=tau_disp_min, tau_max_ns=tau_disp_max,
                             intensity_percentile_hi=95, tau_key='tau_mean_int', verbose=False,
+                            field_area_um2=area_um2,
                         )
                     except Exception as exc:
                         print(f'    Warning: lifetime image export failed for {roi_name}: {exc}')
@@ -258,6 +261,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                         make_component_rgb_tiff(
                             canvas=pixel_maps, output_dir=pos_dir, roi_name=roi_name,
                             n_exp=args.nexp, intensity_percentile_hi=95, verbose=False,
+                            field_area_um2=area_um2,
                         )
                     except Exception as exc:
                         print(f'    Warning: component RGB TIFF export failed for {roi_name}: {exc}')
@@ -272,14 +276,16 @@ def fit_timelapse(ptu_dir, output_dir, args,
                         intensity_u16 = np.clip(
                             intensity.astype(np.float64) / i_max * 65535, 0, 65535
                         ).astype(np.uint16)
-                        _tifffile.imwrite(str(pos_dir / f'{roi_name}_intensity.tif'), intensity_u16)
+                        _tifffile.imwrite(str(pos_dir / f'{roi_name}_intensity.tif'), intensity_u16,
+                                          **tiff_resolution(intensity_u16, area_um2))
                     except Exception as exc:
                         print(f'    Warning: intensity TIFF export failed for {roi_name}: {exc}')
                 if getattr(args, 'save_ind', False):
                     try:
                         from ..utils.enhanced_outputs import save_individual_tau_maps
                         save_individual_tau_maps(
-                            pixel_maps, pos_dir, roi_name=roi_name, n_exp=args.nexp)
+                            pixel_maps, pos_dir, roi_name=roi_name, n_exp=args.nexp,
+                            field_area_um2=area_um2)
                     except Exception as exc:
                         print(f'    Warning: individual component map export failed for {roi_name}: {exc}')
                 stats = {'t': t, 's': s, 'path': str(ptu_path)}
@@ -528,6 +534,7 @@ def fit_zstack(ptu_dir, output_dir, args,
             )
             redox = compute_redox_metrics(pixel_maps, args.nexp,
                                           compute_bound_fraction=compute_bound_fraction)
+            area_um2 = flim_field_area_um2(ptu)
             intensity = pixel_maps.get('intensity', pixel_stack.sum(axis=2))
             np.save(str(slice_dir / 'intensity.npy'), intensity.astype(np.float32))
             for map_name in ('alpha_1', 'alpha_2', 'alpha_3', 'tau_mean_amp',
@@ -544,6 +551,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                         canvas=pixel_maps, output_dir=slice_dir, roi_name=roi_name,
                         tau_min_ns=tau_disp_min, tau_max_ns=tau_disp_max,
                         intensity_percentile_hi=95, tau_key='tau_mean_int', verbose=False,
+                            field_area_um2=area_um2,
                     )
                     if png_path is not None and Path(png_path).exists():
                         shutil.copyfile(str(png_path), str(preview_dir / f'z{z:04d}.png'))
@@ -586,6 +594,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                     make_component_rgb_tiff(
                         canvas=pixel_maps, output_dir=slice_dir, roi_name=roi_name,
                         n_exp=args.nexp, intensity_percentile_hi=95, verbose=False,
+                            field_area_um2=area_um2,
                     )
                 except Exception as exc:
                     print(f'    Warning: component RGB TIFF export failed for {roi_name}: {exc}')
@@ -600,14 +609,16 @@ def fit_zstack(ptu_dir, output_dir, args,
                     intensity_u16 = np.clip(
                         intensity.astype(np.float64) / i_max * 65535, 0, 65535
                     ).astype(np.uint16)
-                    _tifffile.imwrite(str(slice_dir / f'{roi_name}_intensity.tif'), intensity_u16)
+                    _tifffile.imwrite(str(slice_dir / f'{roi_name}_intensity.tif'), intensity_u16,
+                                      **tiff_resolution(intensity_u16, area_um2))
                 except Exception as exc:
                     print(f'    Warning: intensity TIFF export failed for {roi_name}: {exc}')
             if getattr(args, 'save_ind', False):
                 try:
                     from ..utils.enhanced_outputs import save_individual_tau_maps
                     save_individual_tau_maps(
-                        pixel_maps, slice_dir, roi_name=roi_name, n_exp=args.nexp)
+                        pixel_maps, slice_dir, roi_name=roi_name, n_exp=args.nexp,
+                        field_area_um2=area_um2)
                 except Exception as exc:
                     print(f'    Warning: individual component map export failed for {roi_name}: {exc}')
             stats = {'z': z, 'path': str(ptu_path)}

@@ -50,7 +50,6 @@ from flimkit.UI.utils import (
     PAD,
     _C,
     _reconstruct_dict_from_session,
-    _safe_array_from_json,
     _parse_summary,
     _Redirect,
     _FileRedirect,
@@ -359,6 +358,9 @@ class _UIBuilder:
             p = self.sv_ptu.get().strip()
             if p:
                 return Path(p).stem
+        shown = getattr(getattr(self, '_fov_preview', None), '_ptu_path', None)
+        if isinstance(shown, str) and shown.strip():
+            return Path(shown).stem
         return ''
 
     def _menu_restore_npz(self):
@@ -1569,39 +1571,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                         ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                                         color='orange', linewidth=2.0, label='IRF', alpha=0.8)
                                     gs = _reconstruct_dict_from_session(session_data, 'global_summary')
-                                    model = gs.get('model')
-                                    if model is not None and isinstance(model, str):
-                                        model = _safe_array_from_json(model)
+                                    from flimkit.utils.display import summary_model
+                                    model = summary_model(gs, session_data)
                                     if model is not None and len(model) > 0:
                                         ax_decay.semilogy(time_ns, model, color='red', linewidth=2.0,
                                                         label='Fitted', alpha=0.8)
                                     ax_decay.legend(fontsize=8, loc='upper right', labelcolor='black')
-                                    ax_resid = self._fov_preview._ax_resid
-                                    ax_resid.clear()
-                                    ax_resid.set_facecolor('white')
-                                    if model is not None and len(model) == len(decay):
-                                        with np.errstate(invalid='ignore', divide='ignore'):
-                                            resid = np.where(model > 0,
-                                                             (decay - model) / np.sqrt(model),
-                                                             0.0)
-                                        self._fov_preview._cached_resid_data = (time_ns.copy(), resid)
-                                        ax_resid.plot(time_ns, resid, color='steelblue', linewidth=1.0)
-                                        ax_resid.axhline(0, color='red', linewidth=1.0,
-                                                         linestyle='--', alpha=0.8)
-                                        ax_resid.set_ylabel('Resid. (σ)', fontsize=7, color='white')
-                                        chi2_r = gs.get('reduced_chi2_tail')
-                                        if chi2_r is not None:
-                                            ax_resid.annotate(
-                                                f'χ²_r = {chi2_r:.3f}',
-                                                xy=(0.98, 0.85), xycoords='axes fraction',
-                                                ha='right', va='top', fontsize=7,
-                                                color='white',
-                                                bbox=dict(boxstyle='round,pad=0.2',
-                                                          fc='#333333', alpha=0.7),
-                                            )
-                                    ax_resid.set_xlabel('Time (ns)', color='white')
-                                    ax_resid.tick_params(labelsize=7, colors='white')
-                                    ax_resid.grid(True, alpha=0.3)
+                                    gs = dict(gs)
+                                    gs['model'] = model
+                                    self._fov_preview.draw_residuals(time_ns, decay, gs)
                             ax_decay.set_title('Summed Decay (reloaded)', fontsize=10, fontweight='bold', color='white')
                             ax_decay.set_xlabel('Time (ns)', color='white')
                             ax_decay.set_ylabel('Photon Count', color='white')
@@ -1932,13 +1910,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     ax_flim.set_ylabel('Y (pixels)')
                     valid = lifetime[~np.isnan(lifetime)]
                     if valid.size > 0:
-                        vmin_cb = cs.get('vmin') or float(np.nanmin(valid))
-                        vmax_cb = cs.get('vmax') or float(np.nanmax(valid))
+                        from flimkit.utils.export_png import lifetime_limits, colorbar_ticks
+                        vmin_cb, vmax_cb = lifetime_limits(lifetime, cs.get('vmin'), cs.get('vmax'))
                         cbar = fig.colorbar(im, cax=ax_cbar)
                         cbar.set_label('τ (ns)', fontsize=8)
-                        ticks = np.linspace(0, 1, 5)
+                        ticks, tick_values = colorbar_ticks(vmin_cb, vmax_cb, cs.get('gamma') or 1.0)
                         cbar.set_ticks(ticks)
-                        cbar.set_ticklabels([f'{vmin_cb + t*(vmax_cb - vmin_cb):.2f}' for t in ticks], fontsize=7)
+                        cbar.set_ticklabels([f'{v:.2f}' for v in tick_values], fontsize=7)
                     ax_decay = self._fov_preview._ax_decay
                     ax_decay.clear()
                     decay = fit_result.get('decay')
@@ -1952,13 +1930,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                             ax_decay.semilogy(time_ns[:len(irf)], np.maximum(irf_scaled, 1e-2),
                                             color='orange', linewidth=2.0, label='IRF', alpha=0.8)
                         gs = _reconstruct_dict_from_session(fit_result, 'global_summary')
-                        model = gs.get('model')
-                        if model is not None and isinstance(model, str):
-                            model = _safe_array_from_json(model)
+                        from flimkit.utils.display import summary_model
+                        model = summary_model(gs, fit_result)
                         if model is not None and len(model) > 0:
                             ax_decay.semilogy(time_ns, model, color='red', linewidth=2.0,
                                             label='Fitted', alpha=0.8)
                         ax_decay.legend(fontsize=8, loc='upper right', labelcolor='black')
+                        gs = dict(gs)
+                        gs['model'] = model
+                        self._fov_preview.draw_residuals(time_ns, decay, gs)
                     ax_decay.set_title('Summed Decay', fontsize=10, fontweight='bold', color='white')
                     ax_decay.set_xlabel('Time (ns)', color='white')
                     ax_decay.set_ylabel('Photon Count', color='white')
@@ -2022,6 +2002,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             dlg.grab_set()
             bv_scalebar = tk.BooleanVar(value=True)
             bv_annotations = tk.BooleanVar(value=True)
+            bv_colorbar = tk.BooleanVar(value=True)
             image_vars = {key: tk.BooleanVar(value=True) for key in available_images}
             ttk.Label(dlg, text='Export Results', font=('TkDefaultFont', 11, 'bold')).pack(pady=10)
             img_frame = ttk.LabelFrame(dlg, text='Images to Export', padding=10)
@@ -2048,7 +2029,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ttk.Button(sel_btn_frame, text='None', command=select_none, width=8).pack(side='left', padx=2)
             opt_frame = ttk.LabelFrame(dlg, text='Rendering Options', padding=10)
             opt_frame.pack(fill='x', padx=20, pady=5)
-            ttk.Checkbutton(opt_frame, text='Include scale bar', variable=bv_scalebar).pack(anchor='w', pady=3)
+            ttk.Checkbutton(opt_frame, text='Include scale bar (µm) in the image', variable=bv_scalebar).pack(anchor='w', pady=3)
+            ttk.Checkbutton(opt_frame, text='Save colour scale bar as a separate PNG', variable=bv_colorbar).pack(anchor='w', pady=3)
             ttk.Checkbutton(opt_frame, text='Include ROI annotations', variable=bv_annotations).pack(anchor='w', pady=3)
             fmt_frame = ttk.LabelFrame(dlg, text='Image Format', padding=10)
             fmt_frame.pack(fill='x', padx=20, pady=5)
@@ -2099,9 +2081,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                        with_scalebar=bv_scalebar.get(),
                                        with_annotations=bv_annotations.get(),
                                        format=fmt,
-                                       fit_result=image_dict)
+                                       fit_result=image_dict,
+                                       with_colorbar=bv_colorbar.get())
                     dlg.destroy()
-                    messagebox.showinfo('Success', f'Results exported to\n{export_dir}')
+                    notes = getattr(self, '_export_warnings', [])
+                    extra = ('\n\n' + '\n'.join(notes)) if notes else ''
+                    messagebox.showinfo('Success', f'Results exported to\n{export_dir}{extra}')
                 except Exception as e:
                     print(f'[Export Error] {e}')
                     import traceback
@@ -2123,8 +2108,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
 
     def _export_images(self, image_dict: dict, output_dir: str,
                       with_scalebar: bool = True, with_annotations: bool = True,
-                      format: str = 'png', fit_result: dict = None):
+                      format: str = 'png', fit_result: dict = None,
+                      with_colorbar: bool = True):
         try:
+            from flimkit.utils.export_png import lifetime_limits, save_colorbar
             from pathlib import Path
             import numpy as np
             import matplotlib.pyplot as plt
@@ -2133,14 +2120,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
             exported_count = 0
-            pixel_size_um = self._get_pixel_size_um()
+            pixel_size_um = (fit_result or {}).get('pixel_size_um') or self._get_pixel_size_um()
             scan_stem = self._current_scan_stem() or 'results'
             ome_meta = {'axes': 'YX'}
             if pixel_size_um:
                 ome_meta.update(PhysicalSizeX=float(pixel_size_um), PhysicalSizeXUnit='µm',
                                 PhysicalSizeY=float(pixel_size_um), PhysicalSizeYUnit='µm')
+            self._export_warnings = []
             if with_scalebar and pixel_size_um is None:
                 print('[Export] No pixel size available - scale bar will be omitted')
+                self._export_warnings.append('The file has no pixel size, so the images have no scale bar.')
                 with_scalebar = False
             if fmt == 'omezarr':
                 try:
@@ -2219,6 +2208,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         _lo, _hi = self._fov_preview._intensity_limits(intensity)
                         _icmap = _display.get_colormap(self._fov_preview._int_display.get('cmap', 'inferno'))
                         im = ax.imshow(intensity, cmap=_icmap, origin='upper', aspect='auto', vmin=_lo, vmax=_hi)
+                        if with_colorbar:
+                            cb_file = output_path / f'{scan_stem}_intensity_colorbar.png'
+                            save_colorbar(cb_file, _icmap, _lo, _hi, 'Intensity (photons)')
+                            print(f'✓ Exported colour bar: {cb_file.name}')
                         ax.axis('off')
                         if with_scalebar:
                             self._draw_scale_bar(ax, w, h, pixel_size_um)
@@ -2234,12 +2227,26 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 if 'lifetime' in image_dict and isinstance(image_dict['lifetime'], np.ndarray):
                     try:
                         lifetime = image_dict['lifetime']
+                        shown = getattr(self._fov_preview, '_lifetime_map', None)
+                        if isinstance(shown, np.ndarray) and shown.shape[:2] == lifetime.shape[:2]:
+                            lifetime = shown
                         print(f'[Export] Lifetime shape: {lifetime.shape}')
                         h, w = lifetime.shape[:2]
                         fig = plt.figure(figsize=(w/100, h/100), dpi=100, facecolor='black', edgecolor='black')
                         ax = fig.add_axes([0, 0, 1, 1])
                         ax.set_facecolor('black')
-                        im = ax.imshow(lifetime, cmap='viridis', origin='upper', aspect='auto')
+                        from flimkit.utils import display as _display
+                        cs = self._fov_preview._flim_color_scale
+                        _lcmap = _display.get_colormap(cs.get('cmap') or 'viridis')
+                        _lcmap.set_bad(color='black')
+                        _lo, _hi = lifetime_limits(lifetime, cs.get('vmin'), cs.get('vmax'))
+                        scaled = _display.apply_color_scale(lifetime, vmin=_lo, vmax=_hi,
+                                                            gamma=cs.get('gamma') or 1.0)
+                        im = ax.imshow(scaled, cmap=_lcmap, origin='upper', aspect='auto', vmin=0, vmax=1)
+                        if with_colorbar:
+                            cb_file = output_path / f'{scan_stem}_lifetime_colorbar.png'
+                            save_colorbar(cb_file, _lcmap, _lo, _hi, 'τ (ns)', gamma=cs.get('gamma') or 1.0)
+                            print(f'✓ Exported colour bar: {cb_file.name}')
                         ax.axis('off')
                         if with_scalebar:
                             self._draw_scale_bar(ax, w, h, pixel_size_um)
@@ -2324,9 +2331,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if ptu_path and Path(ptu_path).exists():
                 from flimkit.formats import FLIMFile
                 ptu = FLIMFile(str(ptu_path), verbose=False)
-                pix_res = ptu.tags.get('ImgHdr_PixRes', 0)
-                if pix_res and float(pix_res) > 0:
-                    return float(pix_res) * 1e6
+                from flimkit.utils.export_png import tag_pixel_size_um
+                pix_res = tag_pixel_size_um(getattr(ptu, 'tags', {}) or {})
+                if pix_res is not None:
+                    return pix_res
         except Exception as e:
             print(f'[Export] Could not determine pixel size: {e}')
         return None
@@ -2958,24 +2966,28 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         canvas = assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp)
                         del tile_results; gc.collect()
                         summary = derive_global_tau(canvas, n_exp=n_exp)
+                        from flimkit.utils.export_png import xlif_field_area_um2
+                        area_um2 = xlif_field_area_um2(xlif_path, ptu_basename, (canvas_h, canvas_w), fit_args.binning)
                         save_assembled_maps(
                             canvas=canvas, global_summary=summary,
                             output_dir=roi_out, roi_name=roi_clean, n_exp=n_exp,
                             tau_display_min=tau_lo, tau_display_max=tau_hi,
                             intensity_display_max=int_max,
                             tau_weighting=('int' if tau_weighting == 'intensity' else 'amp'),
+                            field_area_um2=area_um2,
                         )
                         if save_lifetime:
                             make_lifetime_image(
                                 canvas=canvas, output_dir=roi_out, roi_name=roi_clean,
                                 tau_min_ns=tau_lo, tau_max_ns=tau_hi,
                                 smooth_sigma_px=0.0, gamma=gamma, verbose=False,
-                                tau_key=tau_key,
+                                tau_key=tau_key, field_area_um2=area_um2,
                             )
                         if save_rgb:
                             make_component_rgb_tiff(
                                 canvas=canvas, output_dir=roi_out,
                                 roi_name=roi_clean, n_exp=n_exp, verbose=False,
+                                field_area_um2=area_um2,
                             )
                         if not save_npy:
                             for f_ in roi_out.glob('*.npy'):

@@ -82,7 +82,7 @@ class FOVPreviewPanel:
         ttk.Entry(ctrl_frame, textvariable=self._sv_gamma, width=6).grid(row=1, column=2, sticky='w', padx=2)
         ttk.Label(ctrl_frame, text='Colormap:').grid(row=1, column=3, sticky='w', padx=(10, 2))
         self._sv_cmap = tk.StringVar(value='viridis')
-        self._cmap_combo = ttk.Combobox(ctrl_frame, textvariable=self._sv_cmap, 
+        self._cmap_combo = ttk.Combobox(ctrl_frame, textvariable=self._sv_cmap,
                                  state='readonly', width=10)
         self._cmap_combo.grid(row=1, column=4, sticky='w', padx=2)
         self._cmap_combo['values'] = list(display.COLORMAPS.keys())
@@ -212,12 +212,12 @@ class FOVPreviewPanel:
             n_photons = int(decay.sum())
             if is_image:
                 img_shape = intensity.shape
-                self._status.set(f"✓ {Path(ptu_path).name} | {img_shape[0]}×{img_shape[1]}px | {n_photons} photons")
+                self._status.set(f'✓ {Path(ptu_path).name} | {img_shape[0]}×{img_shape[1]}px | {n_photons} photons')
             else:
-                self._status.set(f"✓ {Path(ptu_path).name} | point measurement, no image | {n_photons} photons")
+                self._status.set(f'✓ {Path(ptu_path).name} | point measurement, no image | {n_photons} photons')
         except Exception as e:
             self._clear()
-            self._status.set(f"Error loading FOV: {str(e)[:50]}")
+            self._status.set(f'Error loading FOV: {str(e)[:50]}')
     def display_fit_results(self, ptu_path: str, fit_result: dict, _keep_zstack=False):
         if not _keep_zstack:
             self._hide_zstack()
@@ -258,7 +258,7 @@ class FOVPreviewPanel:
             from flimkit.utils.display import compute_weighted_lifetime
             pixel_maps = fit_result.get('pixel_maps')
             if pixel_maps is None and canvas is not None:
-                pixel_maps = {k: v for k, v in canvas.items() 
+                pixel_maps = {k: v for k, v in canvas.items()
                              if k not in ('intensity', 'coverage')}
             nexp = global_summary.get('n_exp', len(global_summary.get('taus_ns', [])))
             if nexp == 0:
@@ -271,7 +271,7 @@ class FOVPreviewPanel:
                         weighting=self._sv_tau_weighting.get(),
                     )
                 except Exception as e:
-                    print(f"  - Warning: Could not compute lifetime map: {e}")
+                    print(f'  - Warning: Could not compute lifetime map: {e}')
                     lifetime_map = None
             if (lifetime_map is not None and intensity is not None
                     and lifetime_map.shape != intensity.shape[:2]):
@@ -282,7 +282,7 @@ class FOVPreviewPanel:
                         lifetime_map.astype(np.float32), (tw, th),
                         interpolation=_cv2.INTER_NEAREST)
                 except Exception as _upe:
-                    print(f"  - Could not upsample lifetime_map: {_upe}")
+                    print(f'  - Could not upsample lifetime_map: {_upe}')
             self._lifetime_map = lifetime_map
             self._pixel_maps = pixel_maps
             self._intensity_map = intensity
@@ -314,17 +314,16 @@ class FOVPreviewPanel:
                 self._strip_image_axes(self._ax_flim)
                 valid_data = self._lifetime_map[~np.isnan(self._lifetime_map)]
                 if valid_data.size > 0:
-                    data_min = np.min(valid_data)
-                    data_max = np.max(valid_data)
+                    from flimkit.utils.export_png import lifetime_limits, colorbar_ticks
+                    cs = self._flim_color_scale
+                    data_min, data_max = lifetime_limits(self._lifetime_map, cs['vmin'], cs['vmax'])
                     self._ax_cbar.clear()
                     cbar = self._fig.colorbar(im, cax=self._ax_cbar)
-                    cbar.set_label(f"τ (ns)", fontsize=8, color='white')
+                    cbar.set_label('τ (ns)', fontsize=8, color='white')
                     self._flim_cbar = cbar
-                    n_ticks = 5
-                    tick_positions = np.linspace(0, 1, n_ticks)
-                    tick_values = data_min + tick_positions * (data_max - data_min)
+                    tick_positions, tick_values = colorbar_ticks(data_min, data_max, cs.get('gamma') or 1.0)
                     cbar.set_ticks(tick_positions)
-                    cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7, color='white')
+                    cbar.set_ticklabels([f'{v:.2f}' for v in tick_values], fontsize=7, color='white')
                     cbar.ax.tick_params(colors='white')
                 else:
                     self._ax_cbar.clear()
@@ -348,13 +347,14 @@ class FOVPreviewPanel:
                     if irf_max > 0:
                         irf_scaled = (irf_prompt / irf_max) * decay.max() * 0.2
                         irf_time = time_ns[:len(irf_prompt)]
-                        self._ax_decay.semilogy(irf_time, np.maximum(irf_scaled, 1e-2), 
+                        self._ax_decay.semilogy(irf_time, np.maximum(irf_scaled, 1e-2),
                                               linewidth=2.0, color='orange', label='IRF', alpha=0.8)
-                model = global_summary.get('model')
+                model = display.summary_model(global_summary, fit_result)
                 if model is not None and len(model) > 0:
-                    self._ax_decay.semilogy(time_ns, model, linewidth=2.0, 
+                    global_summary = dict(global_summary, model=model)
+                    self._ax_decay.semilogy(time_ns[:len(model)], model[:len(time_ns)], linewidth=2.0,
                                           color='red', label='Fitted', alpha=0.8)
-            self._ax_decay.set_title(f"Summed Decay{f' ({nexp}-exp fit)' if nexp > 0 else ''}", 
+            self._ax_decay.set_title(f"Summed Decay{f' ({nexp}-exp fit)' if nexp > 0 else ''}",
                                     fontsize=10, fontweight='bold', color='white')
             self._ax_decay.set_xlabel('Time (ns)', color='white')
             self._ax_decay.set_ylabel('Photon Count', color='white')
@@ -362,54 +362,26 @@ class FOVPreviewPanel:
                 self._ax_decay.legend(fontsize=8, loc='upper right', labelcolor='black')
             self._ax_decay.grid(True, alpha=0.3)
             self._ax_decay.tick_params(labelsize=8, colors='white')
-            self._ax_resid.clear()
-            self._ax_resid.set_facecolor('white')
-            model_arr = global_summary.get('model')
-            if (decay is not None and len(decay) > 0
-                    and model_arr is not None
-                    and len(model_arr) == len(decay)):
-                with np.errstate(invalid='ignore', divide='ignore'):
-                    resid = np.where(model_arr > 0,
-                                     (decay - model_arr) / np.sqrt(model_arr),
-                                     0.0)
-                self._cached_resid_data = (time_ns.copy(), resid)
-                self._ax_resid.plot(time_ns, resid, color='steelblue', linewidth=1.0)
-                self._ax_resid.axhline(0, color='red', linewidth=1.0,
-                                       linestyle='--', alpha=0.8)
-                self._ax_resid.set_ylabel('Resid. (σ)', fontsize=7, color='white')
-                chi2_r = global_summary.get('reduced_chi2_tail')
-                if chi2_r is not None:
-                    self._ax_resid.annotate(
-                        f"χ²_r = {chi2_r:.3f}",
-                        xy=(0.98, 0.85), xycoords='axes fraction',
-                        ha='right', va='top', fontsize=7,
-                        color='white',
-                        bbox=dict(boxstyle='round,pad=0.2', fc='#333333', alpha=0.7),
-                    )
-            else:
-                self._cached_resid_data = None
-            self._ax_resid.set_xlabel('Time (ns)', color='white')
-            self._ax_resid.tick_params(labelsize=7, colors='white')
-            self._ax_resid.grid(True, alpha=0.3)
+            self.draw_residuals(time_ns, decay, global_summary)
             self._ctrl_frame.grid()
             self._canvas_mpl.draw_idle()
-            status = f"✓ Fit complete"
+            status = f'✓ Fit complete'
             chi2_tail = global_summary.get('reduced_chi2_tail')
             if chi2_tail is not None:
-                status += f" | χ²_r(tail)={chi2_tail:.3f}"
+                status += f' | χ²_r(tail)={chi2_tail:.3f}'
             if nexp > 0:
-                taus = [global_summary.get(f'taus_ns', [])[i] if i < len(global_summary.get('taus_ns', [])) else None 
+                taus = [global_summary.get(f'taus_ns', [])[i] if i < len(global_summary.get('taus_ns', [])) else None
                         for i in range(nexp)]
-                taus_str = ', '.join([f"{t:.3f}" for t in taus if t is not None])
-                status += f" | τ=[{taus_str}] ns"
+                taus_str = ', '.join([f'{t:.3f}' for t in taus if t is not None])
+                status += f' | τ=[{taus_str}] ns'
             self._status.set(status)
-            print(f"  - Status: {status}")
+            print(f'  - Status: {status}')
         except Exception as e:
             import traceback
-            print(f"[FOV Preview] Error displaying fit results:")
+            print(f'[FOV Preview] Error displaying fit results:')
             traceback.print_exc()
-            self._status.set(f"Error: {str(e)[:60]}")
-            self._status.set(f"Error displaying fit: {str(e)[:50]}")
+            self._status.set(f'Error: {str(e)[:60]}')
+            self._status.set(f'Error displaying fit: {str(e)[:50]}')
     def display_zstack(self, slices, ptu_path=None):
         self._zstack = list(slices) if slices else None
         if not self._zstack:
@@ -449,7 +421,7 @@ class FOVPreviewPanel:
         if desc.get('z') is not None:
             parts.append(f"z{desc['z']}")
         head = ' '.join(parts) or desc.get('name', '')
-        return f"{head}  ({i + 1}/{len(self._series)})"
+        return f'{head}  ({i + 1}/{len(self._series)})'
 
     def _show_series_plane(self, i):
         desc = self._series[i]
@@ -525,9 +497,9 @@ class FOVPreviewPanel:
                     if valid.any():
                         lifetime_min = float(np.nanmin(lifetime_data[valid]))
                         lifetime_max = float(np.nanpercentile(lifetime_data[valid], 98))
-                        print(f"  ✓ Loaded full-range lifetime: {lifetime_min:.2f}-{lifetime_max:.2f} ns")
+                        print(f'  ✓ Loaded full-range lifetime: {lifetime_min:.2f}-{lifetime_max:.2f} ns')
                 except Exception as e:
-                    print(f"  - Could not load full-range lifetime: {e}")
+                    print(f'  - Could not load full-range lifetime: {e}')
             if lifetime_data is None:
                 lifetime_disp = sorted(out_path.glob('*_tau_intensity_weighted.tif'))
                 if lifetime_disp:
@@ -535,9 +507,9 @@ class FOVPreviewPanel:
                         lifetime_data = tifffile.imread(str(lifetime_disp[0])).astype(np.float32)
                         lifetime_data = lifetime_data / 65535.0 * 5.0
                         lifetime_min, lifetime_max = 0.0, 5.0
-                        print(f"  ✓ Loaded display-scaled lifetime: 0-5 ns")
+                        print(f'  ✓ Loaded display-scaled lifetime: 0-5 ns')
                     except Exception as e:
-                        print(f"  - Could not load display-scaled lifetime: {e}")
+                        print(f'  - Could not load display-scaled lifetime: {e}')
             if lifetime_data is not None:
                 self._ax_flim.clear()
                 if lifetime_min is None or lifetime_max is None or lifetime_max <= lifetime_min:
@@ -547,14 +519,14 @@ class FOVPreviewPanel:
                         lifetime_max = lifetime_min + 0.1
                 lifetime_norm = np.clip((lifetime_data - lifetime_min) / (lifetime_max - lifetime_min), 0, 1)
                 im = self._ax_flim.imshow(lifetime_norm, cmap='viridis', origin='upper', vmin=0, vmax=1)
-                self._ax_flim.set_title(f"FLIM Lifetime ({lifetime_min:.2f}-{lifetime_max:.2f} ns)",
+                self._ax_flim.set_title(f'FLIM Lifetime ({lifetime_min:.2f}-{lifetime_max:.2f} ns)',
                                        fontsize=9, fontweight='bold', color='white')
                 self._strip_image_axes(self._ax_flim)
                 self._ax_cbar.clear()
                 cbar = self._fig.colorbar(im, cax=self._ax_cbar, label='τ (ns)')
                 _min, _max = lifetime_min, lifetime_max
                 def _fmt_ns(x, pos):
-                    return f"{_min + x * (_max - _min):.1f}"
+                    return f'{_min + x * (_max - _min):.1f}'
                 from matplotlib.ticker import FuncFormatter
                 cbar.ax.yaxis.set_major_formatter(FuncFormatter(_fmt_ns))
                 cbar.ax.tick_params(labelsize=7)
@@ -565,17 +537,17 @@ class FOVPreviewPanel:
                 self._ax_flim.set_title('FLIM Lifetime', fontsize=10, fontweight='bold', color='white')
             self._ax_decay.clear()
             self._ax_decay.set_facecolor('white')
-            self._ax_decay.text(0.5, 0.5, 'Per-tile fit complete ✓', 
+            self._ax_decay.text(0.5, 0.5, 'Per-tile fit complete ✓',
                                ha='center', va='center', transform=self._ax_decay.transAxes,
                                fontsize=10, color='forestgreen', fontweight='bold')
             self._canvas_mpl.draw_idle()
             img_shape = intensity.shape
-            self._status.set(f"✓ Tile fit | {img_shape[0]}×{img_shape[1]}px")
+            self._status.set(f'✓ Tile fit | {img_shape[0]}×{img_shape[1]}px')
         except Exception as e:
             import traceback
             traceback.print_exc()
             self._clear()
-            self._status.set(f"Error loading stitched: {str(e)[:50]}")
+            self._status.set(f'Error loading stitched: {str(e)[:50]}')
     def _clear(self):
         self._ax_img.clear()
         self._ax_flim.clear()
@@ -585,7 +557,7 @@ class FOVPreviewPanel:
         self._flim_cbar = None
         self._ax_img.set_title('No FOV loaded', color='white')
         self._ax_flim.set_title('FLIM Lifetime', color='white')
-        self._ax_decay.text(0.5, 0.5, 'Load a PTU file →', 
+        self._ax_decay.text(0.5, 0.5, 'Load a PTU file →',
                            ha='center', va='center', transform=self._ax_decay.transAxes,
                            fontsize=10, color='#888')
         self._ctrl_frame.grid_remove()
@@ -601,7 +573,7 @@ class FOVPreviewPanel:
                 weighting=self._sv_tau_weighting.get(),
             )
         except Exception as e:
-            print(f"  - Could not recompute lifetime map: {e}")
+            print(f'  - Could not recompute lifetime map: {e}')
             return
         if (lifetime_map is not None
                 and lifetime_map.shape != self._intensity_map.shape[:2]):
@@ -614,6 +586,36 @@ class FOVPreviewPanel:
                 pass
         self._lifetime_map = lifetime_map
         self._update_flim_display()
+    def draw_residuals(self, time_ns, decay, global_summary):
+        import numpy as np
+        ax = self._ax_resid
+        ax.clear()
+        ax.set_facecolor('white')
+        global_summary = global_summary or {}
+        resid = display.compute_residuals(decay, global_summary.get('model'),
+                                          global_summary.get('residuals'))
+        if resid is not None and time_ns is not None:
+            t = np.asarray(time_ns)[:len(resid)]
+            resid = resid[:len(t)]
+            self._cached_resid_data = (t.copy(), resid)
+            ax.plot(t, resid, color='steelblue', linewidth=1.0)
+            ax.axhline(0, color='red', linewidth=1.0, linestyle='--', alpha=0.8)
+            ax.set_ylabel('Resid. (σ)', fontsize=7, color='white')
+            chi2_r = global_summary.get('reduced_chi2_tail')
+            if chi2_r is not None:
+                ax.annotate(
+                    f'χ²_r = {float(chi2_r):.3f}',
+                    xy=(0.98, 0.85), xycoords='axes fraction',
+                    ha='right', va='top', fontsize=7,
+                    color='white',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='#333333', alpha=0.7),
+                )
+        else:
+            self._cached_resid_data = None
+        ax.set_xlabel('Time (ns)', color='white')
+        ax.tick_params(labelsize=7, colors='white')
+        ax.grid(True, alpha=0.3)
+
     def _intensity_limits(self, intensity):
         import numpy as np
         lo = self._int_display.get('vmin')
@@ -691,8 +693,8 @@ class FOVPreviewPanel:
         if valid_data.size > 0:
             vmin = np.percentile(valid_data, 2)
             vmax = np.percentile(valid_data, 98)
-            self._sv_tau_min.set(f"{vmin:.2f}")
-            self._sv_tau_max.set(f"{vmax:.2f}")
+            self._sv_tau_min.set(f'{vmin:.2f}')
+            self._sv_tau_max.set(f'{vmax:.2f}')
             self._update_flim_display()
     def _update_flim_display(self):
         import numpy as np
@@ -732,24 +734,22 @@ class FOVPreviewPanel:
             self._strip_image_axes(self._ax_flim)
             valid_data = self._lifetime_map[~np.isnan(self._lifetime_map)]
             if valid_data.size > 0:
-                data_min = vmin if vmin is not None else np.min(valid_data)
-                data_max = vmax if vmax is not None else np.max(valid_data)
+                from flimkit.utils.export_png import lifetime_limits, colorbar_ticks
+                data_min, data_max = lifetime_limits(self._lifetime_map, vmin, vmax)
                 self._ax_cbar.clear()
                 cbar = self._fig.colorbar(im, cax=self._ax_cbar)
                 cbar.set_label('τ (ns)', fontsize=8, color='white')
                 self._flim_cbar = cbar
-                n_ticks = 5
-                tick_positions = np.linspace(0, 1, n_ticks)
-                tick_values = data_min + tick_positions * (data_max - data_min)
+                tick_positions, tick_values = colorbar_ticks(data_min, data_max, gamma)
                 cbar.set_ticks(tick_positions)
-                cbar.set_ticklabels([f"{v:.2f}" for v in tick_values], fontsize=7, color='white')
+                cbar.set_ticklabels([f'{v:.2f}' for v in tick_values], fontsize=7, color='white')
                 cbar.ax.tick_params(colors='white')
             else:
                 self._ax_cbar.clear()
             self._redraw_region_overlays()
             self._canvas_mpl.draw_idle()
         except Exception as e:
-            print(f"Error updating FLIM display: {e}")
+            print(f'Error updating FLIM display: {e}')
     def _save_color_scale_update(self):
         try:
             if not self._ptu_path:
@@ -758,7 +758,7 @@ class FOVPreviewPanel:
             import json
             import numpy as np
             ptu_path = Path(self._ptu_path)
-            session_file = ptu_path.parent / f"{ptu_path.stem}.roi_session.npz"
+            session_file = ptu_path.parent / f'{ptu_path.stem}.roi_session.npz'
             if not session_file.exists():
                 return
             existing_data = np.load(session_file, allow_pickle=True)
@@ -767,9 +767,9 @@ class FOVPreviewPanel:
             session_data['fov_color_scale'] = json.dumps(self._flim_color_scale)
             session_data['fov_intensity_scale'] = json.dumps(self._int_display)
             np.savez_compressed(session_file, **session_data)
-            print(f"[Color Scale] ✓ Saved to {session_file.name}")
+            print(f'[Color Scale] ✓ Saved to {session_file.name}')
         except Exception as e:
-            print(f"[Color Scale] Could not save update: {e}")
+            print(f'[Color Scale] Could not save update: {e}')
     def _save_regions_update(self):
         try:
             if not self._ptu_path:
@@ -779,7 +779,7 @@ class FOVPreviewPanel:
             import numpy as np
             from datetime import datetime
             ptu_path = Path(self._ptu_path)
-            session_file = ptu_path.parent / f"{ptu_path.stem}.roi_session.npz"
+            session_file = ptu_path.parent / f'{ptu_path.stem}.roi_session.npz'
             if session_file.exists():
                 existing_data = np.load(session_file, allow_pickle=True)
                 session_data = {key: existing_data[key].item() if existing_data[key].ndim == 0 else existing_data[key]
@@ -801,16 +801,16 @@ class FOVPreviewPanel:
                     session_data['fov_ptu_path'] = self._ptu_path
             session_data['fov_regions'] = self._roi_manager.to_json()
             np.savez_compressed(session_file, **session_data)
-            print(f"[ROI Manager] ✓ Saved {len(self._roi_manager.regions)} region(s) to {session_file.name}")
+            print(f'[ROI Manager] ✓ Saved {len(self._roi_manager.regions)} region(s) to {session_file.name}')
         except Exception as e:
-            print(f"[ROI Manager] Could not save regions: {e}")
+            print(f'[ROI Manager] Could not save regions: {e}')
     def _load_regions_from_json(self, json_str: str):
         try:
             self._roi_manager = RoiManager.from_json(json_str)
-            print(f"[ROI Manager] ✓ Loaded {len(self._roi_manager.regions)} region(s)")
+            print(f'[ROI Manager] ✓ Loaded {len(self._roi_manager.regions)} region(s)')
             self._redraw_region_overlays()
         except Exception as e:
-            print(f"[ROI Manager] Could not load regions: {e}")
+            print(f'[ROI Manager] Could not load regions: {e}')
     def _redraw_region_overlays(self):
         import matplotlib.patches as mpatches
         from flimkit.utils.roi import get_rectangle_patch, get_ellipse_patch, get_polygon_patch
@@ -842,7 +842,7 @@ class FOVPreviewPanel:
                     ax.add_patch(patch)
                     patches_for_region.append(patch)
                 except Exception as e:
-                    print(f"[ROI] Could not draw region {region_id}: {e}")
+                    print(f'[ROI] Could not draw region {region_id}: {e}')
             if patches_for_region:
                 self._roi_patches[region_id] = patches_for_region
         self._canvas_mpl.draw_idle()
@@ -1041,17 +1041,15 @@ class FOVPreviewPanel:
                     self._flim_cbar = None
                     valid = self._lifetime_map[~np.isnan(self._lifetime_map)]
                     if valid.size > 0:
+                        from flimkit.utils.export_png import lifetime_limits, colorbar_ticks
                         cs = self._flim_color_scale
-                        d_min = cs['vmin'] if cs['vmin'] is not None else float(np.min(valid))
-                        d_max = cs['vmax'] if cs['vmax'] is not None else float(np.max(valid))
+                        d_min, d_max = lifetime_limits(self._lifetime_map, cs['vmin'], cs['vmax'])
                         cbar = self._fig.colorbar(im, cax=self._ax_cbar)
                         cbar.set_label('τ (ns)', fontsize=8, color='white')
                         self._flim_cbar = cbar
-                        n_ticks = 5
-                        tp = np.linspace(0, 1, n_ticks)
-                        tv = d_min + tp * (d_max - d_min)
+                        tp, tv = colorbar_ticks(d_min, d_max, cs.get('gamma') or 1.0)
                         cbar.set_ticks(tp)
-                        cbar.set_ticklabels([f"{v:.2f}" for v in tv], fontsize=7, color='white')
+                        cbar.set_ticklabels([f'{v:.2f}' for v in tv], fontsize=7, color='white')
                         cbar.ax.tick_params(colors='white')
             self._ax_flim.set_title(flim_title, fontsize=9, fontweight='bold', color='white')
             self._strip_image_axes(self._ax_flim)
@@ -1104,7 +1102,7 @@ class FOVPreviewPanel:
         self._is_drawing = True
         self._draw_coords = [[event.xdata, event.ydata]]
         self._mouse_press_event = event
-        print(f"[Drawing] Started {mode} at ({event.xdata:.1f}, {event.ydata:.1f})")
+        print(f'[Drawing] Started {mode} at ({event.xdata:.1f}, {event.ydata:.1f})')
     def _on_draw_motion(self, event):
         if not self._is_drawing or not event.inaxes or event.inaxes not in self._active_image_axes():
             return
@@ -1119,9 +1117,9 @@ class FOVPreviewPanel:
             x0, y0 = self._draw_coords[0]
             x1, y1 = event.xdata, event.ydata
             from matplotlib.patches import Rectangle
-            preview = Rectangle((min(x0, x1), min(y0, y1)), 
+            preview = Rectangle((min(x0, x1), min(y0, y1)),
                                abs(x1 - x0), abs(y1 - y0),
-                               edgecolor='cyan', facecolor='none', 
+                               edgecolor='cyan', facecolor='none',
                                linewidth=1, linestyle='', alpha=0.5)
             event.inaxes.add_patch(preview)
             self._temp_line = preview
@@ -1151,22 +1149,22 @@ class FOVPreviewPanel:
         self._is_drawing = False
     def _finalize_drawing(self, tool_type: str):
         if len(self._draw_coords) < 2:
-            print(f"[Drawing] Cancelled {tool_type} (insufficient points)")
+            print(f'[Drawing] Cancelled {tool_type} (insufficient points)')
             self._draw_coords = []
             return
         try:
             region_id = self._roi_manager.add_region(
-                f"{tool_type}-{len(self._roi_manager.regions) + 1}",
+                f'{tool_type}-{len(self._roi_manager.regions) + 1}',
                 tool_type,
                 self._draw_coords
             )
             self._redraw_region_overlays()
             self._save_regions_update()
-            print(f"[Drawing] Added {tool_type} region {region_id}")
+            print(f'[Drawing] Added {tool_type} region {region_id}')
             if self._roi_analysis_panel:
                 self._roi_analysis_panel._refresh_region_list()
         except Exception as e:
-            print(f"[Drawing] Error finalizing: {e}")
+            print(f'[Drawing] Error finalizing: {e}')
         finally:
             self._draw_coords = []
     def grid(self, **kw):
