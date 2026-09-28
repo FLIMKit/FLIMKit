@@ -1,0 +1,17 @@
+name: main-from-dev
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  from-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only dev merges into main
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ] || [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "main only takes releases merged in from dev. Open this pull request against dev instead."
+            exit 1
+          fi
+          echo "From dev"
