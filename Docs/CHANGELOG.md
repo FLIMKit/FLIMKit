@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.13.8] - 2026-09-28
+
+### Added
+- Save colour scale bar as a separate PNG, in the export dialog. It writes `<scan>_lifetime_colorbar.png` and `<scan>_intensity_colorbar.png` with the same range, gamma and colormap as the preview.
+- Development builds. A push to `main` that touches the code builds FLIMKitDEV for macOS, Windows and Linux and publishes it as a GitHub pre-release tagged `dev-YYYY.MM.DD`, versioned as the last release plus the date. Nothing goes to PyPI, the update check ignores it, and `publish.yml` refuses a pre-release.
+- Every release, dev builds included, carries the documentation as a PDF built from `Docs/documentation.md` at that commit, so each version has its own docs. `Docs/build_pdf.py` builds it locally.
+
+### Changed
+- `fitter_version` goes to 22. Fits that use a `.photons` IRF with data at other than 256 bins give different numbers, because the IRF was the wrong width before. Fits with any other IRF are unchanged.
+
+### Fixed
+- PNG export ignored the FOV display settings for the lifetime map and always drew it in viridis over its full range. It now uses the preview's min, max, gamma and colormap, and the lifetime map the preview shows, so the τ weighting matches too.
+- The µm scale bar never appeared on PTU exports, and OME-TIFF exports carried no pixel size. The export read the tag `ImgHdr_PixRes` and multiplied it by 10⁶ as if it were in metres. PTU files carry `ImgHdr_PixResol`, in µm. `Ado_1.ptu` reads 0.189 µm now. When a file really has no pixel size the export says so at the end instead of only in the log.
+- Exporting a fit that was reopened from its session named the files `results_*`, because the scan name came only from the form's PTU box. It falls back to the PTU the preview shows, so they are named after the scan again.
+- The TIFFs written by a fit carry the pixel size as well: the FOV maps from `fit_cli.py`, the batch, z-stack and timelapse maps, the stitched intensity, and the tile-fit and stitch-and-fit maps. Maps fitted with binning get the binned pixel size, so a 4 x 4 binned map of a 0.651 µm scan reads 2.605 µm. They used to carry none, so Fiji opened them in pixels.
+- The preview's lifetime colour bar labelled its ends with the data minimum and maximum when the range was left on auto, while the map itself is stretched over the 2nd to 98th percentile. The labels now show the range actually used, and follow gamma.
+- Reopening a saved fit, from Load fitted data or by clicking a fitted file in a project, drew the decay and the fitted curve but left the residual plot empty. The residuals come from the saved decay and curve, and when a session has no fitted curve it is rebuilt from the saved lifetimes, amplitudes, IRF shift and width and background. Rebuilt against a saved curve, the difference was 3.5e-16 of the peak.
+- A `.photons` IRF is binned on the data's grid. The IRF file was opened with the reader's default of 256 bins and padded to the data's bin count, so with data at 1024 bins the IRF came out 4x too narrow and nothing complained. It is read with the data's bin count and period now, and an IRF whose bin width differs from the data's by more than 0.1% raises instead of being padded.
+- A project folder listed its own `project.json` as a scan, because every `.json` in the folder was taken for a FLIM LABS file. Files in a project are now checked the same way File > Open checks them, so only real FLIM LABS JSON is listed, and a stale entry left in an existing `project.json` is dropped when the project opens.
+
 ## [0.13.7] - 2026-09-28
 
 ### Fixed

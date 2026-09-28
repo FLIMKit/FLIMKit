@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.7** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.8** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -142,7 +142,12 @@ Download the build for your machine from the
 [Releases](https://github.com/FLIMKit/FLIMKit/releases/latest) tab, unzip it,
 and run it. Python is inside it, so there is nothing else to install.
 `FLIMKit-windows.zip`, `FLIMKit-macos.zip` and `FLIMKit-linux.zip` are attached
-to every release, built by GitHub Actions on each tag.
+to every release, built by GitHub Actions on each tag. Each release also carries
+this documentation as a PDF, `FLIMKit-docs-<version>.pdf`, so the docs for the
+version you are running stay available after the wiki moves on.
+
+Code merged after a release is built too, as FLIMKitDEV
+([Development builds](#development-builds)).
 
 On macOS the app is self-signed, so the first launch needs right-click then
 Open. A double-click will be refused.
@@ -493,10 +498,11 @@ Export Images..., under the Fit Summary table, saves the images shown in the pre
 
 | Option | What it does |
 |---|---|
-| Images to Export | The images the fit produced, Intensity and Lifetime here. All / None tick or clear them. |
-| Include scale bar | Draws a µm scale bar when the file carries a pixel size. `Ado_1.ptu` doesn't, so the log said `No pixel size available - scale bar will be omitted`. |
+| Images to Export | The maps the fit produced. After a fresh fit that is Intensity and Lifetime. A fit reopened from its session, as here, lists every map the session holds. PNG and OME-TIFF write Intensity and Lifetime; OME-Zarr writes every ticked map. All / None tick or clear them. |
+| Include scale bar (µm) in the image | Draws a µm scale bar in the bottom right corner of the PNGs. The pixel size comes from the file, 0.189 µm for `Ado_1.ptu`, so the bar was 20 µm. A file with no pixel size gets no bar, and the export says so when it finishes. |
+| Save colour scale bar as a separate PNG | Writes `<scan>_lifetime_colorbar.png` and `<scan>_intensity_colorbar.png`, the colour scales from the preview with their values, to place beside the images in a figure. |
 | Include ROI annotations | Draws the regions on the images. |
-| PNG | The images as displayed, with the current colour map and limits. For slides and quick looks. |
+| PNG | The images as displayed in the preview: the lifetime map with the FLIM min, max, gamma, colormap and τ weighting, and the intensity image with its own min, max and colormap. For slides and quick looks. |
 | OME-TIFF | `<scan>_lifetime.ome.tiff` as 32-bit floats in ns, with unfitted pixels left as NaN, and `<scan>_intensity.ome.tiff` as 32-bit photon counts. The pixel size goes into the OME metadata when the file carries one. These are the ones to measure from in Fiji/ImageJ. |
 | OME-Zarr | One compressed store named after the scan, each image a channel ([OME-Zarr export](#ome-zarr-export)). |
 | Save Location | The folder. |
@@ -563,7 +569,7 @@ The dialog shows the model, IRF, lifetime bounds and display scales it will copy
 
 ![Settings applied](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/24_apply_done.jpg)
 
-Clicking Ado_2 afterwards reloads its saved fit. The residual plot isn't stored in the session, so it stays empty until the file is refitted, but the values are all there.
+Clicking Ado_2 afterwards reloads its saved fit, residual plot included. The residuals are worked out from the saved decay and fitted curve. A session saved without the fitted curve has it rebuilt from the saved lifetimes, amplitudes, IRF shift and width and background, which gives back the same curve to rounding error.
 
 ![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
 
@@ -637,7 +643,9 @@ Files FLIMKit writes:
 | `<file>.roi_session.npz` | Every fit, every ROI change, colour-scale changes | Fit results (summed and per-pixel arrays, decay, IRF, time axis, intensity, lifetime map), form settings, display scales and ROIs. Reopening the file restores all of it. File > Save NPZ / Save NPZ As... writes it on demand. |
 | `<file>_phasor.npz` | Phasor mode, automatically, or Save session | Calibrated G and S before filtering, the mean intensity, frequency, the cursors (ellipses and polygons), their size and the filter applied. Restored when the file is loaded again. |
 | `<scan>_intensity.png`, `<scan>_lifetime.png`, `<scan>_summed_decay.png` | Export Images..., PNG | The images as displayed, for slides. |
+| `<scan>_intensity_colorbar.png`, `<scan>_lifetime_colorbar.png` | Export Images..., PNG, with the colour scale bar ticked | The preview's colour scales with their values. |
 | `<scan>_intensity.ome.tiff`, `<scan>_lifetime.ome.tiff` | Export Images..., OME-TIFF | Intensity as 32-bit photon counts, lifetime as 32-bit floats in ns with NaN where nothing was fitted, and the pixel size when known. |
+| `<prefix>_*.tif` | Fits from `fit_cli.py`, batch, z-stack, timelapse, stitch and tile fits | The intensity and lifetime maps, with the pixel size in the TIFF resolution tags, scaled for binning. |
 | `<scan>.ome.zarr` | Export Images..., OME-Zarr | One compressed store, each image a channel, the fit summary in the metadata. |
 | ROI `.csv` | Export as CSV, File > Export > Export ROI Table CSV | Per region: ID, name, type, τ mean/median/SD, photons and photon SD, and the per-ROI fit (τ_mean, χ²_r, τᵢ and αᵢ) when there is one. |
 | ROI `.geojson` | Export as GeoJSON / Export All as GeoJSON, and the File > Export menu | Each region as a GeoJSON feature with its name, type, colour and statistics (τ median and SD, photons and SD). Self-intersecting outlines are repaired and flagged. Opens in QuPath. |
@@ -1589,6 +1597,32 @@ The compiled app bundles whatever GPU libraries are present on the **build machi
 **If you need GPU acceleration in the compiled app, build it yourself on the machine (or OS/hardware type) where it will run.** A pre-built binary downloaded from Releases will only have GPU support if it was built on matching hardware.
 
 `build_and_sign.py` detects and bundles GPU backends automatically, run it on the target hardware after running `python install.py` to install the right backend.
+
+### Development builds
+
+Every push to `main` that touches the code builds the app again as FLIMKitDEV
+and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
+page as a pre-release tagged `dev-YYYY.MM.DD`, with the documentation PDF as it
+stood at that commit. It is not a release: nothing goes to PyPI, and the update
+check ignores it. A second push on the same day replaces that day's build.
+
+`FLIMKitDEV-macos.zip`, `FLIMKitDEV-windows.zip` and `FLIMKitDEV-linux.zip`
+unzip to an app named FLIMKitDEV, so it can sit beside the released FLIMKit. Its
+version reads as the last release plus the date, for example
+`0.13.8+dev.2026.09.30`. Both share the settings in `~/.flimkit`.
+
+A push that changes `flimkit/_version.py` is a release, so the version tag
+builds it instead.
+
+### Documentation PDF
+
+`Docs/build_pdf.py` turns this file into a PDF. It needs `markdown` and
+`weasyprint`, and WeasyPrint needs Pango.
+
+```bash
+pip install markdown weasyprint
+python Docs/build_pdf.py FLIMKit-docs.pdf
+```
 
 ### macOS notes
 

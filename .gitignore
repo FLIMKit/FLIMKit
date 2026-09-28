@@ -35,3 +35,4 @@ PTU.sptw/
 *s.md
 out_*
 *.egg-info/
+.venv*
