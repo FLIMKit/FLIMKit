@@ -412,6 +412,37 @@ Fit Summary tab, row by row:
 
 Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
 
+#### The figures the fit saves
+
+Every fit saves its figures next to the output prefix without being asked. These are from the masked 8 x 8 fit above.
+
+`<prefix>_summed_<n>exp.png` is the summed fit.
+
+![Summed fit figure](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/28_summed_fit.jpg)
+
+| Part | What it shows |
+|---|---|
+| Top left | The summed decay (grey dots), the IRF scaled to a tenth of the decay peak (orange, the scale factor is in the legend) and the fitted model (red), on a log axis. The green band is the fit window. Only the first 22 ns are drawn, so a window running further than that is cut off on the plot but not in the fit. |
+| Bottom left | Weighted residuals across the fit window, clipped to ±5. A good fit scatters evenly around zero. A wave, like the one the 2-exponential fit in Step 6 left, means the model is missing something. |
+| Top right | Histogram of the same residuals, with their mean and SD. It should be a single peak at zero with an SD near 1. The residuals are clipped at ±5, so spikes at the edges are the points that fell outside that range. |
+| Bottom right | χ²_r over the fit window and χ²_r(tail), background, both mean lifetimes, the effective IRF width, and each τᵢ with its amplitude fraction fᵢ. The χ² values here are Pearson, so they differ from the Neyman χ²_r(tail) on the preview's residual plot: 1.2104 here against 1.244. The Fit Summary tab lists both. |
+
+`<prefix>_pixelmaps_<n>exp.png` is the per-pixel fit, only written by Full fits.
+
+![Pixel maps figure](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/29_pixel_maps.jpg)
+
+The top row is the photon count per pixel, the intensity-weighted mean lifetime and the amplitude-weighted mean lifetime. The bottom row is the amplitude fraction of each component, on a fixed 0 to 1 scale. The lifetime and intensity colour ranges run from the 2nd to the 98th percentile of the fitted pixels, so they won't match the range set in the preview, and unmasked background shows up as noise the same way it does on screen.
+
+`<prefix>_lifetime_hist_<n>exp.png` is the distribution of per-pixel lifetimes.
+
+![Lifetime histogram](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/30_lifetime_hist.jpg)
+
+Each pixel's intensity-weighted mean lifetime, weighted by its photon count, with the weighted mean as a dashed line: 2.840 ns here, against 2.834 ns from the summed fit. The preview map shows the amplitude-weighted lifetime by default, so the histogram and the map aren't showing the same quantity.
+
+`<prefix>_cell_mask.png` is the Cellpose mask at the full image resolution, white for the pixels kept. Check it against the intensity image before trusting per-cell numbers.
+
+The PNG export in [Step 11](#step-11-export) writes separate figures: `<scan>_summed_decay.png` is the decay, IRF and fit from the preview over the whole time range, without residuals.
+
 ### Step 9: Adjust the display
 
 The FLIM Color Scale panel under the preview changes the picture, never the fitted values.
