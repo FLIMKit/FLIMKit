@@ -5,7 +5,7 @@ on:
     tags:
       - "v*"
     branches:
-      - main
+      - dev
     paths:
       - "flimkit/**"
       - "main.py"
@@ -21,7 +21,7 @@ on:
         required: false
         default: "true"
       channel:
-        description: "release builds FLIMKit from _version.py, dev builds FLIMKitDEV dated today"
+        description: "release builds FLIMKit from _version.py, dev builds FLIMKitDEV dated today. Run a release from main"
         required: false
         default: "release"
         type: choice

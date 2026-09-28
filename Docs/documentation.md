@@ -146,7 +146,7 @@ to every release, built by GitHub Actions on each tag. Each release also carries
 this documentation as a PDF, `FLIMKit-docs-<version>.pdf`, so the docs for the
 version you are running stay available after the wiki moves on.
 
-Code merged after a release is built too, as FLIMKitDEV
+Code merged into `dev` after a release is built too, as FLIMKitDEV
 ([Development builds](#development-builds)).
 
 On macOS the app is self-signed, so the first launch needs right-click then
@@ -1602,8 +1602,9 @@ The compiled app bundles whatever GPU libraries are present on the **build machi
 
 ### Development builds
 
-Every push to `main` that touches the code builds the app again as FLIMKitDEV
-and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
+New work lands on the `dev` branch first, and `dev` is merged into `main` for
+each release. Every push to `dev` that touches the code builds the app again as
+FLIMKitDEV and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
 page as a pre-release tagged `dev-YYYY.MM.DD`, with the documentation PDF as it
 stood at that commit. It is not a release: nothing goes to PyPI, and the update
 check ignores it. A second push on the same day replaces that day's build.
@@ -1614,7 +1615,8 @@ version reads as the last release plus the date, for example
 `0.13.8+dev.2026.09.30`. Both share the settings in `~/.flimkit`.
 
 A push that changes `flimkit/_version.py` is a release, so the version tag
-builds it instead.
+builds it instead. Pushing to `main` builds nothing on its own; a release is
+built from its version tag.
 
 ### Documentation PDF
 
