@@ -7,6 +7,7 @@
 
 ### Changed
 - New work goes to a `dev` branch, which is merged into `main` for each release. FLIMKitDEV is built from pushes to `dev` now, not `main`, and a push to `main` builds nothing until its version tag. Tests run on both branches, and the PyPI workflow refuses to run from `dev`.
+- A dev build names itself FLIMKitDEV while it runs: the window title reads `FLIMKitDEV 0.13.8+dev.2026.09.28` and the About box says the same. The app is built under that name too, so the macOS menu bar and Dock show it, where before the bundle was only renamed after the build and still called itself FLIMKit inside. A release reads `FLIMKit 0.13.8`.
 
 ## [0.13.8] - 2026-09-28
 

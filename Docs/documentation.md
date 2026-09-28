@@ -1612,7 +1612,8 @@ check ignores it. A second push on the same day replaces that day's build.
 `FLIMKitDEV-macos.zip`, `FLIMKitDEV-windows.zip` and `FLIMKitDEV-linux.zip`
 unzip to an app named FLIMKitDEV, so it can sit beside the released FLIMKit. Its
 version reads as the last release plus the date, for example
-`0.13.8+dev.2026.09.30`. Both share the settings in `~/.flimkit`.
+`0.13.8+dev.2026.09.30`, and the window title and About box say FLIMKitDEV with
+that version, so a running dev build can't be mistaken for a release. Both share the settings in `~/.flimkit`.
 
 A push that changes `flimkit/_version.py` is a release, so the version tag
 builds it instead. Pushing to `main` builds nothing on its own; a release is

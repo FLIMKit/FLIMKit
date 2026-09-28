@@ -152,20 +152,17 @@ jobs:
       - name: Package macOS app bundle
         if: runner.os == 'macOS'
         run: |
-          if [ "$APP" != "FLIMKit" ]; then mv dist/FLIMKit.app "dist/$APP.app"; fi
           ditto -c -k --sequesterRsrc --keepParent "dist/$APP.app" "dist/$APP-macos.zip"
 
       - name: Package Linux binary
         if: runner.os == 'Linux'
         run: |
-          if [ "$APP" != "FLIMKit" ]; then mv dist/FLIMKit "dist/$APP"; fi
           zip -j "dist/$APP-linux.zip" "dist/$APP"
 
       - name: Package Windows binary
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if ($env:APP -ne 'FLIMKit') { Move-Item dist\FLIMKit.exe "dist\$($env:APP).exe" }
           7z a -tzip "dist\$($env:APP)-windows.zip" "dist\$($env:APP).exe"
 
       - name: Upload artifact

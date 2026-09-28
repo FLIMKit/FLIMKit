@@ -1,5 +1,6 @@
 __version__ = '0.13.8'
 fitter_version = '22'
+app_name = 'FLIMKitDEV' if '+dev' in __version__ else 'FLIMKit'
 
 roadmap = '''Flim program roadmap:
 Version history:

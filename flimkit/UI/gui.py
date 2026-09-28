@@ -697,8 +697,8 @@ class _UIBuilder:
             self._switch_form('batch')
 
     def _menu_about(self):
-        from flimkit._version import __version__
-        about_text = f'''FLIMKit Analysis GUI
+        from flimkit._version import __version__, app_name
+        about_text = f'''{app_name} Analysis GUI
 
 Version: {__version__}
 
@@ -714,7 +714,7 @@ Built with Python, Tkinter, NumPy, and SciPy.
 Designed, developed, and maintained by Alex Hunt.
 Anthropic's Claude AI assisted with parts of the GUI implementation.
         '''
-        messagebox.showinfo('About FLIMKit', about_text)
+        messagebox.showinfo(f'About {app_name}', about_text)
 
     def _menu_documentation(self):
         import webbrowser
@@ -4504,10 +4504,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         for btn in (self._btn_fov, self._btn_st, self._btn_ph):
             btn.configure(state=state)
 
+def window_title():
+    from flimkit._version import __version__, app_name
+    return f'{app_name} {__version__}'
+
 if HAS_TKMT:
     class FLIMKitGUIThemed(TKMT.ThemedTKinterFrame, _UIBuilder):
         def __init__(self, theme='sun-valley', mode='dark'):
-            super().__init__('FLIMkit Analysis GUI', theme, mode,
+            super().__init__(window_title(), theme, mode,
                              usecommandlineargs=True, useconfigfile=True)
             self.root = self.master
             self.root.minsize(760, 700)
@@ -4517,7 +4521,7 @@ if HAS_TKMT:
 class FLIMKitGUIFallback(_UIBuilder):
     def __init__(self, root):
         self.root = root
-        self.root.title('FLIMkit Analysis GUI')
+        self.root.title(window_title())
         self.root.minsize(760, 700)
         self._init_ui()
         self._run_plugin_startups()
