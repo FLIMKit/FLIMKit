@@ -11,6 +11,17 @@ _SPTW_CANDIDATES = [
 PROJECT_FILENAME = 'project.json'
 DEFAULT_OUTPUT_SUBDIR = 'output'
 
+def _is_flim_file(p):
+    if p.name == PROJECT_FILENAME:
+        return False
+    if not p.exists():
+        return True
+    from flimkit.formats import detect_format
+    try:
+        return detect_format(p) != 'unknown'
+    except Exception:
+        return False
+
 @dataclass
 class ScanRecord:
     stem: str
@@ -76,7 +87,10 @@ class ProjectFile:
                 if ob:
                     pf.output_base = Path(ob)
                 for stem, rec_dict in data.get('scans', {}).items():
-                    pf.scans[stem] = ScanRecord(**rec_dict)
+                    rec = ScanRecord(**rec_dict)
+                    if rec.scan_type == 'fov' and not _is_flim_file(Path(rec.source_path)):
+                        continue
+                    pf.scans[stem] = rec
                 pf.config = data.get('config', {})
             except Exception as exc:
                 print(f'[Project] Warning: could not read {json_path.name}: {exc}')
@@ -111,6 +125,8 @@ class ProjectFile:
                             for p in self.project_dir.glob(ext))
         for ptu in flim_files:
             if ptu.name.startswith('._'):
+                continue
+            if not _is_flim_file(ptu):
                 continue
             if str(ptu) in zstack_slice_paths:
                 continue
