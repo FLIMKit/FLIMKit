@@ -3,13 +3,31 @@ name: Build FLIMKit App
 on:
   push:
     tags:
-      - "v*"         
-  workflow_dispatch:  
+      - "v*"
+    branches:
+      - main
+    paths:
+      - "flimkit/**"
+      - "main.py"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "build_and_sign.py"
+      - "Docs/documentation.md"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
     inputs:
       publish_release:
         description: "Publish artifacts to a GitHub Release"
         required: false
         default: "true"
+      channel:
+        description: "release builds FLIMKit from _version.py, dev builds FLIMKitDEV dated today"
+        required: false
+        default: "release"
+        type: choice
+        options:
+          - release
+          - dev
 
 jobs:
   get-version:
@@ -17,31 +35,64 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       tag:     ${{ steps.read.outputs.tag }}
+      app:     ${{ steps.read.outputs.app }}
+      title:   ${{ steps.read.outputs.title }}
+      dev:     ${{ steps.read.outputs.dev }}
+      skip:    ${{ steps.read.outputs.skip }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Read version from flimkit/_version.py
+      - name: Work out what this build is
         id: read
         run: |
           VERSION=$(python -c "import re; m = re.search(r'__version__\s*=\s*[\"\'](.*?)[\"\']', open('flimkit/_version.py').read()); print(m.group(1))")
-          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION"     >> "$GITHUB_OUTPUT"
-          echo "Building FLIMKit $VERSION (tag: v$VERSION)"
+          if [ "${{ github.ref_type }}" = "tag" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.channel }}" != "dev" ]; }; then
+            echo "dev=false"                   >> "$GITHUB_OUTPUT"
+            echo "skip=false"                  >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION"            >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION"               >> "$GITHUB_OUTPUT"
+            echo "app=FLIMKit"                 >> "$GITHUB_OUTPUT"
+            echo "title=FLIMKit $VERSION"      >> "$GITHUB_OUTPUT"
+            echo "Release build of FLIMKit $VERSION"
+            exit 0
+          fi
+          SKIP=false
+          if git tag --points-at HEAD | grep -q '^v'; then
+            echo "HEAD is already a release, so no dev build"
+            SKIP=true
+          fi
+          if [ "${{ github.event_name }}" = "push" ] && ! git diff --quiet HEAD^1 HEAD -- flimkit/_version.py; then
+            echo "This push changes _version.py, so it is a release and the tag builds it"
+            SKIP=true
+          fi
+          DATE=$(date -u +%Y.%m.%d)
+          echo "dev=true"                            >> "$GITHUB_OUTPUT"
+          echo "skip=$SKIP"                          >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION+dev.$DATE"          >> "$GITHUB_OUTPUT"
+          echo "tag=dev-$DATE"                       >> "$GITHUB_OUTPUT"
+          echo "app=FLIMKitDEV"                      >> "$GITHUB_OUTPUT"
+          echo "title=FLIMKitDEV $DATE (after $VERSION)" >> "$GITHUB_OUTPUT"
+          echo "Dev build $VERSION+dev.$DATE"
 
   build:
     needs: get-version
+    if: needs.get-version.outputs.skip != 'true'
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: FLIMKit-linux
+            platform: linux
           - os: windows-latest
-            artifact_name: FLIMKit-windows
+            platform: windows
           - os: macos-latest
-            artifact_name: FLIMKit-macos
+            platform: macos
 
     runs-on: ${{ matrix.os }}
+    env:
+      APP: ${{ needs.get-version.outputs.app }}
 
     steps:
       - name: Checkout code
@@ -56,6 +107,19 @@ jobs:
         run: |
           python -c "import sys; print('Python:', sys.version)"
           python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 'Python >= 3.12 required for phasorpy==0.9')"
+
+      - name: Stamp the dev version
+        if: needs.get-version.outputs.dev == 'true'
+        shell: bash
+        run: |
+          python - <<'EOF'
+          import re
+          p = 'flimkit/_version.py'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r"__version__ = '[^']*'", "__version__ = '${{ needs.get-version.outputs.version }}'", s, count=1)
+          open(p, 'w', encoding='utf-8').write(s)
+          EOF
+          grep -m1 __version__ flimkit/_version.py
 
       - name: Install dependencies
         run: |
@@ -87,44 +151,65 @@ jobs:
 
       - name: Package macOS app bundle
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent dist/FLIMKit.app dist/FLIMKit-macos.zip
+        run: |
+          if [ "$APP" != "FLIMKit" ]; then mv dist/FLIMKit.app "dist/$APP.app"; fi
+          ditto -c -k --sequesterRsrc --keepParent "dist/$APP.app" "dist/$APP-macos.zip"
 
       - name: Package Linux binary
         if: runner.os == 'Linux'
-        run: zip -j dist/FLIMKit-linux.zip dist/FLIMKit
+        run: |
+          if [ "$APP" != "FLIMKit" ]; then mv dist/FLIMKit "dist/$APP"; fi
+          zip -j "dist/$APP-linux.zip" "dist/$APP"
+
       - name: Package Windows binary
         if: runner.os == 'Windows'
-        run: 7z a -tzip dist\FLIMKit-windows.zip dist\FLIMKit.exe
         shell: pwsh
+        run: |
+          if ($env:APP -ne 'FLIMKit') { Move-Item dist\FLIMKit.exe "dist\$($env:APP).exe" }
+          7z a -tzip "dist\$($env:APP)-windows.zip" "dist\$($env:APP).exe"
 
-      - name: Upload artifact (macOS)
-        if: runner.os == 'macOS'
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/FLIMKit-macos.zip
+          name: ${{ env.APP }}-${{ matrix.platform }}
+          path: dist/${{ env.APP }}-${{ matrix.platform }}.zip
           retention-days: 30
 
-      - name: Upload artifact (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/FLIMKit-linux.zip
-          retention-days: 30
+  docs-pdf:
+    needs: get-version
+    if: needs.get-version.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the PDF toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu
+          pip install markdown weasyprint
+
+      - name: Build the documentation PDF
+        run: python Docs/build_pdf.py "dist/${{ needs.get-version.outputs.app }}-docs-${{ needs.get-version.outputs.version }}.pdf" "${{ needs.get-version.outputs.version }}"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/FLIMKit-windows.zip
+          name: docs-pdf
+          path: dist/*.pdf
           retention-days: 30
 
   release:
-    needs: [get-version, build]
+    needs: [get-version, build, docs-pdf]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || inputs.publish_release == 'true'
+    if: >-
+      needs.get-version.outputs.skip != 'true' &&
+      (startsWith(github.ref, 'refs/tags/') || github.event_name == 'push' || inputs.publish_release == 'true')
     permissions:
       contents: write
 
@@ -134,18 +219,35 @@ jobs:
         with:
           path: artifacts/
 
-      - name: Prepare release archives
+      - name: Prepare release files
         run: |
           mkdir -p release
-          cd artifacts
-          for d in */; do
-            cp "$d"*.zip ../release/
-          done
-          ls -lh ../release/
+          find artifacts -type f \( -name '*.zip' -o -name '*.pdf' \) -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Replace today's dev release
+        if: needs.get-version.outputs.dev == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release delete "${{ needs.get-version.outputs.tag }}" --cleanup-tag --yes || true
 
       - name: Create GitHub Release
+        if: needs.get-version.outputs.dev != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}
-          name:     FLIMKit ${{ needs.get-version.outputs.version }}
-          files:    release/*.zip
+          name:     ${{ needs.get-version.outputs.title }}
+          files:    release/*
+
+      - name: Create the dev pre-release
+        if: needs.get-version.outputs.dev == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:         ${{ needs.get-version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name:             ${{ needs.get-version.outputs.title }}
+          prerelease:       true
+          make_latest:      "false"
+          body: "Development build ${{ needs.get-version.outputs.version }} from ${{ github.sha }}. It is not a release and is not on PyPI. The PDF is the documentation as it stood at this commit."
+          files:            release/*

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import numpy as np
 import warnings
 from pathlib import Path
@@ -13,6 +12,7 @@ from flimkit.utils.xlsx_tools import load_irf_export
 from flimkit.FLIM.fit_tools import find_irf_peak_bin, coates_pileup_correction
 from flimkit.image.tools import make_intensity_image, apply_intensity_threshold, pick_intensity_threshold
 from flimkit.utils.enhanced_outputs import save_weighted_tau_images, save_individual_tau_maps
+from flimkit.utils.export_png import flim_field_area_um2
 from flimkit.configs import *
 from flimkit.interactive import _load_machine_irf_prompt, parse_exclude_ns
 from flimkit._version import fitter_version
@@ -138,17 +138,17 @@ def single_FOV_flim_fit_cli():
         print(config_message)
         return
     print(f"\n{'='*60}")
-    print(f"  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}")
+    print(f'  flim_fit_v{fitter_version}  |  {args.nexp}-exp  |  {args.mode}  |  optimizer={args.optimizer}')
     print(f"{'='*60}")
-    print(f"\n[1] PTU: {args.ptu}")
+    print(f'\n[1] PTU: {args.ptu}')
     ptu = FLIMFile(args.ptu, verbose=True)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
-    print(f"  IRF FWHM: {fwhm_ns*1000:.2f} ps "
+    print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
     intensity_mask = None
     _int_thr = getattr(args, 'intensity_threshold', None)
     if _int_thr is not None:
-        print(f"\n[1b] Intensity threshold")
+        print(f'\n[1b] Intensity threshold')
         intensity_img = make_intensity_image(args.ptu, rotate_90_cw=False, save_image=False)
         if str(_int_thr).lower() == 'interactive':
             _int_thr = pick_intensity_threshold(intensity_img)
@@ -157,50 +157,50 @@ def single_FOV_flim_fit_cli():
         intensity_mask = apply_intensity_threshold(intensity_img, _int_thr)
         n_kept = int(intensity_mask.sum())
         n_total = intensity_mask.size
-        print(f"    Threshold: {_int_thr} photons  →  "
-              f"{n_kept:,}/{n_total:,} pixels kept ({100*n_kept/n_total:.1f}%)")
+        print(f'    Threshold: {_int_thr} photons  →  '
+              f'{n_kept:,}/{n_total:,} pixels kept ({100*n_kept/n_total:.1f}%)')
     print(f"\n[2] Building summed decay (channel={args.channel or 'auto'})")
     if intensity_mask is not None:
         stack_tmp = ptu.pixel_stack(channel=args.channel, binning=1)
         stack_tmp[~intensity_mask] = 0
         decay = stack_tmp.sum(axis=(0, 1))
         del stack_tmp
-        print(f"    (Using intensity-masked photons only)")
+        print(f'    (Using intensity-masked photons only)')
     else:
         decay = ptu.summed_decay(channel=args.channel)
     irf_peak_bin = find_irf_peak_bin(decay)
     decay_peak_bin = int(np.argmax(decay))
-    print(f"    {decay.sum():,.0f} photons  |  peak={decay.max():,.0f}  "
-          f"at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)")
-    print(f"    IRF peak (steepest rise): bin {irf_peak_bin} "
-          f"({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)")
+    print(f'    {decay.sum():,.0f} photons  |  peak={decay.max():,.0f}  '
+          f'at bin {decay_peak_bin} ({ptu.time_ns[decay_peak_bin]:.3f} ns)')
+    print(f'    IRF peak (steepest rise): bin {irf_peak_bin} '
+          f'({irf_peak_bin * ptu.tcspc_res * 1e9:.3f} ns)')
     pu = getattr(ptu, 'photons_per_pulse', None)
     if pu is not None:
         acq_s = getattr(ptu, 'acq_time_s', None) or (ptu.n_sync / ptu.sync_rate)
         cr_mhz = (decay.sum() / acq_s) / 1e6
         pu_pct = pu * 100
         pu_warn = ' ⚠ HIGH - use --correct-pileup' if pu_pct > 5 else ''
-        print(f"    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  "
-              f"Acq: {acq_s:.1f} s  "
-              f"Count rate: {cr_mhz:.3f} MHz  "
-              f"Pile-up: {pu_pct:.1f}%{pu_warn}")
+        print(f'    Sync rate: {ptu.sync_rate/1e6:.2f} MHz  '
+              f'Acq: {acq_s:.1f} s  '
+              f'Count rate: {cr_mhz:.3f} MHz  '
+              f'Pile-up: {pu_pct:.1f}%{pu_warn}')
         if getattr(args, 'correct_pileup', False):
             from flimkit.FLIM.fit_tools import estimate_bg
             bg_pre = estimate_bg(decay, irf_peak_bin)
             decay_no_bg = np.maximum(decay - bg_pre, 0.0)
             decay_raw_sum = decay.sum()
             decay = coates_pileup_correction(decay_no_bg, ptu.n_sync) + bg_pre
-            print(f"    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): "
-                  f"{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)")
+            print(f'    Coates pile-up correction applied (bg={bg_pre:.1f} cts/bin fixed): '
+                  f'{decay_raw_sum:,.0f} → {decay.sum():,.0f} photons (corrected)')
     xlsx = None
     if args.xlsx is not None and Path(args.xlsx).exists():
-        print(f"\n[3] LAS X export: {args.xlsx}")
+        print(f'\n[3] LAS X export: {args.xlsx}')
         xlsx = load_irf_export(args.xlsx, debug=args.debug_xlsx)
         if xlsx['fit_t'] is not None and xlsx['fit_c'] is not None:
             print(f"    FLIM microscope fit present, peak = {xlsx['fit_c'].max():.0f} cts")
     else:
-        print(f"\n[3] No LAS X export provided or file not found")
-    print(f"\n[4] Building IRF")
+        print(f'\n[3] No LAS X export provided or file not found')
+    print(f'\n[4] Building IRF')
     sigma_max = MACHINE_IRF_SIGMA_MAX_FULL
     if args.irf is not None:
         irf_prompt = irf_from_measured_file(args.irf, ptu, channel=args.channel)
@@ -209,12 +209,12 @@ def single_FOV_flim_fit_cli():
         fit_sigma = False
         fit_bg = True
     elif args.irf_xlsx is not None:
-        print(f"  IRF: fitting analytical model to: {args.irf_xlsx}")
+        print(f'  IRF: fitting analytical model to: {args.irf_xlsx}')
         if not Path(args.irf_xlsx).exists():
-            raise FileNotFoundError(f"IRF export file not found: {args.irf_xlsx}")
+            raise FileNotFoundError(f'IRF export file not found: {args.irf_xlsx}')
         irf_ref = load_irf_export(args.irf_xlsx, debug=False)
         if irf_ref['irf_t'] is None or irf_ref['irf_c'] is None:
-            raise ValueError(f"No IRF columns found in export: {args.irf_xlsx}")
+            raise ValueError(f'No IRF columns found in export: {args.irf_xlsx}')
         irf_prompt, irf_params = irf_from_xlsx_analytical(
             irf_ref, ptu.n_bins, ptu.tcspc_res, verbose=True)
         irf_current_peak = int(np.argmax(irf_prompt))
@@ -226,22 +226,22 @@ def single_FOV_flim_fit_cli():
             s = irf_prompt.sum()
             if s > 0:
                 irf_prompt /= s
-            print(f"  Pre-shifted IRF by {pre_shift:+d} bins "
-                  f"(from bin {irf_current_peak} → {irf_peak_bin})")
-        strategy = (f"irf_xlsx_analytical ({Path(args.irf_xlsx).name})  "
+            print(f'  Pre-shifted IRF by {pre_shift:+d} bins '
+                  f'(from bin {irf_current_peak} → {irf_peak_bin})')
+        strategy = (f'irf_xlsx_analytical ({Path(args.irf_xlsx).name})  '
                     f"FWHM={irf_params['fwhm_ns']*1000:.1f}ps  "
                     f"tail_amp={irf_params['tail_amp']:.3f}  "
                     f"tail_tau={irf_params['tail_tau_ns']:.3f}ns")
         has_tail = False
         fit_sigma = False
         fit_bg = True
-        print(f"  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}")
+        print(f'  IRF peak bin after pre-shift = {np.argmax(irf_prompt)}')
     elif xlsx is not None and xlsx['irf_t'] is not None and not args.no_xlsx_irf:
         irf_prompt = irf_from_xlsx(xlsx, ptu.n_bins, ptu.tcspc_res)
         above = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
         fwhm_xlsx = (above[-1] - above[0]) * ptu.tcspc_res * 1e9 if len(above) > 1 else 0
-        print(f"  IRF: xlsx prompt  peak bin={int(np.argmax(irf_prompt))}  "
-              f"FWHM={fwhm_xlsx:.3f} ns  + tail + σ as free params")
+        print(f'  IRF: xlsx prompt  peak bin={int(np.argmax(irf_prompt))}  '
+              f'FWHM={fwhm_xlsx:.3f} ns  + tail + σ as free params')
         strategy = 'xlsx'
         has_tail = True
         fit_sigma = True
@@ -259,31 +259,31 @@ def single_FOV_flim_fit_cli():
         has_tail = True
         fit_sigma = True
         fit_bg = True
-        print(f"  IRF: {strategy} + tail + σ as free params")
+        print(f'  IRF: {strategy} + tail + σ as free params')
     elif args.estimate_irf.startswith('machine_irf'):
         irf_prompt, strategy, has_tail, fit_bg, fit_sigma, sigma_max = machine_irf_prompt(
             getattr(args, 'machine_irf', None), ptu.n_bins, decay_peak_bin, args.estimate_irf)
-        print(f"  IRF: {strategy}")
+        print(f'  IRF: {strategy}')
     else:
         irf_prompt = gaussian_irf_from_fwhm(
             ptu.n_bins, ptu.tcspc_res, fwhm_ns, decay_peak_bin)
         has_tail = True
         fit_sigma = False
         fit_bg = True
-        strategy = (f"gaussian_paper FWHM={fwhm_ns*1000:.1f}ps "
-                    f"peak_bin={decay_peak_bin} (decay maximum)")
-        print(f"  IRF: {strategy}")
-    print(f"  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}")
+        strategy = (f'gaussian_paper FWHM={fwhm_ns*1000:.1f}ps '
+                    f'peak_bin={decay_peak_bin} (decay maximum)')
+        print(f'  IRF: {strategy}')
+    print(f'  Flags: has_tail={has_tail}  fit_sigma={fit_sigma}  fit_bg={fit_bg}')
     if not args.no_plots and xlsx is not None:
         matplotlib.use('Agg')
-        print(f"\n[4b] IRF comparison")
+        print(f'\n[4b] IRF comparison')
         compare_irfs(irf_prompt, xlsx, ptu.tcspc_res, ptu.n_bins,
                      strategy, args.out)
     tvb_profile = None
     if args.tvb_ptu is not None:
         from flimkit.FLIM.bg_tools import tvb_from_reference_ptu
         tvb_chan = args.tvb_channel if args.tvb_channel is not None else args.channel
-        print(f"\n[4c] Time-varying background from: {args.tvb_ptu}")
+        print(f'\n[4c] Time-varying background from: {args.tvb_ptu}')
         tvb_profile = tvb_from_reference_ptu(args.tvb_ptu, ptu, channel=tvb_chan)
     fit_tvb = tvb_profile is not None
     global_popt = None
@@ -325,22 +325,22 @@ def single_FOV_flim_fit_cli():
             exclude_ns=parse_exclude_ns(args.exclude_ns),
         )
     if args.mode in ('summed', 'both'):
-        print(f"\n[5] Summed decay fit  ({args.nexp}-exp"
+        print(f'\n[5] Summed decay fit  ({args.nexp}-exp'
               f"{' tail' if _tail_fit else ''}, optimizer={args.optimizer})")
         global_popt, global_summary = _run_summed()
         print_summary(global_summary, strategy, args.nexp)
         if not args.no_plots:
             matplotlib.use('Agg')
-            print(f"\n[6] Plotting")
+            print(f'\n[6] Plotting')
             plot_summed(decay, global_summary, ptu, xlsx,
                         args.nexp, strategy, args.out,
                         irf_prompt=irf_prompt)
     if args.mode in ('perPixel', 'both'):
         if global_popt is None:
-            print(f"\n[5] Running summed fit first (τ needed for per-pixel)")
+            print(f'\n[5] Running summed fit first (τ needed for per-pixel)')
             global_popt, global_summary = _run_summed()
             print_summary(global_summary, strategy, args.nexp)
-        print(f"\n[7] Building pixel stack (binning={args.binning}×{args.binning})")
+        print(f'\n[7] Building pixel stack (binning={args.binning}×{args.binning})')
         stack = ptu.pixel_stack(channel=ptu.photon_channel, binning=args.binning)
         if intensity_mask is not None:
             import cv2
@@ -352,8 +352,8 @@ def single_FOV_flim_fit_cli():
             else:
                 mask_resized = intensity_mask
             stack[~mask_resized] = 0
-            print(f"    Applied intensity threshold mask to pixel stack")
-        print(f"\n[8] Per-pixel fitting (min_photons={args.min_photons})")
+            print(f'    Applied intensity threshold mask to pixel stack')
+        print(f'\n[8] Per-pixel fitting (min_photons={args.min_photons})')
         pixel_maps = fit_per_pixel(
             stack, ptu.tcspc_res, ptu.n_bins,
             irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -384,10 +384,11 @@ def single_FOV_flim_fit_cli():
             tau_display_max=getattr(args, 'tau_display_max', None),
             intensity_display_min=getattr(args, 'intensity_display_min', None),
             intensity_display_max=getattr(args, 'intensity_display_max', None),
+            field_area_um2=flim_field_area_um2(ptu),
         )
         if not args.no_plots:
             matplotlib.use('Agg')
-            print(f"\n[9] Plotting pixel maps")
+            print(f'\n[9] Plotting pixel maps')
             plot_pixel_maps(pixel_maps, args.nexp, args.out, binning=args.binning)
             plot_lifetime_histogram(pixel_maps, args.nexp, args.out)
     print('\nDone.\n')

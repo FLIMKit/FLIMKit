@@ -99,9 +99,6 @@ COLORMAPS = {
     'twilight': 'twilight',
 }
 
-# hsv and twilight are cyclic: they end on the colour they start with, so the
-# shortest and longest lifetimes would look the same. Only the stretch that
-# does not come back round is used.
 _OPEN_SPAN = {'hsv': (0.0, 0.8), 'twilight': (0.0, 0.5)}
 
 INTENSITY_COLORMAPS = ['inferno', 'gray', 'magma', 'viridis', 'hot', 'bone', 'cividis', 'plasma']
@@ -219,3 +216,61 @@ def mask_to_rgba(
     rgba[mask, 2] = color[2]
     rgba[mask, 3] = alpha
     return rgba
+
+def compute_residuals(decay, model=None, residuals=None):
+    if decay is None:
+        return None
+    decay = np.asarray(decay, dtype=float)
+    if residuals is not None:
+        residuals = np.asarray(residuals, dtype=float)
+        if residuals.ndim == 1 and len(residuals) == len(decay):
+            return residuals
+    if model is None:
+        return None
+    model = np.asarray(model, dtype=float)
+    if model.ndim != 1 or len(model) == 0:
+        return None
+    n = min(len(model), len(decay))
+    return (decay[:n] - model[:n]) / np.sqrt(np.maximum(model[:n], 1.0))
+
+def rebuild_summed_model(global_summary, irf_prompt, tcspc_res, n_bins):
+    gs = global_summary or {}
+    if gs.get('fit_model') not in (None, 'reconvolution'):
+        return None
+    if float(gs.get('tvb_scale') or 0.0) != 0.0:
+        return None
+    taus_ns = gs.get('taus_ns')
+    amps = gs.get('amps')
+    if taus_ns is None or amps is None or irf_prompt is None or not tcspc_res or not n_bins:
+        return None
+    taus = np.atleast_1d(np.asarray(taus_ns, dtype=float)) * 1e-9
+    amps = np.atleast_1d(np.asarray(amps, dtype=float))
+    if len(taus) == 0 or len(taus) != len(amps):
+        return None
+    tcspc_res = float(tcspc_res)
+    tail_amp = float(gs.get('tail_amp') or 0.0)
+    has_tail = tail_amp > 0
+    params = list(taus) + list(amps) + [float(gs.get('irf_shift_bins') or 0.0),
+                                        float(gs.get('irf_sigma_bins') or 0.0),
+                                        float(gs.get('bg_fit') or 0.0)]
+    if has_tail:
+        params += [tail_amp, float(gs.get('tail_tau_ns') or 0.0) / (tcspc_res * 1e9)]
+    from flimkit.FLIM.models import reconvolution_model
+    return reconvolution_model(np.asarray(params), tcspc_res, int(n_bins),
+                               np.asarray(irf_prompt, dtype=float), len(taus), 0.0,
+                               has_tail, True, True)
+
+def summary_model(global_summary, fit_result):
+    gs = global_summary or {}
+    model = gs.get('model')
+    if isinstance(model, str):
+        from flimkit.utils.session import _safe_array_from_json
+        model = _safe_array_from_json(model)
+    if model is not None and np.asarray(model).size > 0:
+        return np.asarray(model, dtype=float)
+    fr = fit_result or {}
+    try:
+        return rebuild_summed_model(gs, fr.get('irf_prompt'), fr.get('tcspc_res'), fr.get('n_bins'))
+    except Exception as exc:
+        print(f'[Residuals] Could not rebuild the fitted model: {exc}')
+        return None

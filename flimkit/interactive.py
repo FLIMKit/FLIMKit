@@ -12,8 +12,8 @@ from .configs import (
     MACHINE_IRF_DEFAULT_PATH, MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
     MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF)
 from flimkit.formats import FLIMFile
-from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting  
-from .utils.xml_utils import parse_xlif_tile_positions 
+from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
+from .utils.xml_utils import parse_xlif_tile_positions
 from .FLIM.fit_tools import find_irf_peak_bin
 from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, align_irf_to_bin, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
 from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
@@ -28,6 +28,7 @@ from .utils.enhanced_outputs import (
     create_complete_output_package
 )
 from .utils.lifetime_image import make_lifetime_image
+from .utils.export_png import field_area_um2, xlif_field_area_um2
 from .image.tools import make_intensity_image, make_cell_mask, apply_intensity_threshold, pick_intensity_threshold
 from ._version import fitter_version
 
@@ -111,7 +112,7 @@ def _align_measured_irf(args, irf_prompt, irf_peak_bin, n_bins, tcspc_res):
     if abs(offset) > 10:
         print(f'  WARNING: measured IRF peak sits {offset:+d} bins '
               f'({offset * tcspc_res * 1e9:+.2f} ns) from the decay rising edge, and the '
-              f'fit can only shift it by ±{getattr(args, "irf_shift_bins", 2)} bins.')
+              f'fit can only shift it by ±{getattr(args, 'irf_shift_bins', 2)} bins.')
         print(f'           Lifetimes from this fit will be wrong. Enable IRF alignment '
               f'(--align-irf) if the IRF came from a separate acquisition.')
     return irf_prompt, 'measured_irf'
@@ -662,13 +663,15 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 intensity_display_min=getattr(args, 'intensity_display_min', None),
                 intensity_display_max=getattr(args, 'intensity_display_max', None),
                 target_shape=(ny, nx),
+                field_area_um2=field_area_um2(stitch_result.get('pixel_size_um'), stitch_result['canvas_shape']),
             )
         if getattr(args, 'save_individual', False):
             save_individual_tau_maps(
                 pixel_maps,
                 Path(args.output_dir),
                 roi_name=roi_name,
-                n_exp=args.nexp
+                n_exp=args.nexp,
+                field_area_um2=field_area_um2(stitch_result.get('pixel_size_um'), stitch_result['canvas_shape']),
             )
         if not args.no_plots:
             matplotlib.use('Agg')
@@ -1431,6 +1434,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         cancel_event = cancel_event,
     )
     _binning = getattr(args, 'binning', 1)
+    tile_area_um2 = xlif_field_area_um2(args.xlif, args.ptu_basename, (canvas_height, canvas_width), _binning)
     if _binning > 1:
         try:
             import cv2 as _cv2
@@ -1467,10 +1471,10 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tau_k = global_summary.get(f'tau{k}_mean_ns', float('nan'))
         a_k = global_summary.get(f'a{k}_mean_frac', float('nan'))
         print(f'  τ{k} = {tau_k:8.4f} ns   α{k} = {a_k:.3e}   f{k} = {a_k:.4f}')
-    print(f'  τ_mean (amplitude-weighted)  = {tau_mean:.4f} ns')
-    print(f'  τ_mean (median, amp-wtd)     = {tau_med:.4f} ns')
-    print(f'  τ σ (pixel distribution)     = {tau_std:.4f} ns')
-    print(f'  n pixels fitted              = {n_px}')
+    print(f'  τ_mean (amplitude-weighted) = {tau_mean:.4f} ns')
+    print(f'  τ_mean (median, amp-wtd) = {tau_med:.4f} ns')
+    print(f'  τ σ (pixel distribution) = {tau_std:.4f} ns')
+    print(f'  n pixels fitted = {n_px}')
     print(f'  Optimizer: per-pixel (per-tile fit)')
     if _cancelled(cancel_event):
         return None
@@ -1487,6 +1491,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tau_display_max = getattr(args, 'tau_display_max',       None),
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
+        field_area_um2 = tile_area_um2,
     )
     if _cancelled(cancel_event):
         return None
@@ -1503,6 +1508,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tau_max_ns = tau_max_img,
         smooth_sigma_px = 2.0,
         verbose = True,
+        field_area_um2 = tile_area_um2,
     )
     print(f"\n{'='*60}")
     print(f'  PER-TILE FITTING COMPLETE')
