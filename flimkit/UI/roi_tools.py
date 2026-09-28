@@ -754,6 +754,7 @@ class RoiAnalysisPanel:
                     region_obj['statistics'] = stats
             key = tuple(sorted(result.get('region_ids', [result['region_id']])))
             self._last_fit_results[key] = result
+            self.fov_preview._save_regions_update()
             self._refresh_region_list()
             self._show_roi_fit_result(result)
         self.run_with_progress(

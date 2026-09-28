@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.6** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.13.7** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -412,6 +412,37 @@ Fit Summary tab, row by row:
 
 Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
 
+#### The figures the fit saves
+
+Every fit saves its figures next to the output prefix without being asked. These are from the masked 8 x 8 fit above.
+
+`<prefix>_summed_<n>exp.png` is the summed fit.
+
+![Summed fit figure](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/28_summed_fit.jpg)
+
+| Part | What it shows |
+|---|---|
+| Top left | The summed decay (grey dots), the IRF scaled to a tenth of the decay peak (orange, the scale factor is in the legend) and the fitted model (red), on a log axis. The green band is the fit window. Only the first 22 ns are drawn, so a window running further than that is cut off on the plot but not in the fit. |
+| Bottom left | Weighted residuals across the fit window, clipped to ±5. A good fit scatters evenly around zero. A wave, like the one the 2-exponential fit in Step 6 left, means the model is missing something. |
+| Top right | Histogram of the same residuals, with their mean and SD. It should be a single peak at zero with an SD near 1. The residuals are clipped at ±5, so spikes at the edges are the points that fell outside that range. |
+| Bottom right | χ²_r over the fit window and χ²_r(tail), background, both mean lifetimes, the effective IRF width, and each τᵢ with its amplitude fraction fᵢ. The χ² values here are Pearson, so they differ from the Neyman χ²_r(tail) on the preview's residual plot: 1.2104 here against 1.244. The Fit Summary tab lists both. |
+
+`<prefix>_pixelmaps_<n>exp.png` is the per-pixel fit, only written by Full fits.
+
+![Pixel maps figure](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/29_pixel_maps.jpg)
+
+The top row is the photon count per pixel, the intensity-weighted mean lifetime and the amplitude-weighted mean lifetime. The bottom row is the amplitude fraction of each component, on a fixed 0 to 1 scale. The lifetime and intensity colour ranges run from the 2nd to the 98th percentile of the fitted pixels, so they won't match the range set in the preview, and unmasked background shows up as noise the same way it does on screen.
+
+`<prefix>_lifetime_hist_<n>exp.png` is the distribution of per-pixel lifetimes.
+
+![Lifetime histogram](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/30_lifetime_hist.jpg)
+
+Each pixel's intensity-weighted mean lifetime, weighted by its photon count, with the weighted mean as a dashed line: 2.840 ns here, against 2.834 ns from the summed fit. The preview map shows the amplitude-weighted lifetime by default, so the histogram and the map aren't showing the same quantity.
+
+`<prefix>_cell_mask.png` is the Cellpose mask at the full image resolution, white for the pixels kept. Check it against the intensity image before trusting per-cell numbers.
+
+The PNG export in [Step 11](#step-11-export) writes separate figures: `<scan>_summed_decay.png` is the decay, IRF and fit from the preview over the whole time range, without residuals.
+
 ### Step 9: Adjust the display
 
 The FLIM Color Scale panel under the preview changes the picture, never the fitted values.
@@ -451,6 +482,8 @@ Open the ROI Analysis tab, pick a drawing mode and drag on either image.
 | Send to a viewer | Added by the `flimkit-bridge` plugin. Checks that a viewer such as QuPath has connected and says which images it is being served ([FLIMKit Bridge](#flimkit-bridge)). |
 
 The table gives, per region, the mean, median and standard deviation of the pixel lifetimes and the photon count. The ellipse over the lower cell gave τ_mean = 1.22 ns (median 1.18, SD 0.21) from 163,093 photons, and the rectangle over the upper cell 1.22 ns (median 1.19, SD 0.23) from 138,519. Regions are written to the session file as soon as they're drawn.
+
+Fit ROI Decay re-fits a region from the raw file rather than taking values from the whole-FOV fit. It sums every photon inside the outline at full resolution, so the FOV fit's binning, photon threshold and background mask don't apply to it. It reuses the IRF from the last FOV fit. If there isn't one it falls back to a 0.2 ns Gaussian on the decay peak, and the IRF label in the results window says which was used. The FOV fit and the lifetime map are left as they were.
 
 ### Step 11: Export
 
@@ -1743,7 +1776,9 @@ It runs inside a live QuPath session rather than as a script, so it works with t
 Two halves, one on each side.
 
 1. `pip install flimkit-bridge` into the environment FLIMKit runs in ([FLIMKit Bridge](#flimkit-bridge)).
-2. Put `qupath-extension-flimkit-bridge-*.jar` in QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`. Alternatively, in `Extensions > Manage extensions`, add `https://github.com/FLIMKit/flimkit-qupath-bridge` as a catalog and QuPath installs it and offers each new release.
+2. In QuPath, open `Extensions > Manage extensions`, add `https://github.com/FLIMKit/flimkit-qupath-bridge` as a catalog, and install FLIMKit bridge from it. QuPath then offers each new release, so you don't have to fetch jars by hand.
+
+If you'd rather install by hand, download `qupath-extension-flimkit-bridge-*.jar` from the [releases page](https://github.com/FLIMKit/flimkit-qupath-bridge/releases) and put it in QuPath's extensions directory, normally `~/QuPath/v0.7/extensions`. You'll have to repeat that for every update.
 
 `pip install flimkit-qupath-bridge` used to be step 1 and still works, but that package is being sunset. It is a shim that re-exports `flimkit-bridge`, warns on import, and is removed in 0.7.0.
 
