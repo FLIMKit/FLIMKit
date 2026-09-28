@@ -100,3 +100,43 @@ def test_the_summary_names_the_model_irf_and_display():
     assert 'machine_irf' in text
     assert '1.50 to auto ns' in text
     assert 'hsv' in text
+
+
+def test_only_fitted_single_fov_files_are_exported(tmp_path):
+    from flimkit.utils.apply_settings import fitted_fovs
+    for stem in ('a', 'c'):
+        np.savez(tmp_path / f'{stem}.roi_session.npz', x=np.zeros(1))
+    project = FakeProject({
+        'a': ScanRecord('a', 'fov', str(tmp_path / 'a.ptu')),
+        'b': ScanRecord('b', 'fov', str(tmp_path / 'b.ptu')),
+        'c': ScanRecord('c', 'fov', str(tmp_path / 'c.ptu')),
+        'tiles': ScanRecord('tiles', 'xlif', str(tmp_path / 'tiles.xlif')),
+    })
+    assert [stem for stem, _ in fitted_fovs(project)] == ['a', 'c']
+    assert fitted_fovs(None) == []
+
+
+def test_the_fit_summary_is_the_table_the_gui_shows(tmp_path):
+    from flimkit.utils.apply_settings import write_fit_summary
+    np.savez(tmp_path / 's.npz',
+             summary_params=np.array(['τ1', 'α1', 'χ²_r(tail) Pearson'], dtype=object),
+             summary_values=np.array(['5.4335', '1.080e+04', '2.2614'], dtype=object),
+             summary_units=np.array(['ns', '', ''], dtype=object),
+             strategy='machine_irf',
+             decay=np.full(10, 5.0))
+    session = dict(np.load(tmp_path / 's.npz', allow_pickle=True))
+    out = tmp_path / 's_fit_summary.txt'
+    assert write_fit_summary(session, out, name='s.ptu') == True
+    lines = out.read_text(encoding='utf-8').splitlines()
+    assert 'File: s.ptu' in lines
+    assert 'IRF: machine_irf' in lines
+    assert 'Total photons: 50' in lines
+    assert 'τ1                  5.4335 ns' in lines
+    assert 'χ²_r(tail) Pearson  2.2614' in lines
+
+
+def test_a_session_without_a_summary_writes_nothing(tmp_path):
+    from flimkit.utils.apply_settings import write_fit_summary
+    out = tmp_path / 'x.txt'
+    assert write_fit_summary({'decay': np.ones(3)}, out) == False
+    assert not out.exists()

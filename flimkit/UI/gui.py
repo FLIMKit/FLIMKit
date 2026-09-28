@@ -2109,7 +2109,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _export_images(self, image_dict: dict, output_dir: str,
                       with_scalebar: bool = True, with_annotations: bool = True,
                       format: str = 'png', fit_result: dict = None,
-                      with_colorbar: bool = True):
+                      with_colorbar: bool = True, open_folder: bool = True):
         try:
             from flimkit.utils.export_png import lifetime_limits, save_colorbar
             from pathlib import Path
@@ -2305,6 +2305,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 import traceback
                 traceback.print_exc()
             print(f'✓ Export complete: {exported_count} high-resolution images to {output_path}')
+            if not open_folder:
+                return exported_count
             try:
                 import subprocess
                 subprocess.Popen(['open', str(output_path)])
@@ -3460,12 +3462,261 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self.sv_out_fov.set(restore['out'])
         self._fov_preview._roi_manager.clear_all()
         self._fov_preview._roi_patches.clear()
-        if Path(restore['session']).exists():
+        if restore['session'] and Path(restore['session']).is_file():
             self._load_fitted_data_from_file(restore['session'], suppress_popups=True)
-        else:
+        elif restore['ptu']:
             self._fov_preview.load_fov(restore['ptu'])
         if hasattr(self, '_roi_analysis_panel'):
             self._roi_analysis_panel._refresh_region_list()
+
+    @staticmethod
+    def _exportable_images(fit_result):
+        found = {}
+        for k, v in (fit_result or {}).items():
+            if isinstance(v, np.ndarray) and (v.ndim == 2 or (v.ndim == 3 and v.shape[2] == 3)):
+                found[k] = v
+        return found
+
+    def _open_export_all_dialog(self):
+        from flimkit.utils.apply_settings import fitted_fovs
+        project = getattr(getattr(self, '_proj_browser', None), '_project', None)
+        if project is None:
+            messagebox.showinfo('Export all', 'Open a project folder first.')
+            return
+        targets = fitted_fovs(project)
+        if not targets:
+            messagebox.showinfo('Export all', 'No single FOV file in this project has been fitted yet.')
+            return
+        keys = sorted(self._exportable_images(self.load_roi_fit(str(targets[0][1].session_path))))
+        if not keys:
+            messagebox.showinfo('Export all', f'{targets[0][0]} has no fit images to export.')
+            return
+        dlg = tk.Toplevel(self.root)
+        dlg.title('Export All')
+        dlg.transient(self.root)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=12)
+        frm.pack(fill='both', expand=True)
+        ttk.Label(frm, text='Export every fitted file in this project',
+                  font=('TkDefaultFont', 10, 'bold')).pack(anchor='w')
+        ttk.Label(frm, text='Each file is exported with its own saved display settings and ROIs.',
+                  foreground='grey').pack(anchor='w', pady=(2, 8))
+        files_frame = ttk.LabelFrame(frm, text='Files', padding=8)
+        files_frame.pack(fill='both', expand=True)
+        outer, inner = self._make_scroll_frame(files_frame)
+        outer.pack(fill='both', expand=True)
+        outer.configure(height=min(240, 26 * len(targets) + 20))
+        outer.pack_propagate(False)
+        chosen = {}
+        for stem, rec in targets:
+            var = tk.BooleanVar(value=True)
+            ttk.Checkbutton(inner, text=stem, variable=var).pack(anchor='w')
+            chosen[stem] = var
+        sel = ttk.Frame(files_frame)
+        sel.pack(fill='x', pady=(6, 0))
+        ttk.Button(sel, text='All', width=6,
+                   command=lambda: [v.set(True) for v in chosen.values()]).pack(side='left', padx=(0, 4))
+        ttk.Button(sel, text='None', width=6,
+                   command=lambda: [v.set(False) for v in chosen.values()]).pack(side='left')
+        img_frame = ttk.LabelFrame(frm, text='Images to Export', padding=8)
+        img_frame.pack(fill='x', pady=(8, 0))
+        image_vars = {k: tk.BooleanVar(value=True) for k in keys}
+        n_cols = 3
+        for idx, k in enumerate(keys):
+            ttk.Checkbutton(img_frame, text=k.replace('_', ' ').title(),
+                            variable=image_vars[k]).grid(row=idx // n_cols, column=idx % n_cols, sticky='w', padx=5, pady=2)
+        opt_frame = ttk.LabelFrame(frm, text='Rendering Options', padding=8)
+        opt_frame.pack(fill='x', pady=(8, 0))
+        bv_scalebar = tk.BooleanVar(value=True)
+        bv_colorbar = tk.BooleanVar(value=True)
+        bv_annotations = tk.BooleanVar(value=True)
+        ttk.Checkbutton(opt_frame, text='Include scale bar (µm) in the image', variable=bv_scalebar).pack(anchor='w', pady=2)
+        ttk.Checkbutton(opt_frame, text='Save colour scale bar as a separate PNG', variable=bv_colorbar).pack(anchor='w', pady=2)
+        ttk.Checkbutton(opt_frame, text='Include ROI annotations', variable=bv_annotations).pack(anchor='w', pady=2)
+        fmt_frame = ttk.LabelFrame(frm, text='Image Format', padding=8)
+        fmt_frame.pack(fill='x', pady=(8, 0))
+        bv_format = tk.StringVar(value='png')
+        ttk.Radiobutton(fmt_frame, text='PNG (smaller file size, web-friendly)',
+                        variable=bv_format, value='png').pack(anchor='w', pady=2)
+        ttk.Radiobutton(fmt_frame, text='OME-TIFF (lossless, metadata-rich)',
+                        variable=bv_format, value='ometiff').pack(anchor='w', pady=2)
+        ttk.Radiobutton(fmt_frame, text='OME-Zarr (lossless, compressed, one channel per image)',
+                        variable=bv_format, value='omezarr').pack(anchor='w', pady=2)
+        extra_frame = ttk.LabelFrame(frm, text='Also Export', padding=8)
+        extra_frame.pack(fill='x', pady=(8, 0))
+        bv_geojson = tk.BooleanVar(value=False)
+        bv_txt = tk.BooleanVar(value=False)
+        ttk.Checkbutton(extra_frame, text='ROIs as GeoJSON (files that have ROIs)', variable=bv_geojson).pack(anchor='w', pady=2)
+        ttk.Checkbutton(extra_frame, text='Fit summary as .txt', variable=bv_txt).pack(anchor='w', pady=2)
+        loc_frame = ttk.LabelFrame(frm, text='Save Location', padding=8)
+        loc_frame.pack(fill='x', pady=(8, 0))
+        export_path = tk.StringVar(value=str(project.project_dir / 'exports'))
+        ttk.Entry(loc_frame, textvariable=export_path, width=40).pack(side='left', padx=(0, 5), fill='x', expand=True)
+
+        def browse_folder():
+            folder = filedialog.askdirectory(initialdir=str(project.project_dir), title='Select export folder', parent=dlg)
+            if folder:
+                export_path.set(folder)
+        ttk.Button(loc_frame, text='Browse', command=browse_folder, width=8).pack(side='left')
+
+        def go():
+            stems = [s for s, v in chosen.items() if v.get()]
+            images = [k for k, v in image_vars.items() if v.get()]
+            if not stems:
+                messagebox.showinfo('Export all', 'Tick at least one file.', parent=dlg)
+                return
+            if not images and not bv_geojson.get() and not bv_txt.get():
+                messagebox.showinfo('Export all', 'Tick at least one thing to export.', parent=dlg)
+                return
+            out_dir = export_path.get().strip()
+            if not out_dir:
+                messagebox.showinfo('Export all', 'Choose an export folder.', parent=dlg)
+                return
+            fmt = bv_format.get()
+            if fmt == 'omezarr' and images:
+                try:
+                    import zarr
+                except ImportError:
+                    messagebox.showerror('Zarr not installed',
+                                         'OME-Zarr export needs the zarr package.\n\nInstall it with:  pip install zarr',
+                                         parent=dlg)
+                    return
+            opts = {
+                'images': images,
+                'format': fmt,
+                'scalebar': bv_scalebar.get(),
+                'colorbar': bv_colorbar.get(),
+                'annotations': bv_annotations.get(),
+                'geojson': bv_geojson.get(),
+                'txt': bv_txt.get(),
+            }
+            dlg.destroy()
+            self._export_all(stems, out_dir, opts)
+        btns = ttk.Frame(frm)
+        btns.pack(fill='x', pady=(10, 0))
+        ttk.Button(btns, text='Cancel', command=dlg.destroy).pack(side='right', padx=(4, 0))
+        ttk.Button(btns, text='Export', command=go).pack(side='right')
+
+    def _export_all(self, stems, out_dir, opts):
+        import json
+        from flimkit.utils.apply_settings import fitted_fovs, write_fit_summary
+        project = getattr(getattr(self, '_proj_browser', None), '_project', None)
+        if project is None:
+            messagebox.showerror('Export all', 'Open a project folder first.')
+            return
+        if str(self._btn_fov.cget('state')) == 'disabled':
+            messagebox.showerror('Export all', 'Wait for the current fit to finish.')
+            return
+        wanted = set(stems)
+        targets = [(s, r) for s, r in fitted_fovs(project) if s in wanted]
+        if not targets:
+            messagebox.showerror('Export all', 'None of those files have a saved fit.')
+            return
+        out_path = Path(out_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+        shown = self._fov_preview._ptu_path or self.sv_ptu.get().strip()
+        restore = {
+            'ptu': shown or '',
+            'xlsx': self.sv_xlsx.get(),
+            'out': self.sv_out_fov.get(),
+            'session': str(Path(shown).parent / f'{Path(shown).stem}.roi_session.npz') if shown else '',
+        }
+        results = {'ok': [], 'failed': [], 'no_rois': [], 'no_summary': []}
+
+        def export_one(stem, rec):
+            p = self._fov_preview
+            p._roi_manager.clear_all()
+            p._roi_patches.clear()
+            self._last_loaded_ptu = rec.source_path
+            self.sv_ptu.set(rec.source_path)
+            self.sv_xlsx.set(rec.xlsx_path or '')
+            self.sv_out_fov.set(stem)
+            self._load_fitted_data_from_file(str(rec.session_path), suppress_popups=True)
+            self.sv_ptu.set(rec.source_path)
+            fit_result = self._res._fit_result or {}
+            if opts['images']:
+                images = {k: v for k, v in self._exportable_images(fit_result).items() if k in opts['images']}
+                if images:
+                    self._export_images(images, str(out_path),
+                                        with_scalebar=opts['scalebar'],
+                                        with_annotations=opts['annotations'],
+                                        format=opts['format'],
+                                        fit_result=fit_result,
+                                        with_colorbar=opts['colorbar'],
+                                        open_folder=False)
+            if opts['geojson']:
+                payload = p._roi_manager.to_geojson()
+                if payload.get('features'):
+                    geo_file = out_path / f'{stem}_all_rois.geojson'
+                    with open(geo_file, 'w', encoding='utf-8') as f:
+                        json.dump(payload, f, indent=2)
+                    print(f'✓ Exported ROIs: {geo_file.name}')
+                else:
+                    results['no_rois'].append(stem)
+            if opts['txt']:
+                if not write_fit_summary(fit_result, out_path / f'{stem}_fit_summary.txt', name=Path(rec.source_path).name):
+                    results['no_summary'].append(stem)
+
+        def on_ui(fn):
+            done = threading.Event()
+            outcome = {}
+
+            def run():
+                try:
+                    fn()
+                except Exception as exc:
+                    outcome['error'] = exc
+                finally:
+                    done.set()
+            self.root.after(0, run)
+            done.wait()
+            if 'error' in outcome:
+                raise outcome['error']
+
+        def task(progress_callback, cancel_event):
+            n = len(targets)
+            for i, (stem, rec) in enumerate(targets):
+                if cancel_event.is_set():
+                    print('\nExport all cancelled.')
+                    break
+                progress_callback(i, n)
+                print(f'\n[{i + 1}/{n}] Exporting {stem}')
+                try:
+                    on_ui(lambda: export_one(stem, rec))
+                    results['ok'].append(stem)
+                except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
+                    results['failed'].append((stem, str(exc)))
+            progress_callback(n, n)
+            return results
+
+        def on_done(result):
+            self._set_buttons('normal')
+            self._restore_apply_source(restore)
+            ok, failed = results['ok'], results['failed']
+            self._res.set_status(f'✓  Exported {len(ok)} file(s) to {out_path}')
+            notes = []
+            if failed:
+                notes.append('These failed:\n' + '\n'.join(f'{s}: {e[:80]}' for s, e in failed))
+            if results['no_rois']:
+                notes.append('No ROIs, so no GeoJSON: ' + ', '.join(results['no_rois']))
+            if results['no_summary']:
+                notes.append('No fit summary in the session: ' + ', '.join(results['no_summary']))
+            msg = f'Exported {len(ok)} of {len(targets)} file(s) to\n{out_path}'
+            if notes:
+                msg += '\n\n' + '\n\n'.join(notes)
+            if failed:
+                messagebox.showwarning('Export all', msg)
+            else:
+                messagebox.showinfo('Export all', msg)
+            try:
+                import subprocess
+                subprocess.Popen(['open', str(out_path)])
+            except Exception as e:
+                print(f'[Export] Could not open folder: {e}')
+        self._set_buttons('disabled')
+        self.run_with_progress(task, task_name=f'Export all ({len(targets)} files)', on_done=on_done)
 
     def _populate_zstack_summary_from_dir(self, group_dir):
         import json

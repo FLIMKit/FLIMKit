@@ -573,6 +573,8 @@ Clicking Ado_2 afterwards reloads its saved fit, residual plot included. The res
 
 ![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
 
+Once two or more single-FOV files in the project have a fit, Export all... under the list exports them in one go. It has the same image, rendering and format options as the export dialog, and writes every file into one folder (`exports` in the project by default), each named after its scan. Each file is exported with its own saved display settings and ROIs. Two more boxes add each file's ROIs as `<scan>_all_rois.geojson` and its fit summary table as `<scan>_fit_summary.txt`. A file with no ROIs gets no GeoJSON, and the dialog at the end says which.
+
 ### Step 14: Fit a z-stack
 
 Selecting the Z row switches Analysis to Z-stack and fills the folder. The slider under the preview steps through the slices. The fit pools every slice to fit one set of lifetimes, then fits each slice per pixel with those lifetimes locked, so only the amplitudes change with depth ([Timelapse and Z-stack Fitting](#timelapse-and-z-stack-fitting)). The form is the same as for a single FOV, and the button reads Run Z-stack Fit.

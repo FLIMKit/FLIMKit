@@ -33,14 +33,14 @@ class ProjectBrowserPanel:
         sb.grid(row=0, column=1, sticky='ns')
         self._lb = tk.Listbox(
             lb_outer,
-            yscrollcommand = sb.set,
-            selectmode = 'single',
-            activestyle = 'none',
-            font = ('Courier', 9),
-            relief = 'flat',
-            borderwidth = 0,
-            highlightthickness = 0,
-            exportselection = False,
+            yscrollcommand=sb.set,
+            selectmode='single',
+            activestyle='none',
+            font=('Courier', 9),
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            exportselection=False,
         )
         self._lb.grid(row=0, column=0, sticky='nsew')
         sb.config(command=self._lb.yview)
@@ -48,20 +48,27 @@ class ProjectBrowserPanel:
         self._sv_status = tk.StringVar(value='No project open')
         ttk.Label(
             self.frame,
-            textvariable = self._sv_status,
-            foreground = 'grey',
-            font = ('TkDefaultFont', 7),
-            wraplength = width - 12,
-            anchor = 'w',
+            textvariable=self._sv_status,
+            foreground='grey',
+            font=('TkDefaultFont', 7),
+            wraplength=width - 12,
+            anchor='w',
         ).grid(row=2, column=0, sticky='ew', padx=6, pady=(2, 6))
         ttk.Button(self.frame, text='Apply fit settings...',
                    command=self._open_apply_settings).grid(
-            row=3, column=0, sticky='ew', padx=4, pady=(0, 6))
+            row=3, column=0, sticky='ew', padx=4, pady=(0, 2))
+        self._btn_export_all = ttk.Button(self.frame, text='Export all...',
+                                          command=self._open_export_all, state='disabled')
+        self._btn_export_all.grid(row=4, column=0, sticky='ew', padx=4, pady=(0, 6))
         self._setup_dnd()
 
     def _open_apply_settings(self):
         if hasattr(self._app, '_open_apply_fit_settings_dialog'):
             self._app._open_apply_fit_settings_dialog()
+
+    def _open_export_all(self):
+        if hasattr(self._app, '_open_export_all_dialog'):
+            self._app._open_export_all_dialog()
 
     def grid(self, **kw):
         self.frame.grid(**kw)
@@ -77,9 +84,9 @@ class ProjectBrowserPanel:
             return
         self._project.update_after_fit(
             stem,
-            out_st = out_st,
-            output_prefix = output_prefix,
-            ptu_dir = ptu_dir,
+            out_st=out_st,
+            output_prefix=output_prefix,
+            ptu_dir=ptu_dir,
         )
         self._project.save()
         self._refresh()
@@ -171,9 +178,13 @@ class ProjectBrowserPanel:
         n = len(self._stems)
         n_sess = sum(1 for r in self._project.scans.values()
                      if r.has_session or r.has_phasor_session)
+        from flimkit.utils.apply_settings import fitted_fovs
+        n_fitted = len(fitted_fovs(self._project))
+        self._btn_export_all.configure(state='normal' if n_fitted >= 2 else 'disabled')
         folder_name = self._project.project_dir.name
+        plural = 's' if n != 1 else ''
         self._sv_status.set(
-            f"{folder_name}  |  {n} scan{'s' if n != 1 else ''}  |  {n_sess} saved"
+            f'{folder_name}  |  {n} scan{plural}  |  {n_sess} saved'
         )
 
     def _on_select(self, _event=None):
