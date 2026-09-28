@@ -1,8 +1,15 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.7] - 2026-09-28
+
+### Fixed
+- Fit ROI Decay saves its result to the session file as soon as the fit finishes. It wrote τ_mean, the component lifetimes and amplitudes, and χ²_r into the region's statistics but never saved them, so they were lost if FLIMKit closed before something else wrote the session, although the docs said they were saved automatically.
 
 ### Changed
+- The guide says what Fit ROI Decay re-fits: every photon inside the outline at full resolution, with the IRF from the last FOV fit. The FOV fit's binning, photon threshold and background mask don't apply to it, and the FOV fit is left as it was.
+- The guide explains the figures a fit saves: what each panel of the summed fit shows, why its χ² differs from the one in the preview, how the pixel maps are scaled, and that the lifetime histogram is intensity-weighted while the preview map is amplitude-weighted.
+- Home folder paths are blurred out of the guide and plugin screenshots.
+- The QuPath extension installs from its catalog in `Extensions > Manage extensions`, which offers each new release. Copying the jar in by hand is the fallback.
 - The Docker build files and `docker.yml` are gone from this repository. The images have been built in [flimkit-docker](https://github.com/FLIMKit/flimkit-docker) since 16 September, and the leftover workflow still fired on version tags, set to push the old images over the new ones. A release now asks flimkit-docker to build that version, once a `FLIMKIT_DOCKER_DISPATCH_TOKEN` secret is set; without it the images wait for the weekly build.
 
 ## [0.13.6] - 2026-09-26
