@@ -29,6 +29,10 @@ on:
           - release
           - dev
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+
 jobs:
   get-version:
     runs-on: ubuntu-latest
