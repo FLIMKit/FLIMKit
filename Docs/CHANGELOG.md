@@ -10,6 +10,7 @@
 - Phasor plot and cursor image as PNG, in Export Images and Export all. It writes `<scan>_phasor.png`, the phasor histogram on the semicircle with the cursors, and `<scan>_phasor_image.png`, the image coloured by cursor, both with a legend giving each cursor's pixel count and median τφ. They are drawn from the file's saved phasor session, so a file needs to have been through Phasor Analysis first.
 - Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
 - Standard errors on every summed fit: a 1σ error for each lifetime, amplitude and fraction, both mean lifetimes, the IRF shift and the background, plus the correlation between lifetimes. They show as ± rows in the Fit Summary and in the terminal output. A lifetime with more than 10% error, or two lifetimes correlated beyond |r| = 0.95, gets a ⚠ row. The fitted values don't change.
+- Bootstrap errors, on by default in the GUI, `fit_cli.py` and the guided terminal UI for single FOV, stitched and ROI fits. The summed decay is refitted 25 times on Poisson-resampled copies, and the spread of the lifetimes is reported as a second ± with a 16th to 84th percentile range. For 3-exponential fits the curvature errors can be several times too small, and the bootstrap catches that: on one synthetic decay τ2 went from ±5.8% to ±24%, against 51% measured over repeated noise. Expert Settings turns it off or changes the number of resamples, and `fit_cli.py --bootstrap 0` does the same. It adds about 35 s to a 1-exponential fit and a minute to a 3-exponential one. From Python it is off unless `bootstrap=` is passed.
 
 ### Changed
 - New work goes to a `dev` branch, which is merged into `main` for each release. FLIMKitDEV is built from pushes to `dev` now, not `main`, and a push to `main` builds nothing until its version tag. Tests run on both branches, and the PyPI workflow refuses to run from `dev`.
@@ -18,6 +19,7 @@
 - A dev build names itself FLIMKitDEV while it runs: the window title reads `FLIMKitDEV 0.13.8+dev.2026.09.28` and the About box says the same. The app is built under that name too, so the macOS menu bar and Dock show it, where before the bundle was only renamed after the build and still called itself FLIMKit inside. A release reads `FLIMKit 0.13.8`.
 
 ### Fixed
+- Reset Defaults in Expert Settings now clears Pile-up in the model and Background in the model, which it used to leave ticked.
 - The compiled app's update check never looked up the latest release, because it only did so from inside a git checkout, and the app never runs in one. It now checks GitHub directly.
 
 ## [0.13.8] - 2026-09-28

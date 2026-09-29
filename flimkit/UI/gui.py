@@ -71,6 +71,7 @@ from flimkit.UI.results_panel import ResultsPanel
 from flimkit.UI.app_state import AppState
 from flimkit.UI.mode_controller import ModeController
 from flimkit.UI.controller import FLIMKitController
+from flimkit.FLIM.fitters import DEFAULT_BOOTSTRAP
 
 class _UIBuilder:
 
@@ -2561,6 +2562,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.exclude_ns = ex['exclude_ns'] or None
         if 'fit_t0' in ex:
             a.fit_t0 = ex['fit_t0']
+        if 'bootstrap' in ex:
+            a.bootstrap = int(ex.get('bootstrap_resamples', DEFAULT_BOOTSTRAP)) if ex['bootstrap'] else 0
 
     def _open_expert_settings(self):
         from flimkit.utils.config_manager import cfg
@@ -3304,9 +3307,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'irf_fwhm': cfg['IRF_FWHM'],
             'irf_align': 'steepest_rise',
             'irf_shift_bins': 2,
+            'bootstrap': DEFAULT_BOOTSTRAP,
         }
         expert = self._expert_overrides
         if expert:
+            if 'bootstrap' in expert:
+                params['bootstrap'] = int(expert.get('bootstrap_resamples', DEFAULT_BOOTSTRAP)) if expert['bootstrap'] else 0
             if 'cost_function' in expert:
                 params['cost_function'] = expert['cost_function']
             if 'channels' in expert:
@@ -4479,6 +4485,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             amps_d = list(_np.atleast_1d(global_summary.get('amps', [])))
             fracs_d = list(_np.atleast_1d(global_summary.get('fractions', [])))
             centers_err = list(_np.atleast_1d(global_summary.get('tau_centers_ns_err', [])))
+            centers_boot = list(_np.atleast_1d(global_summary.get('tau_centers_ns_boot_err', [])))
             dist_type = global_summary.get('dist_type', 'gaussian')
             dist_label = dist_type.capitalize()
             width_label = 'σ' if dist_type == 'gaussian' else 'Γ (FWHM)'
@@ -4486,6 +4493,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 rows.append((f'τ̄{i+1} ({dist_label} center)', f'{tau_centers[i]:.4f}', 'ns'))
                 if i < len(centers_err) and _np.isfinite(centers_err[i]):
                     rows.append((f'τ̄{i+1} ± (1σ)', f'{centers_err[i]:.4f}', 'ns'))
+                if i < len(centers_boot) and _np.isfinite(centers_boot[i]):
+                    rows.append((f'τ̄{i+1} ± (bootstrap)', f'{centers_boot[i]:.4f}', 'ns'))
                 if i < len(widths_ns):
                     rows.append((f'{width_label}{i+1}', f'{widths_ns[i]:.4f}', 'ns'))
                 if i < len(fwhms_ns):
@@ -4505,10 +4514,13 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             intens = list(np.atleast_1d(global_summary.get('intensities', [])))
             ifracs = list(np.atleast_1d(global_summary.get('intensity_fractions', [])))
             taus_err = list(np.atleast_1d(global_summary.get('taus_ns_err', [])))
+            taus_boot = list(np.atleast_1d(global_summary.get('taus_ns_boot_err', [])))
             for i in range(len(taus)):
                 rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))
                 if i < len(taus_err) and np.isfinite(taus_err[i]):
                     rows.append((f'τ{i+1} ± (1σ)', f'{taus_err[i]:.4f}', 'ns'))
+                if i < len(taus_boot) and np.isfinite(taus_boot[i]):
+                    rows.append((f'τ{i+1} ± (bootstrap)', f'{taus_boot[i]:.4f}', 'ns'))
                 if i < len(amps):
                     rows.append((f'α{i+1}', f'{amps[i]:.3e}', ''))
                 if i < len(fracs):
@@ -4527,6 +4539,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 v_err = global_summary.get(key + '_err')
                 if v_err is not None and v_err == v_err:
                     rows.append((label + ' ± (1σ)', f'{v_err:.4f}', 'ns'))
+                v_boot = global_summary.get(key + '_boot_err')
+                if v_boot is not None and v_boot == v_boot:
+                    rows.append((label + ' ± (bootstrap)', f'{v_boot:.4f}', 'ns'))
         tau_global = global_summary.get('tau_mean_amp_global_ns')
         if tau_global is not None:
             rows.append(('τ_mean amp-wtd (global)', f'{tau_global:.4f}', 'ns'))
@@ -4576,6 +4591,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         chi2_p_tail = global_summary.get('reduced_chi2_tail_pearson')
         if chi2_p_tail is not None:
             rows.append(('χ²_r(tail) Pearson', f'{chi2_p_tail:.4f}', ''))
+        n_boot = global_summary.get('n_bootstrap')
+        if n_boot:
+            rows.append(('Bootstrap resamples', f'{int(n_boot)}', ''))
         for note in global_summary.get('uncertainty_warnings') or []:
             rows.append(('⚠ ' + str(note), '', ''))
         return rows

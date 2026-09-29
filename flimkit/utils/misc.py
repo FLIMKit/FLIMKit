@@ -103,6 +103,13 @@ def print_summary(summary: dict, strategy: str, n_exp: int):
         print(f"  Optimizer: {s['optimizer_msg']}")
     if any(k.endswith('_err') for k in s):
         print('  ± values are 1σ standard errors from the fit curvature (Poisson noise assumed)')
+    tau_key = 'tau_centers_ns' if is_dist else 'taus_ns'
+    boot = s.get(tau_key + '_boot_err')
+    if boot is not None:
+        print(f"  Bootstrap ({s.get('n_bootstrap', 0)} resampled refits), 16th-84th percentile:")
+        for i, (tau, err, lo, hi) in enumerate(zip(s[tau_key], boot, s[tau_key + '_boot_lo'],
+                                                   s[tau_key + '_boot_hi'])):
+            print(f'    τ{i+1} = {tau:8.4f} ± {err:.4f} ns   ({lo:.4f} to {hi:.4f} ns)')
     for note in s.get('uncertainty_warnings') or []:
         print(f'  WARNING: {note}')
 

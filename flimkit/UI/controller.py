@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 from flimkit.UI.utils import _C, _flt, _thresh
+from flimkit.FLIM.fitters import DEFAULT_BOOTSTRAP
 
 class FLIMKitController:
     def __init__(self, builder):
@@ -42,6 +43,7 @@ class FLIMKitController:
         a.de_maxiter = cfg['de_maxiter']
         a.workers = cfg['n_workers']
         a.no_polish = False
+        a.bootstrap = DEFAULT_BOOTSTRAP
         a.channel = cfg['channels']
         _out_raw = self.b.sv_out_fov.get().strip() or cfg['OUT_NAME']
         if Path(_out_raw).parent == Path('.'):
@@ -104,6 +106,7 @@ class FLIMKitController:
         a.de_maxiter = cfg['de_maxiter']
         a.workers = cfg['n_workers']
         a.no_polish = False
+        a.bootstrap = DEFAULT_BOOTSTRAP
         a.channel = cfg['channels']
         a.irf_fwhm = cfg['IRF_FWHM']
         a.irf_bins = cfg['IRF_BINS']

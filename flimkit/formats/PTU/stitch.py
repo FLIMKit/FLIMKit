@@ -722,6 +722,7 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
         sigma_max = sigma_max,
         tvb_profile = _tvb_pooled,
         fit_tvb = _fit_tvb,
+        bootstrap = getattr(args, 'bootstrap', 0),
     )
     if verbose:
         taus = global_summary['taus_ns']
@@ -1107,6 +1108,7 @@ def fit_flim_tiles(
             sigma_max = sigma_max,
             tvb_profile = _tvb_pooled,
             fit_tvb = _fit_tvb,
+            bootstrap = getattr(args, 'bootstrap', 0),
         )
     consensus_taus_ns = global_summary['taus_ns']
     if verbose:

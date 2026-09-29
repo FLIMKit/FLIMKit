@@ -134,3 +134,80 @@ def test_terminal_summary_prints_errors(capsys):
     out = capsys.readouterr().out
     assert f"± {s['taus_ns_err'][0]:.4f}" in out
     assert '1σ standard errors' in out
+
+def _boot_fit(decay, irf, n_exp, n):
+    return _quiet(fit_summed, decay, RES_NS * 1e-9, N_BINS, irf, False, True, False,
+                  n_exp, 0.1, 20, de_popsize=10, de_maxiter=300, workers=1, bootstrap=n)
+
+def test_bootstrap_is_off_by_default_in_the_api():
+    expected, irf = _expected([2.5])
+    _, s = _fit(np.random.default_rng(17).poisson(expected).astype(float), irf, 1)
+    assert 'taus_ns_boot_err' not in s
+    assert 'n_bootstrap' not in s
+
+def test_bootstrap_matches_curvature_for_a_clean_fit():
+    expected, irf = _expected([2.5])
+    _, s = _boot_fit(np.random.default_rng(19).poisson(expected).astype(float), irf, 1, 8)
+    assert s['n_bootstrap'] == 8
+    assert s['bootstrap_failed'] == 0
+    ratio = s['taus_ns_boot_err'][0] / s['taus_ns_err'][0]
+    assert 0.4 < ratio < 2.5
+    assert s['taus_ns_boot_lo'][0] < s['taus_ns'][0] + 3 * s['taus_ns_err'][0]
+    assert s['taus_ns_boot_hi'][0] > s['taus_ns'][0] - 3 * s['taus_ns_err'][0]
+    assert np.isfinite(s['tau_mean_amp_ns_boot_err'])
+
+def test_bootstrap_is_reproducible():
+    expected, irf = _expected([2.5])
+    decay = np.random.default_rng(21).poisson(expected).astype(float)
+    _, a = _boot_fit(decay, irf, 1, 4)
+    _, b = _boot_fit(decay, irf, 1, 4)
+    assert np.array_equal(a['taus_ns_boot_err'], b['taus_ns_boot_err'])
+
+def test_bootstrap_catches_what_curvature_misses():
+    expected, irf = _expected([4.0, 1.5, 0.6], [0.4, 0.3, 0.3], photons=2e4)
+    _, s = _boot_fit(np.random.default_rng(13).poisson(expected).astype(float), irf, 3, 8)
+    assert s['tau_corr_boot'].shape == (3, 3)
+    assert np.nanmax(s['taus_ns_boot_err'] / s['taus_ns']) > 0.1
+    assert s['uncertainty_warnings']
+
+def test_tail_and_distribution_fits_bootstrap():
+    expected, irf = _expected([2.5])
+    decay = np.random.default_rng(23).poisson(expected).astype(float)
+    _, t = _quiet(fit_summed_tail, decay, RES_NS * 1e-9, N_BINS, True, 1, 0.1, 20,
+                  de_popsize=10, de_maxiter=300, workers=1, bootstrap=4)
+    assert t['taus_ns_boot_err'].shape == (1,)
+    _, d = _quiet(fit_summed_dist, decay, RES_NS * 1e-9, N_BINS, irf, 1, 'gaussian', True, False,
+                  0.1, 20, de_popsize=10, de_maxiter=200, workers=1, bootstrap=3)
+    assert d['tau_centers_ns_boot_err'].shape == (1,)
+
+def test_expert_setting_turns_bootstrap_off():
+    import argparse
+    from flimkit.UI.gui import _UIBuilder
+    from flimkit.UI.expert_settings import _EXPERT_DEFAULTS
+    from flimkit.FLIM.fitters import DEFAULT_BOOTSTRAP
+    assert _EXPERT_DEFAULTS['bootstrap'] == True
+    assert _EXPERT_DEFAULTS['bootstrap_resamples'] == DEFAULT_BOOTSTRAP
+    a = argparse.Namespace(bootstrap=DEFAULT_BOOTSTRAP)
+    _UIBuilder._apply_expert_overrides(object(), a, {'bootstrap': False, 'bootstrap_resamples': 40})
+    assert a.bootstrap == 0
+    _UIBuilder._apply_expert_overrides(object(), a, {'bootstrap': True, 'bootstrap_resamples': 40})
+    assert a.bootstrap == 40
+
+def test_cli_has_a_bootstrap_flag():
+    import flimkit.interactive as fi
+    import inspect
+    src = inspect.getsource(fi.single_FOV_flim_fit)
+    assert "'--bootstrap'" in src
+
+def test_results_table_and_terminal_show_bootstrap(capsys):
+    from flimkit.UI.gui import _UIBuilder
+    from flimkit.utils.misc import print_summary
+    expected, irf = _expected([2.5])
+    _, s = _boot_fit(np.random.default_rng(25).poisson(expected).astype(float), irf, 1, 3)
+    rows = _UIBuilder._extract_summary_rows(object(), s)
+    labels = [r[0] for r in rows]
+    assert 'τ1 ± (bootstrap)' in labels
+    assert ('Bootstrap resamples', '3', '') in rows
+    print_summary(s, 'gaussian', 1)
+    out = capsys.readouterr().out
+    assert 'Bootstrap (3 resampled refits)' in out

@@ -28,8 +28,9 @@ _EXPERT_DEFAULTS = {
     'fit_end_ns': None,
     'exclude_ns': '',
     'fit_t0': False,
+    'bootstrap': True,
+    'bootstrap_resamples': 25,
 }
-
 
 class ExpertSettingsDialog(tk.Toplevel):
 
@@ -39,10 +40,8 @@ class ExpertSettingsDialog(tk.Toplevel):
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
-
         self.result: Optional[dict] = None
         cfg = _C()
-
         vals = dict(_EXPERT_DEFAULTS)
         vals.update({
             'binning_factor': cfg['binning_factor'],
@@ -54,12 +53,10 @@ class ExpertSettingsDialog(tk.Toplevel):
             'min_photons': cfg['MIN_PHOTONS_PERPIX'],
         })
         vals.update(current)
-
         PAD = {'padx': 4, 'pady': 3}
         row = 0
         f = ttk.Frame(self, padding=12)
         f.pack(fill='both', expand=True)
-
         opt_label = ttk.Frame(f)
         opt_label.grid(row=row, column=0, sticky='w', **PAD)
         ttk.Label(opt_label, text='Optimizer:').pack(side='left')
@@ -71,7 +68,6 @@ class ExpertSettingsDialog(tk.Toplevel):
                         variable=self._sv_optimizer, value='de').pack(side='left', padx=(0, 8))
         ttk.Radiobutton(opt_frame, text='Levenberg-Marquardt (LM)',
                         variable=self._sv_optimizer, value='lm_multistart').pack(side='left')
-
         row += 1
         ttk.Label(f, text='DE population:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_de_pop = tk.StringVar(value=str(vals['de_population']))
@@ -79,29 +75,24 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Label(f, text='DE max iterations:').grid(row=row, column=2, sticky='w', **PAD)
         self._sv_de_maxiter = tk.StringVar(value=str(vals['de_maxiter']))
         ttk.Entry(f, textvariable=self._sv_de_maxiter, width=8).grid(row=row, column=3, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='LM random restarts:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_lm_restarts = tk.StringVar(value=str(vals['lm_restarts']))
         ttk.Entry(f, textvariable=self._sv_lm_restarts, width=8).grid(row=row, column=1, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='Spatial binning (NxN):').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_binning = tk.StringVar(value=str(vals['binning_factor']))
         ttk.Entry(f, textvariable=self._sv_binning, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(1 = no binning)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='CPU workers:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_workers = tk.StringVar(value=str(vals['n_workers']))
         ttk.Entry(f, textvariable=self._sv_workers, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(-1 = all cores)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='Min photons/pixel:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_min_ph = tk.StringVar(value=str(vals['min_photons']))
         ttk.Entry(f, textvariable=self._sv_min_ph, width=8).grid(row=row, column=1, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='Cost function:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_cost = tk.StringVar(value=vals['cost_function'])
@@ -111,20 +102,17 @@ class ExpertSettingsDialog(tk.Toplevel):
                         variable=self._sv_cost, value='poisson').pack(side='left', padx=(0, 8))
         ttk.Radiobutton(cf_frame, text='Chi² (legacy)',
                         variable=self._sv_cost, value='chi2').pack(side='left')
-
         row += 1
         ttk.Label(f, text='Channel filter:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_channels = tk.StringVar(value=str(vals.get('channels', '') or ''))
         ttk.Entry(f, textvariable=self._sv_channels, width=12).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = all channels)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='IRF FWHM (ns):').grid(row=row, column=0, sticky='w', **PAD)
         _irf_fwhm_val = vals.get('irf_fwhm')
         self._sv_irf_fwhm = tk.StringVar(value='' if _irf_fwhm_val is None else str(_irf_fwhm_val))
         ttk.Entry(f, textvariable=self._sv_irf_fwhm, width=12).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = 1 bin auto, e.g. 0.097)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='IRF alignment:').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_irf_align = tk.StringVar(value=vals.get('irf_align', 'steepest_rise'))
@@ -134,20 +122,17 @@ class ExpertSettingsDialog(tk.Toplevel):
                         variable=self._sv_irf_align, value='steepest_rise').pack(side='left', padx=(0, 8))
         ttk.Radiobutton(align_frame, text='Decay peak (legacy)',
                         variable=self._sv_irf_align, value='decay_peak').pack(side='left')
-
         row += 1
         ttk.Label(f, text='IRF shift bound (±bins):').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_irf_shift = tk.StringVar(value=str(vals.get('irf_shift_bins', 2)))
         ttk.Entry(f, textvariable=self._sv_irf_shift, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(2 = recommended; 5 = legacy)', foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         self._bv_align_irf = tk.BooleanVar(value=bool(vals.get('align_irf', False)))
         ttk.Checkbutton(f, text='Align measured IRF peak to the decay rising edge  '
                                 '(for a scatter PTU or .pck from a separate acquisition)',
                         variable=self._bv_align_irf).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
-
         row += 1
         _start_val = vals.get('fit_start_ns')
         _end_val = vals.get('fit_end_ns')
@@ -157,20 +142,17 @@ class ExpertSettingsDialog(tk.Toplevel):
         ttk.Label(f, text='Fit window end (ns):').grid(row=row, column=2, sticky='w', **PAD)
         self._sv_fit_end = tk.StringVar(value='' if _end_val is None else str(_end_val))
         ttk.Entry(f, textvariable=self._sv_fit_end, width=8).grid(row=row, column=3, sticky='w', **PAD)
-
         row += 1
         ttk.Label(f, text='Exclude bands (ns):').grid(row=row, column=0, sticky='w', **PAD)
         self._sv_exclude = tk.StringVar(value=str(vals.get('exclude_ns', '') or ''))
         ttk.Entry(f, textvariable=self._sv_exclude, width=20).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = none, e.g. 7.2-8.8 or 7.2-8.8,11.0-11.5)',
                   foreground='grey').grid(row=row, column=2, columnspan=2, sticky='w', **PAD)
-
         row += 1
         self._bv_free_tau = tk.BooleanVar(value=bool(vals.get('free_tau_perpixel', False)))
         ttk.Checkbutton(f, text='Free τ per pixel  (slower - reveals τ spatial variation for n_exp > 1)',
                         variable=self._bv_free_tau).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
-
         row += 1
         self._bv_pileup_model = tk.BooleanVar(
             value=bool(vals.get('pileup_in_model', False)))
@@ -178,33 +160,40 @@ class ExpertSettingsDialog(tk.Toplevel):
                                 'fits the measured decay instead of rescaling it)',
                         variable=self._bv_pileup_model).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
-
         row += 1
         self._bv_bg_model = tk.BooleanVar(value=bool(vals.get('bg_in_model', False)))
         ttk.Checkbutton(f, text='Background in the model  (one-exponential and fixed tau - '
                                 'fits the offset instead of subtracting it, CPU only)',
                         variable=self._bv_bg_model).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
-
         row += 1
         self._bv_fit_t0 = tk.BooleanVar(value=bool(vals.get('fit_t0', False)))
         ttk.Checkbutton(f, text='Free t0  (tail fit only - correlated with the amplitudes, leave off unless they matter)',
                         variable=self._bv_fit_t0).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
-
+        row += 1
+        self._bv_bootstrap = tk.BooleanVar(value=bool(vals.get('bootstrap', True)))
+        ttk.Checkbutton(f, text='Bootstrap errors  (refits resampled data to get honest ± values - '
+                                'adds about a minute to each summed fit)',
+                        variable=self._bv_bootstrap).grid(
+            row=row, column=0, columnspan=3, sticky='w', **PAD)
+        self._sv_bootstrap_n = tk.StringVar(value=str(vals.get('bootstrap_resamples', 25)))
+        boot_n = ttk.Frame(f)
+        boot_n.grid(row=row, column=3, sticky='w', **PAD)
+        ttk.Label(boot_n, text='resamples:').pack(side='left')
+        ttk.Entry(boot_n, textvariable=self._sv_bootstrap_n, width=5).pack(side='left', padx=(4, 0))
         row += 1
         btn_frame = ttk.Frame(f)
         btn_frame.grid(row=row, column=0, columnspan=4, pady=(12, 0))
         ttk.Button(btn_frame, text='Confirm', command=self._confirm).pack(side='left', padx=4)
         ttk.Button(btn_frame, text='Reset Defaults', command=self._reset).pack(side='left', padx=4)
         ttk.Button(btn_frame, text='Cancel', command=self.destroy).pack(side='left', padx=4)
-
         self.protocol('WM_DELETE_WINDOW', self.destroy)
         self.update_idletasks()
         pw, ph = parent.winfo_width(), parent.winfo_height()
         px, py = parent.winfo_rootx(), parent.winfo_rooty()
         w, h = self.winfo_width(), self.winfo_height()
-        self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+        self.geometry(f'+{px + (pw - w) // 2}+{py + (ph - h) // 2}')
 
     def _collect(self) -> dict:
         from flimkit.interactive import parse_exclude_ns
@@ -232,6 +221,8 @@ class ExpertSettingsDialog(tk.Toplevel):
             'pileup_in_model': self._bv_pileup_model.get(),
             'bg_in_model': self._bv_bg_model.get(),
             'fit_t0': self._bv_fit_t0.get(),
+            'bootstrap': self._bv_bootstrap.get(),
+            'bootstrap_resamples': max(2, int(self._sv_bootstrap_n.get() or 25)),
             'fit_start_ns': float(_start_s) if _start_s else None,
             'fit_end_ns': float(_end_s) if _end_s else None,
             'exclude_ns': _excl_s,
@@ -261,7 +252,11 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_irf_shift.set('2')
         self._bv_align_irf.set(False)
         self._bv_free_tau.set(False)
+        self._bv_pileup_model.set(False)
+        self._bv_bg_model.set(False)
         self._bv_fit_t0.set(False)
+        self._bv_bootstrap.set(d['bootstrap'])
+        self._sv_bootstrap_n.set(str(d['bootstrap_resamples']))
         self._sv_fit_start.set('')
         self._sv_fit_end.set('')
         self._sv_exclude.set('')

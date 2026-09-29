@@ -427,6 +427,7 @@ Expert Settings opens a dialog shared by the single FOV and tile pipelines. When
 | Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
 | Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
 | Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
+| Bootstrap errors / resamples | On by default, with 25 resamples. Refits the summed decay 25 times on resampled copies of the data to measure the ± on each lifetime ([Parameter uncertainties](#parameter-uncertainties)). It adds about 35 s to a 1-exponential fit and a minute to a 3-exponential one, so untick it for quick trial fits. |
 | Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |
 
 For `Ado_1.ptu` I left everything at the defaults until [Step 7](#step-7-full-fit-and-binning).
@@ -474,12 +475,14 @@ Fit Summary tab, row by row:
 | Row | Meaning |
 |---|---|
 | τ1, τ2, τ3 | Component lifetimes from the summed fit, in ns. |
-| τ1 ± (1σ), τ2 ± (1σ), τ3 ± (1σ) | Standard error of each lifetime, in ns. See [Fit Diagnostics](#fit-diagnostics). |
+| τ1 ± (1σ), τ2 ± (1σ), τ3 ± (1σ) | Standard error of each lifetime from the fit curvature, in ns. See [Fit Diagnostics](#fit-diagnostics). |
+| τ1 ± (bootstrap), ... | Standard deviation of each lifetime over the bootstrap refits. Trust this one over the curvature error when they disagree. |
 | α1, α2, α3 | Component amplitudes, in counts. |
 | f1, f2, f3 (amp frac) | Amplitude fractions, αᵢ / Σα. |
 | τ_mean (amp-weighted) | Σαᵢτᵢ / Σαᵢ. Weighted towards the short, high-amplitude components (1.125 ns here). |
 | τ_mean (int-weighted) | Σαᵢτᵢ² / Σαᵢτᵢ. Weighted towards the long components, closer to what a phasor or a mean arrival time gives (2.834 ns here). |
-| τ_mean ± (1σ) | Standard error of each mean lifetime. |
+| τ_mean ± (1σ) / ± (bootstrap) | Error on each mean lifetime, from the curvature and from the bootstrap. |
+| Bootstrap resamples | How many resampled refits the bootstrap errors came from. |
 | Background (fitted) | Constant offset per bin. |
 | IRF shift | How far the IRF was moved to match the decay, in bins (0.913 bins, about 88 ps). |
 | IRF σ (broadening) | Extra Gaussian width. 0 unless a broadening IRF method is used. |
@@ -985,6 +988,7 @@ python fit_cli.py [OPTIONS]
 | `--de-maxiter INT` | DE maximum iterations (default: 5000) |
 | `--workers INT` | CPU cores for DE (-1 = all; auto-limited to 1 in compiled app) |
 | `--no-polish` | Skip LM polish step after DE |
+| `--bootstrap INT` | Resampled refits for the bootstrap ± errors (default: 25, 0 turns them off) |
 | `--cost-function {poisson,chi2}` | Cost function (default: `poisson`) |
 | `--fit-start-ns FLOAT` | Fit window start in ns (default: auto from IRF onset) |
 | `--fit-end-ns FLOAT` | Fit window end in ns (default: auto) |
@@ -1364,9 +1368,30 @@ large there.
 
 These are local estimates. They can't see a different solution elsewhere that
 fits just as well, so for a 3-exponential fit they are a lower bound on the real
-uncertainty. A lifetime with more than 10% relative error, or two lifetimes
-correlated beyond |r| = 0.95, adds a ⚠ row to the Fit Summary and a warning to
-the terminal output.
+uncertainty.
+
+The bootstrap doesn't have that problem. It draws a new Poisson count for every
+bin of the measured decay, refits with the same settings and fit window, and
+repeats (25 times by default, seeded so the same data gives the same errors).
+The spread of the refitted lifetimes is the error, and the 16th and 84th
+percentiles give a range that doesn't have to be symmetric. The summary holds
+them as `taus_ns_boot_err`, `taus_ns_boot_lo` and `taus_ns_boot_hi`
+(`tau_centers_ns_...` for a distribution fit). The GUI, `fit_cli.py` and the
+guided terminal UI run it by default for single FOV, stitched and ROI fits.
+From Python it is off unless you pass `bootstrap=25` to `fit_summed`,
+`fit_summed_tail` or `fit_summed_dist`. Batch, timelapse and z-stack fits don't
+run it.
+
+For a synthetic 3-exponential decay (4.06, 1.36 and 0.71 ns, one million
+photons) fitted 16 times with fresh noise, τ2 scattered by 51% and τ3 by 24%.
+On one of those decays the curvature errors were 5.8% and 26%, and the bootstrap
+gave 24% and 33%, with both true values inside its 16th to 84th percentile
+range. On a 1-exponential decay the two agree (both 0.1%), and on ATTO488 the
+bootstrap gives ±0.0038 ns against SymPhoTime 64's ±0.0029 ns.
+
+A lifetime with more than 10% relative error, or two lifetimes correlated beyond
+|r| = 0.95, adds a ⚠ row to the Fit Summary and a warning to the terminal
+output. When the bootstrap has run, these use its errors and correlations.
 
 ---
 
