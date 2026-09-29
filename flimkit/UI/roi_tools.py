@@ -149,7 +149,6 @@ def _ask_roi_fit_options(params: dict):
         row=5, column=0, columnspan=2, sticky='ew', padx=8, pady=6)
     btn_frame = ttk.Frame(dlg)
     btn_frame.grid(row=6, column=0, columnspan=2, sticky='e', padx=8, pady=(0, 8))
-
     def _ok():
         try:
             tau_min = float(sv_tau_min.get())
@@ -168,7 +167,6 @@ def _ask_roi_fit_options(params: dict):
         result['tau_max'] = tau_max
         result['cost_function'] = sv_cost.get()
         dlg.destroy()
-
     def _cancel():
         dlg.destroy()
     ttk.Button(btn_frame, text='Cancel', command=_cancel).pack(side='left', padx=(0, 4))
@@ -676,7 +674,6 @@ class RoiAnalysisPanel:
         params = _ask_roi_fit_options(params)
         if params is None:
             return
-
         def task(progress_callback=None, cancel_event=None):
             from flimkit.formats import FLIMFile
             from flimkit.FLIM.fitters import fit_summed
@@ -718,6 +715,7 @@ class RoiAnalysisPanel:
                 tau_min_ns=params['tau_min'],
                 tau_max_ns=params['tau_max'],
                 cost_function=params['cost_function'],
+                bootstrap=params.get('bootstrap', 0),
             )
             if progress_callback:
                 progress_callback(4, 4)
@@ -733,7 +731,6 @@ class RoiAnalysisPanel:
                 'summary':     summary,
                 'n_exp':       params['n_exp'],
             }
-
         def on_done(result):
             if result is None:
                 return

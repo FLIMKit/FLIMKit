@@ -1,5 +1,7 @@
 import time
 import os
+import io
+import contextlib
 import numpy as np
 from tqdm import tqdm
 tqdm.disable = True
@@ -27,6 +29,7 @@ _gpu_backend_cache = _GPU_BACKEND_UNSET
 _GPU_MAX_DIST_STACK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 _TAU_GRID_POINTS = 1600
+DEFAULT_BOOTSTRAP = 25
 
 def tau_grid_points():
     override = os.environ.get('FLIMKIT_TAU_GRID_POINTS')
@@ -75,7 +78,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                irf_shift_bins=2,
                tvb_profile=None, fit_tvb=False,
                fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-               n_sync=None):
+               n_sync=None, bootstrap=0):
     warmup_gpu_backend()
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
@@ -244,7 +247,62 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                             n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
                             fit_idx, message, tvb_profile=tvb_profile,
                             fit_tvb=fit_tvb, n_sync=n_sync, lo=lo, hi=hi)
+    if bootstrap and bootstrap > 1:
+        samples, failed = _bootstrap_samples(
+            lambda d: fit_summed(d, tcspc_res, n_bins, irf_prompt, has_tail, fit_bg, fit_sigma,
+                                 n_exp, tau_min_ns, tau_max_ns, optimizer=optimizer,
+                                 n_restarts=n_restarts, de_popsize=de_popsize, de_maxiter=de_maxiter,
+                                 workers=workers, polish=polish, cost_function=cost_function,
+                                 sigma_max=sigma_max, irf_shift_bins=irf_shift_bins,
+                                 tvb_profile=tvb_profile, fit_tvb=fit_tvb, exclude_ns=exclude_ns,
+                                 n_sync=n_sync, **_window_ns(summary)),
+            decay, bootstrap)
+        summary.update(_bootstrap_fields(summary, samples, failed))
     return popt_original, summary
+
+def _bootstrap_samples(refit, decay, n):
+    rng = np.random.default_rng(20260929)
+    samples = []
+    failed = 0
+    t0 = time.time()
+    print(f'  Bootstrap: refitting {n} resampled copies of the decay...')
+    for i in range(int(n)):
+        resampled = rng.poisson(np.maximum(np.asarray(decay, dtype=float), 0.0)).astype(float)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                samples.append(refit(resampled)[1])
+        except Exception:
+            failed += 1
+    print(f'  Bootstrap: {len(samples)} refits in {time.time() - t0:.1f} s'
+          + (f', {failed} failed' if failed else ''))
+    return samples, failed
+
+def _bootstrap_fields(summary, samples, failed, tau_key='taus_ns'):
+    out = dict(n_bootstrap=len(samples), bootstrap_failed=failed)
+    if len(samples) < 2:
+        return out
+    taus = np.array([np.atleast_1d(s[tau_key]) for s in samples], dtype=float)
+    out[tau_key + '_boot_err'] = taus.std(axis=0, ddof=1)
+    out[tau_key + '_boot_lo'] = np.percentile(taus, 16, axis=0)
+    out[tau_key + '_boot_hi'] = np.percentile(taus, 84, axis=0)
+    fracs = np.array([np.atleast_1d(s['fractions']) for s in samples], dtype=float)
+    out['fractions_boot_err'] = fracs.std(axis=0, ddof=1)
+    for key in ('tau_mean_amp_ns', 'tau_mean_int_ns'):
+        vals = np.array([s[key] for s in samples if key in s], dtype=float)
+        if vals.size > 1:
+            out[key + '_boot_err'] = float(vals.std(ddof=1))
+    if taus.shape[1] > 1:
+        with np.errstate(invalid='ignore', divide='ignore'):
+            corr = np.corrcoef(taus.T)
+    else:
+        corr = np.ones((1, 1))
+    out['tau_corr_boot'] = corr
+    out['uncertainty_warnings'] = uncertainty_warnings(summary[tau_key], out[tau_key + '_boot_err'], corr)
+    return out
+
+def _window_ns(summary):
+    lo, hi = summary['fit_window_ns']
+    return dict(fit_start_ns=lo, fit_end_ns=hi)
 
 def _uncertainty_fields(model_fn, popt, fit_idx, lo, hi, n, tau_start, amp_start, order, extras, prefix='taus_ns'):
     try:
@@ -402,7 +460,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                     cost_function='poisson',
                     tvb_profile=None, fit_tvb=False,
                     fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-                    n_sync=None):
+                    n_sync=None, bootstrap=0):
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
@@ -554,6 +612,17 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                  fit_t0=fit_t0, t0_fixed=t0_fixed,
                                  tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync,
                                  lo=lo, hi=hi)
+    if bootstrap and bootstrap > 1:
+        samples, failed = _bootstrap_samples(
+            lambda d: fit_summed_tail(d, tcspc_res, n_bins, fit_bg, n_exp, tau_min_ns, tau_max_ns,
+                                      fit_t0=fit_t0, t0_range_bins=t0_range_bins, optimizer=optimizer,
+                                      n_restarts=n_restarts, de_popsize=de_popsize,
+                                      de_maxiter=de_maxiter, workers=workers, polish=polish,
+                                      cost_function=cost_function, tvb_profile=tvb_profile,
+                                      fit_tvb=fit_tvb, exclude_ns=exclude_ns, n_sync=n_sync,
+                                      **_window_ns(summary)),
+            decay, bootstrap)
+        summary.update(_bootstrap_fields(summary, samples, failed))
     return popt_work, summary
 
 def _make_summary_tail(popt, decay, tcspc_res, n_bins,
@@ -1089,7 +1158,7 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
                     irf_shift_bins=2,
                     tvb_profile=None, fit_tvb=False,
                     fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-                    n_sync=None):
+                    n_sync=None, bootstrap=0):
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
@@ -1231,6 +1300,18 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
         n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
         fit_idx, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync,
         lo=lo, hi=hi)
+    if bootstrap and bootstrap > 1:
+        samples, failed = _bootstrap_samples(
+            lambda d: fit_summed_dist(d, tcspc_res, n_bins, irf_prompt, n_components, dist_type,
+                                      fit_bg, fit_sigma, tau_min_ns, tau_max_ns, optimizer=optimizer,
+                                      n_restarts=n_restarts, de_popsize=de_popsize,
+                                      de_maxiter=de_maxiter, workers=workers, polish=polish,
+                                      cost_function=cost_function, sigma_max=sigma_max,
+                                      irf_shift_bins=irf_shift_bins, tvb_profile=tvb_profile,
+                                      fit_tvb=fit_tvb, exclude_ns=exclude_ns, n_sync=n_sync,
+                                      **_window_ns(summary)),
+            decay, bootstrap)
+        summary.update(_bootstrap_fields(summary, samples, failed, tau_key='tau_centers_ns'))
     return popt_work, summary
 
 def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
