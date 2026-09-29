@@ -156,6 +156,44 @@ This route gets the desktop application only. It carries no GPU backend unless
 the build machine had one, which is covered under GPU acceleration in the
 compiled app.
 
+#### Setting up a Python environment
+
+Install FLIMKit into its own environment, not the system Python, so its
+packages don't collide with anything else. conda and uv both work. Pick one and
+use it for everything FLIMKit, plugins included: a package installed into a
+different environment is never seen.
+
+With conda (Miniforge, Miniconda or Anaconda):
+
+```bash
+conda create -n flimkit -c conda-forge python=3.14
+conda activate flimkit
+pip install "flimkit[gui]"
+```
+
+With uv:
+
+```bash
+uv venv --seed --python 3.14 flimkit-env
+source flimkit-env/bin/activate      # Windows: flimkit-env\Scripts\activate
+uv pip install "flimkit[gui]"
+```
+
+`--seed` puts pip into the environment. uv leaves it out by default, and
+`install.py` calls pip, so without it `python install.py` fails. Once the
+environment is active, every `pip install` below also works as
+`uv pip install`.
+
+FLIMKit and all of its dependencies come from PyPI as wheels, so neither tool
+gets you a different or better install. The differences are around it:
+
+- uv is a single binary, installs a lot faster than pip, and downloads Python
+  3.14 itself if you don't have it.
+- A uv environment is a folder where you created it, and you activate it by
+  path. A conda environment has a name and can be activated from anywhere.
+- If you already use conda, or a shared machine or cluster provides it, stay
+  with conda. There is nothing to gain from adding a second tool.
+
 #### From PyPI
 
 For analysis in scripts, notebooks and the terminal:
@@ -2305,7 +2343,7 @@ Start with `Help > Plugins...` ([Checking what loaded](#checking-what-loaded)) a
 
 ### It is not in the list at all
 
-- **Installed into another environment.** The package has to be in the Python FLIMKit runs from. Check from the same terminal you launch FLIMKit from, for example `python -c "import flimkit_web_ui; print('ok')"`. With conda, activate the FLIMKit environment first.
+- **Installed into another environment.** The package has to be in the Python FLIMKit runs from. Check from the same terminal you launch FLIMKit from, for example `python -c "import flimkit_web_ui; print('ok')"`. With conda or uv, activate the FLIMKit environment first.
 - **User plugins are off.** A file in `~/.flimkit/plugins/` is ignored until `Load from ~/.flimkit/plugins` is ticked in Preferences, and the change takes effect on the next start.
 - **Its name starts with `_` or `.`.** Those files are skipped.
 - **It is disabled.** A plugin unticked in `Help > Plugins...` is listed in `plugins.disabled` in `~/.flimkit/config.json`.

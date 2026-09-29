@@ -4,6 +4,7 @@
 
 ### Added
 - Export all, under Apply fit settings in the project list. It turns on once two or more single FOV files in the project have a fit, and exports each of them with the export dialog's image, scale bar, colour bar, ROI and format options, using each file's own saved display settings and ROIs. It can also write each file's ROIs as GeoJSON and its fit summary table as a `.txt`.
+- Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
 
 ### Changed
 - New work goes to a `dev` branch, which is merged into `main` for each release. FLIMKitDEV is built from pushes to `dev` now, not `main`, and a push to `main` builds nothing until its version tag. Tests run on both branches, and the PyPI workflow refuses to run from `dev`.

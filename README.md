@@ -43,6 +43,19 @@ the terminal, or GPU fitting.
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
 
+Make an environment first, with conda or uv:
+
+```bash
+conda create -n flimkit -c conda-forge python=3.14 && conda activate flimkit
+# or
+uv venv --seed --python 3.14 flimkit-env && source flimkit-env/bin/activate
+```
+
+With uv, `uv pip install` works in place of `pip install` below. `--seed` adds
+pip, which `install.py` needs. The
+[installation docs](https://github.com/FLIMKit/FLIMKit/wiki/Requirements-and-Installation)
+cover Windows and which of the two to pick.
+
 For analysis in scripts, notebooks and the terminal:
 
 ```bash
