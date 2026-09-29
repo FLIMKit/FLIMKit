@@ -82,6 +82,9 @@ For development work (PyInstaller + test dependencies):
 python install.py --dev
 ```
 
+To update a clone later, `python update.py` pulls the latest code and reruns
+`install.py`. `--dry-run` lists the new commits without pulling.
+
 ## Docker / TrueNAS SCALE
 
 Pre-built images are on Docker Hub as `alex1075/flimkit`. They run FLIMKit with the [web UI](https://github.com/FLIMKit/flimkit-web-ui), so the whole app is used from a browser with nothing installed on the client.

@@ -254,6 +254,23 @@ python install.py --dev      # also installs PyInstaller and test requirements
 python install.py --dry-run  # preview commands without executing
 ```
 
+#### Updating a clone
+
+```bash
+python update.py             # pull the latest code, then rerun install.py
+python update.py --dry-run   # list the new commits without pulling
+python update.py --dev       # pass --dev on to install.py
+python update.py --force     # rerun install.py even with nothing to pull
+```
+
+Run it with the Python from your FLIMKit environment, so the requirements go
+into the right place. It only fast-forwards: with uncommitted changes to
+tracked files, or with local commits that the remote doesn't have, it stops
+and changes nothing. If a separate installed copy of flimkit sits in that
+environment, which would be imported in place of the clone, it is reinstalled
+from the clone. It needs `git` on the PATH, and works the same on macOS, Linux
+and Windows.
+
 ### Validate Installation
 
 ```bash

@@ -4,6 +4,7 @@
 
 ### Added
 - Export all, under Apply fit settings in the project list. It turns on once two or more single FOV files in the project have a fit, and exports each of them with the export dialog's image, scale bar, colour bar, ROI and format options, using each file's own saved display settings and ROIs. It can also write each file's ROIs as GeoJSON and its fit summary table as a `.txt`.
+- `update.py` updates a clone: it fast-forwards to the latest code, reruns `install.py`, and reinstalls a separate installed copy of flimkit from the clone so the stale one isn't imported. It stops without changing anything when there are uncommitted changes or local commits.
 - Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
 
 ### Changed
