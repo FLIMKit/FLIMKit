@@ -36,6 +36,9 @@ to every release.
 On macOS the app is self-signed, so the first launch needs right-click then
 Open. A double-click will be refused.
 
+To update it later, Help > Check for Updates downloads the new build and swaps
+it in place. On macOS, move the app out of Downloads first.
+
 This route gets the desktop application only. Everything below is for scripting,
 the terminal, or GPU fitting.
 
@@ -83,7 +86,9 @@ python install.py --dev
 ```
 
 To update a clone later, `python update.py` pulls the latest code and reruns
-`install.py`. `--dry-run` lists the new commits without pulling.
+`install.py`. It also rebuilds an app you built into `dist/`, and
+`--app-path /Applications/FLIMKit.app` copies that build over the one you open.
+`--dry-run` shows what it would do without changing anything.
 
 ## Docker / TrueNAS SCALE
 

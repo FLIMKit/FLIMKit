@@ -5,6 +5,8 @@
 ### Added
 - Export all, under Apply fit settings in the project list. It turns on once two or more single FOV files in the project have a fit, and exports each of them with the export dialog's image, scale bar, colour bar, ROI and format options, using each file's own saved display settings and ROIs. It can also write each file's ROIs as GeoJSON and its fit summary table as a `.txt`.
 - `update.py` updates a clone: it fast-forwards to the latest code, reruns `install.py`, and reinstalls a separate installed copy of flimkit from the clone so the stale one isn't imported. It stops without changing anything when there are uncommitted changes or local commits.
+- Help > Check for Updates in the compiled app offers to download and install a newer build from GitHub, and restarts into it. A release is offered the latest release and FLIMKitDEV the latest dev build. The old copy stays until the new one is in place.
+- `update.py` rebuilds an app built into `dist/` after it pulls, and `--app-path` copies the new build over the app you open. `--release` and `--dev-release` replace an app with the latest build from GitHub without touching the clone.
 - Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
 
 ### Changed
@@ -12,6 +14,9 @@
 - A pull request into `main` fails a `from-dev` check unless it comes from `dev`.
 - A push to `dev` cancels the dev build still running from the push before it. Two builds on the same day both replace that day's `dev-` release, and the one that finished last won, which could leave the older code under today's date. Release tag builds are never cancelled.
 - A dev build names itself FLIMKitDEV while it runs: the window title reads `FLIMKitDEV 0.13.8+dev.2026.09.28` and the About box says the same. The app is built under that name too, so the macOS menu bar and Dock show it, where before the bundle was only renamed after the build and still called itself FLIMKit inside. A release reads `FLIMKit 0.13.8`.
+
+### Fixed
+- The compiled app's update check never looked up the latest release, because it only did so from inside a git checkout, and the app never runs in one. It now checks GitHub directly.
 
 ## [0.13.8] - 2026-09-28
 

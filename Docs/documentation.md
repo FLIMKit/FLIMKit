@@ -258,10 +258,24 @@ python install.py --dry-run  # preview commands without executing
 
 ```bash
 python update.py             # pull the latest code, then rerun install.py
-python update.py --dry-run   # list the new commits without pulling
+python update.py --dry-run   # show what would happen without changing anything
 python update.py --dev       # pass --dev on to install.py
 python update.py --force     # rerun install.py even with nothing to pull
 ```
+
+If `dist/` holds an app you built with `build_and_sign.py`, `update.py`
+rebuilds it after pulling. `--app-path` then copies the new build over the copy
+you open, and `--no-rebuild` skips it. Rebuilding needs PyInstaller, from
+`python install.py --dev`, and stops if that app is running.
+
+```bash
+python update.py --app-path /Applications/FLIMKit.app
+python update.py --rebuild   # rebuild even when there was nothing to pull
+```
+
+`--release` and `--dev-release` leave the clone alone and replace the app at
+`--app-path` with the latest build from GitHub, the same download as the
+button in the app ([Updating the app](#updating-the-app)).
 
 Run it with the Python from your FLIMKit environment, so the requirements go
 into the right place. It only fast-forwards: with uncommitted changes to
@@ -1661,8 +1675,9 @@ New work lands on the `dev` branch first, and `dev` is merged into `main` for
 each release. Every push to `dev` that touches the code builds the app again as
 FLIMKitDEV and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
 page as a pre-release tagged `dev-YYYY.MM.DD`, with the documentation PDF as it
-stood at that commit. It is not a release: nothing goes to PyPI, and the update
-check ignores it. A second push on the same day replaces that day's build.
+stood at that commit. It is not a release: nothing goes to PyPI, and a released
+FLIMKit is never offered it. A second push on the same day replaces that day's
+build.
 
 `FLIMKitDEV-macos.zip`, `FLIMKitDEV-windows.zip` and `FLIMKitDEV-linux.zip`
 unzip to an app named FLIMKitDEV, so it can sit beside the released FLIMKit. Its
@@ -1673,6 +1688,30 @@ that version, so a running dev build can't be mistaken for a release. Both share
 A push that changes `flimkit/_version.py` is a release, so the version tag
 builds it instead. Pushing to `main` builds nothing on its own; a release is
 built from its version tag.
+
+### Updating the app
+
+Help > Check for Updates shows a Download and install button when a newer build
+is on GitHub. A released FLIMKit is offered the latest release, and FLIMKitDEV
+the latest dev build. It downloads the zip for your platform (337 MB for macOS
+at 0.13.8), puts the new app where the running one is, and offers to restart.
+The old copy is kept until the new one is in place, so a failed download or a
+full disk leaves FLIMKit as it was.
+
+It downloads the build GitHub made, which carries the GPU backends of GitHub's
+machines ([GPU acceleration in the compiled app](#gpu-acceleration-in-the-compiled-app)).
+If you built the app yourself to get your GPU, update the clone and rebuild
+instead:
+
+```bash
+python update.py --rebuild --app-path /Applications/FLIMKit.app
+```
+
+On macOS, an app opened straight from the Downloads folder runs from a
+temporary read-only copy and cannot replace itself. Move it into Applications,
+or any other folder, first. On Windows the old `.exe` can't be deleted while it
+runs, so it is left as `FLIMKit.exe.old` and removed the next time FLIMKit
+starts.
 
 ### Documentation PDF
 

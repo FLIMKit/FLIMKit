@@ -285,6 +285,7 @@ class _UIBuilder:
         help_menu.add_command(label='View Error Logs', command=self._menu_view_error_logs)
         help_menu.add_command(label='Export Error Logs', command=self._menu_export_error_logs)
         self.root.after(800, self._maybe_prompt_user_plugins)
+        self.root.after(2000, self._remove_update_backup)
     _RECENT_FILE = os.path.join(os.path.expanduser('~'), '.flimkit', 'recent.json')
     _MAX_RECENT = 10
 
@@ -753,6 +754,15 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             except Exception as exc:
                 report = ''
                 err = str(exc)
+            build = None
+            if getattr(sys, 'frozen', False) and err is None:
+                try:
+                    from flimkit.utils.app_update import findLatestBuild, is_newer
+                    latest = findLatestBuild()
+                    if is_newer(latest):
+                        build = latest
+                except Exception as exc:
+                    report += f'\n\nCould not look up a build to install: {exc}'
 
             def _done():
                 try:
@@ -770,6 +780,69 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 text_widget.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
                 text_widget.insert(tk.END, report)
                 text_widget.config(state=tk.DISABLED)
+                if build is not None:
+                    size_mb = build['size'] / 1e6
+                    ttk.Button(
+                        win,
+                        text=f"Download and install {build['tag']} ({size_mb:.0f} MB)",
+                        command=lambda: (win.destroy(), self._install_app_update(build)),
+                    ).pack(pady=(0, 10))
+            self.root.after(0, _done)
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _remove_update_backup(self):
+        if not getattr(sys, 'frozen', False):
+            return
+        try:
+            from flimkit.utils.app_update import remove_leftover_backup, running_app_path
+            target = running_app_path()
+            if target is not None:
+                threading.Thread(target=remove_leftover_backup, args=(target,), daemon=True).start()
+        except Exception:
+            pass
+
+    def _install_app_update(self, build):
+        from flimkit.utils.app_update import installBuild, relaunch, running_app_path, check_target
+        target = running_app_path()
+        if target is None:
+            messagebox.showerror('Update', 'Only the compiled app can replace itself. In a clone, run python update.py.')
+            return
+        try:
+            check_target(target)
+        except Exception as exc:
+            messagebox.showerror('Update', str(exc))
+            return
+        win = tk.Toplevel(self.root)
+        win.title('Updating FLIMKit')
+        win.geometry('420x120')
+        win.resizable(False, False)
+        label = ttk.Label(win, text=f"Downloading {build['asset']}...", wraplength=380, justify='left')
+        label.pack(padx=16, pady=(18, 10), anchor='w')
+        pb = ttk.Progressbar(win, mode='determinate', maximum=max(build['size'], 1))
+        pb.pack(fill='x', padx=16, pady=(0, 14))
+        win.protocol('WM_DELETE_WINDOW', lambda: None)
+
+        def _progress(done, total):
+            self.root.after(0, lambda: (pb.configure(maximum=max(total, 1), value=done), label.configure(text=f"Downloading {build['asset']}: {done / 1e6:.0f} of {total / 1e6:.0f} MB")))
+
+        def _worker():
+            try:
+                installBuild(build, target, progress=_progress)
+                err = None
+            except Exception as exc:
+                err = str(exc)
+
+            def _done():
+                try:
+                    win.destroy()
+                except Exception:
+                    pass
+                if err is not None:
+                    messagebox.showerror('Update', f"Could not install {build['tag']}. The current version is still in place.\n\n{err}")
+                    return
+                if messagebox.askyesno('Update', f"{build['tag']} is installed at {target}. Restart FLIMKit now to use it?"):
+                    relaunch(target)
+                    self.root.after(300, self._on_close)
             self.root.after(0, _done)
         threading.Thread(target=_worker, daemon=True).start()
 
