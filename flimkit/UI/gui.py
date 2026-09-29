@@ -91,7 +91,6 @@ class _UIBuilder:
         vbar.grid(row=0, column=1, sticky='ns')
         inner = ttk.Frame(canvas, padding=10)
         window_id = canvas.create_window((0, 0), window=inner, anchor='nw')
-
         def _on_inner_configure(_evt=None):
             canvas.configure(scrollregion=canvas.bbox('all'))
             inner_height = inner.winfo_reqheight()
@@ -99,11 +98,9 @@ class _UIBuilder:
             if canvas_height > 1:
                 canvas.itemconfigure(window_id, height=max(inner_height, canvas_height))
             canvas.itemconfigure(window_id, width=canvas.winfo_width() if canvas.winfo_width() > 1 else None)
-
         def _on_canvas_configure(evt):
             if evt.width > 1:
                 canvas.itemconfigure(window_id, width=evt.width)
-
         def _on_mousewheel(evt):
             if evt.num == 5 or evt.delta < 0:
                 canvas.yview_scroll(3, 'units')
@@ -160,12 +157,10 @@ class _UIBuilder:
         log_event(f'Task started: {task_name}')
         win = ProgressWindow(self.root, task_name=task_name)
         cancel_event = win.cancelled
-
         def progress_callback(i, total):
             win.set_progress(i, maximum=total)
             if cancel_event.is_set():
                 win.set_status('Cancelling...')
-
         def worker():
             orig_stdout, orig_stderr = sys.stdout, sys.stderr
             redir = _Redirect(self._res.log, self._buf, root=self.root)
@@ -500,7 +495,6 @@ class _UIBuilder:
                   foreground='grey').pack(anchor='w', pady=(8, 0))
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(0, 0))
-
         def save_prefs():
             mirf = mirf_var.get().strip()
             if mirf:
@@ -641,10 +635,8 @@ class _UIBuilder:
         status = tk.StringVar(value='')
         ttk.Label(frm, textvariable=status, foreground='grey').grid(
             row=len(fields) + 1, column=0, columnspan=2, sticky='w', pady=(8, 0))
-
         def _floats(s):
             return [float(x) for x in str(s).split(',') if x.strip()]
-
         def do_generate():
             from tkinter import filedialog
             out_dir = filedialog.askdirectory(title='Choose output folder for the PTUs')
@@ -740,7 +732,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         pb = ttk.Progressbar(status_win, mode='indeterminate')
         pb.pack(fill='x', padx=16, pady=(0, 14))
         pb.start(12)
-
         def _worker():
             try:
                 from flimkit.utils.update_check import (
@@ -763,7 +754,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                         build = latest
                 except Exception as exc:
                     report += f'\n\nCould not look up a build to install: {exc}'
-
             def _done():
                 try:
                     pb.stop()
@@ -821,17 +811,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         pb = ttk.Progressbar(win, mode='determinate', maximum=max(build['size'], 1))
         pb.pack(fill='x', padx=16, pady=(0, 14))
         win.protocol('WM_DELETE_WINDOW', lambda: None)
-
         def _progress(done, total):
             self.root.after(0, lambda: (pb.configure(maximum=max(total, 1), value=done), label.configure(text=f"Downloading {build['asset']}: {done / 1e6:.0f} of {total / 1e6:.0f} MB")))
-
         def _worker():
             try:
                 installBuild(build, target, progress=_progress)
                 err = None
             except Exception as exc:
                 err = str(exc)
-
             def _done():
                 try:
                     win.destroy()
@@ -1013,7 +1000,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             from tkinterdnd2 import DND_FILES, DND_TEXT
         except ImportError:
             return
-
         def _clean(data: str) -> str:
             data = data.strip()
             if data.startswith('{'):
@@ -1024,7 +1010,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if parts:
                 return parts[0]
             return data
-
         def _register(widget):
             try:
                 widget.drop_target_register(DND_FILES, DND_TEXT)
@@ -1041,7 +1026,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     widget.dnd_bind('<<Drop>>', _drop)
             except Exception:
                 pass
-
         def _walk(widget):
             try:
                 cls = widget.winfo_class()
@@ -1223,7 +1207,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         if hasattr(outer, '_refresh_scheduled') and outer._refresh_scheduled:
             return
         outer._refresh_scheduled = True
-
         def do_refresh():
             try:
                 self.root.update_idletasks()
@@ -2124,7 +2107,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             export_path = tk.StringVar(value=output_dir)
             ttk.Label(loc_frame, text='Path:').pack(side='left')
             ttk.Entry(loc_frame, textvariable=export_path, width=40).pack(side='left', padx=5, fill='x', expand=True)
-
             def browse_folder():
                 from tkinter import filedialog
                 folder = filedialog.askdirectory(initialdir=output_dir, title='Select export folder')
@@ -2132,7 +2114,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     export_path.set(folder)
                     print(f'[Export] Save location changed to: {folder}')
             ttk.Button(loc_frame, text='Browse', command=browse_folder, width=8).pack(side='left', padx=2)
-
             def do_export():
                 try:
                     selected_images = {k: v for k, v in available_images.items()
@@ -2661,7 +2642,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 return
             canvas = outer._canvas
             window_id = outer._window_id
-
             def _refresh():
                 try:
                     inner.update()
@@ -2795,7 +2775,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         n_groups = len(groups)
         n_frames = sum(len(v) for v in groups.values())
         from flimkit.FLIM.batch import fit_timelapse
-
         def task(progress_callback, cancel_event):
             a = argparse.Namespace(
                 nexp=n_exp,
@@ -2842,7 +2821,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 progress_callback=progress_callback,
                 cancel_event=cancel_event,
             )
-
         def on_done(result):
             self._set_buttons('normal')
             self._res.set_status(f'✓  Timelapse complete - {n_groups} group(s), {n_frames} frames.')
@@ -2885,7 +2863,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         expert_overrides = dict(self._expert_overrides)
         from flimkit.interactive import _run_flim_fit
         import gc, csv as csv_mod
-
         def task(progress_callback, cancel_event):
             csv_path = Path(out_dir) / 'batch_fov_fit_summary.csv'
             header_written = False
@@ -2964,7 +2941,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     writer.writerow(row)
             progress_callback(n_total, n_total)
             print(f'\nBatch FOV complete. CSV: {csv_path}')
-
         def on_done(result):
             self._set_buttons('normal')
             self._res.set_status('✓  Batch FOV complete.')
@@ -3016,7 +2992,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                            assemble_tile_maps)
         from flimkit.utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
         import gc, csv as csv_mod
-
         def task(progress_callback, cancel_event):
             csv_path = Path(out_dir) / 'batch_roi_fit_summary.csv'
             header_written = False
@@ -3120,7 +3095,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     writer.writerow(row)
             progress_callback(n_total, n_total)
             print(f'\nBatch complete. CSV: {csv_path}')
-
         def on_done(result):
             self._set_buttons('normal')
             self._res.set_status('✓  Batch complete.')
@@ -3245,7 +3219,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         self._add_to_recent(ptu_path, 'file')
         if hasattr(self, 'sv_out_fov'):
             self.sv_out_fov.set(Path(ptu_path).stem)
-
         def load():
             try:
                 self._fov_preview.load_fov(ptu_path)
@@ -3447,7 +3420,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                    command=lambda: [v.set(False) for v in chosen.values()]).pack(side='left')
         ttk.Label(frm, text='Files marked ● already have a fit, which is replaced. ROIs are not copied.',
                   foreground='grey').pack(anchor='w', pady=(6, 0))
-
         def go():
             stems = [s for s, v in chosen.items() if v.get()]
             if not stems:
@@ -3492,11 +3464,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         results = {'ok': [], 'failed': []}
         from flimkit.interactive import _run_flim_fit
         import gc
-
         def on_ui(fn):
             done = threading.Event()
             outcome = {}
-
             def run():
                 try:
                     fn()
@@ -3508,7 +3478,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             done.wait()
             if 'error' in outcome:
                 raise outcome['error']
-
         def task(progress_callback, cancel_event):
             n = len(targets)
             rule = '=' * 50
@@ -3531,7 +3500,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 gc.collect()
             progress_callback(n, n)
             return results
-
         def on_done(result):
             self._set_buttons('normal')
             self._restore_apply_source(restore)
@@ -3666,13 +3634,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         loc_frame.pack(fill='x', pady=(8, 0))
         export_path = tk.StringVar(value=str(project.project_dir / 'exports'))
         ttk.Entry(loc_frame, textvariable=export_path, width=40).pack(side='left', padx=(0, 5), fill='x', expand=True)
-
         def browse_folder():
             folder = filedialog.askdirectory(initialdir=str(project.project_dir), title='Select export folder', parent=dlg)
             if folder:
                 export_path.set(folder)
         ttk.Button(loc_frame, text='Browse', command=browse_folder, width=8).pack(side='left')
-
         def go():
             stems = [s for s, v in chosen.items() if v.get()]
             images = [k for k, v in image_vars.items() if v.get()]
@@ -3737,7 +3703,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'session': str(Path(shown).parent / f'{Path(shown).stem}.roi_session.npz') if shown else '',
         }
         results = {'ok': [], 'failed': [], 'no_rois': [], 'no_summary': [], 'no_phasor': []}
-
         def export_one(stem, rec):
             p = self._fov_preview
             p._roi_manager.clear_all()
@@ -3776,11 +3741,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     self._export_phasor_plot(rec.phasor_session_path, out_path, stem)
                 else:
                     results['no_phasor'].append(stem)
-
         def on_ui(fn):
             done = threading.Event()
             outcome = {}
-
             def run():
                 try:
                     fn()
@@ -3792,7 +3755,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             done.wait()
             if 'error' in outcome:
                 raise outcome['error']
-
         def task(progress_callback, cancel_event):
             n = len(targets)
             for i, (stem, rec) in enumerate(targets):
@@ -3810,7 +3772,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     results['failed'].append((stem, str(exc)))
             progress_callback(n, n)
             return results
-
         def on_done(result):
             self._set_buttons('normal')
             self._restore_apply_source(restore)
@@ -3906,7 +3867,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         correct_pileup = self.bv_correct_pileup.get()
         n_stacks = len(groups)
         n_slices = sum(len(v) for v in groups.values())
-
         def task(progress_callback, cancel_event):
             a = argparse.Namespace(
                 nexp=params['n_exp'],
@@ -3940,7 +3900,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 progress_callback=progress_callback,
                 cancel_event=cancel_event,
             )
-
         def on_done(result):
             self._set_buttons('normal')
             self._res.set_status(
@@ -3993,7 +3952,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 return
         from flimkit.formats.PTU.stitch import stitch_flim_tiles
         a = self._controller.stitch_args()
-
         def on_done(result):
             self._set_buttons('normal')
             self._res.set_status('✓  Complete.')
@@ -4064,7 +4022,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                     print(f'Warning: Could not load stitched image: {e}')
             if rows:
                 self._res.populate_summary(rows)
-
         def task(progress_callback, cancel_event):
             if pipeline == 'stitch_only':
                 return stitch_flim_tiles(
@@ -4120,11 +4077,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 messagebox.showerror('Missing input',
                                      'Please select a valid .npz session file.')
                 return
-
             def _worker():
                 from flimkit.phasor_launcher import load_session
                 return load_session(sess)
-
             def _done(result):
                 if isinstance(result, Exception):
                     messagebox.showerror('Session load error', str(result))
@@ -4151,14 +4106,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             irf_path = xlsx_irf or mach_irf
             from flimkit.formats import file_modality
             modality = file_modality(ptu)
-
             def _worker():
                 if modality == 'frequency':
                     from flimkit.phasor.signal import process_ifli
                     return process_ifli(ptu, channel=channel)
                 from flimkit.phasor_launcher import _process_ptu
                 return _process_ptu(ptu, irf_path=irf_path, channel=channel)
-
             def _done(result):
                 if isinstance(result, Exception):
                     messagebox.showerror('Phasor error', str(result))
@@ -4240,7 +4193,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
     def _phasor_thread(self, worker_fn, done_cb, *, status='  Working...'):
         self._btn_ph.configure(state='disabled')
         self._res.set_status(status)
-
         def _run():
             try:
                 result = worker_fn()
@@ -4249,7 +4201,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 traceback.print_exc()
                 result = exc
             self.root.after(0, lambda: _finish(result))
-
         def _finish(result):
             self._btn_ph.configure(state='normal')
             done_cb(result)
@@ -4344,7 +4295,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             messagebox.showerror('Missing input', 'Please enter an output base filename.')
             return
         from flimkit.FLIM.irf_tools import build_machine_irf_from_folder
-
         def task_fn():
             Path(out_dir).mkdir(parents=True, exist_ok=True)
             return build_machine_irf_from_folder(
@@ -4357,7 +4307,6 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 output_dir=out_dir,
                 verbose=True,
             )
-
         def on_done_irf(result):
             self._set_buttons('normal')
             self._res.set_status('✓  Machine IRF built.')
@@ -4422,12 +4371,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         win_manager = ProgressWindowManager(self.root)
         win = ProgressWindow(self.root, task_name=task_name)
         cancel_event = win.cancelled
-
         def progress_callback(i, total):
             win.set_progress(i, maximum=total)
             if cancel_event.is_set():
                 win.set_status('Cancelling...')
-
         def _worker():
             orig_stdout, orig_stderr = sys.stdout, sys.stderr
             redir = _Redirect(self._res.log, self._buf, root=self.root)
@@ -4531,11 +4478,14 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             fwhms_ns = list(_np.atleast_1d(global_summary.get('fwhms_ns', [])))
             amps_d = list(_np.atleast_1d(global_summary.get('amps', [])))
             fracs_d = list(_np.atleast_1d(global_summary.get('fractions', [])))
+            centers_err = list(_np.atleast_1d(global_summary.get('tau_centers_ns_err', [])))
             dist_type = global_summary.get('dist_type', 'gaussian')
             dist_label = dist_type.capitalize()
             width_label = 'σ' if dist_type == 'gaussian' else 'Γ (FWHM)'
             for i in range(len(tau_centers)):
                 rows.append((f'τ̄{i+1} ({dist_label} center)', f'{tau_centers[i]:.4f}', 'ns'))
+                if i < len(centers_err) and _np.isfinite(centers_err[i]):
+                    rows.append((f'τ̄{i+1} ± (1σ)', f'{centers_err[i]:.4f}', 'ns'))
                 if i < len(widths_ns):
                     rows.append((f'{width_label}{i+1}', f'{widths_ns[i]:.4f}', 'ns'))
                 if i < len(fwhms_ns):
@@ -4554,8 +4504,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             fracs = list(np.atleast_1d(fracs)) if fracs is not None else []
             intens = list(np.atleast_1d(global_summary.get('intensities', [])))
             ifracs = list(np.atleast_1d(global_summary.get('intensity_fractions', [])))
+            taus_err = list(np.atleast_1d(global_summary.get('taus_ns_err', [])))
             for i in range(len(taus)):
                 rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))
+                if i < len(taus_err) and np.isfinite(taus_err[i]):
+                    rows.append((f'τ{i+1} ± (1σ)', f'{taus_err[i]:.4f}', 'ns'))
                 if i < len(amps):
                     rows.append((f'α{i+1}', f'{amps[i]:.3e}', ''))
                 if i < len(fracs):
@@ -4571,6 +4524,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             v = global_summary.get(key)
             if v is not None:
                 rows.append((label, f'{v:.4f}', 'ns'))
+                v_err = global_summary.get(key + '_err')
+                if v_err is not None and v_err == v_err:
+                    rows.append((label + ' ± (1σ)', f'{v_err:.4f}', 'ns'))
         tau_global = global_summary.get('tau_mean_amp_global_ns')
         if tau_global is not None:
             rows.append(('τ_mean amp-wtd (global)', f'{tau_global:.4f}', 'ns'))
@@ -4620,6 +4576,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         chi2_p_tail = global_summary.get('reduced_chi2_tail_pearson')
         if chi2_p_tail is not None:
             rows.append(('χ²_r(tail) Pearson', f'{chi2_p_tail:.4f}', ''))
+        for note in global_summary.get('uncertainty_warnings') or []:
+            rows.append(('⚠ ' + str(note), '', ''))
         return rows
 
     def _set_buttons(self, state):

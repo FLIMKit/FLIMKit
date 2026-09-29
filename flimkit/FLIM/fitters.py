@@ -9,7 +9,8 @@ from ..FLIM.irf_tools import build_full_irf
 from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
-                              calibrated_chi2, distribution_dof)
+                              calibrated_chi2, distribution_dof,
+                              fit_uncertainties, propagate_uncertainty, uncertainty_warnings)
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
                            dist_reconvolution_model, build_dist_basis_grid,
@@ -79,7 +80,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
-        raise ValueError(f"Unknown cost_function: {cost_function!r}")
+        raise ValueError(f'Unknown cost_function: {cost_function!r}')
     decay_work = decay.astype(float)    
     if decay_work.max() == 0:
         raise ValueError('Decay has zero maximum - cannot fit.')
@@ -105,21 +106,21 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
     tvb_init = float(bg_init * n_bins) if fit_tvb else 0.0
     tvb_upper = float(decay_work.sum()) if fit_tvb else None
     if fit_tvb:
-        print(f"  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}")
-    print(f"  Cost function: {cost_function}")
-    print(f"  bg initial guess = {bg_init:.3f} cts/bin"
-          f", upper bound = {bg_upper:.3f} "
+        print(f'  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}')
+    print(f'  Cost function: {cost_function}')
+    print(f'  bg initial guess = {bg_init:.3f} cts/bin'
+          f', upper bound = {bg_upper:.3f} '
           f"({'free param' if fit_bg else 'fixed'})")
     print(f"  σ broadening: {'free param (σ≤' + f'{sigma_max:.1f})' if fit_sigma else 'fixed at 0'}")
-    print(f"  Fit window: bins {fit_start}-{fit_end} "
-          f"({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), "
-          f"{len(fit_idx)} bins fitted"
+    print(f'  Fit window: bins {fit_start}-{fit_end} '
+          f'({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), '
+          f'{len(fit_idx)} bins fitted'
           f"{' (user-set)' if (fit_start_ns is not None or fit_end_ns is not None) else ' (auto)'}")
     if exclude_bins:
         for (lo_b, hi_b), (lo_n, hi_n) in zip(exclude_bins, exclude_ns):
-            print(f"    Excluded: bins {lo_b}-{hi_b} ({lo_n:.2f}-{hi_n:.2f} ns)")
+            print(f'    Excluded: bins {lo_b}-{hi_b} ({lo_n:.2f}-{hi_n:.2f} ns)')
     if n_sync:
-        print(f"  Pile-up: in forward model (N_sync={n_sync:,}), data left raw")
+        print(f'  Pile-up: in forward model (N_sync={n_sync:,}), data left raw')
     lo, hi = _build_bounds(n_exp, tau_min, tau_max, decay_work.max(),
                              has_tail, fit_bg, fit_sigma,
                              bg_init=bg_init, bg_upper=bg_upper,
@@ -182,22 +183,22 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                                     max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
             except Exception as exc:
-                print(f"    Restart {i:2d}: failed ({exc})")
+                print(f'    Restart {i:2d}: failed ({exc})')
                 continue
             tag = 'log-spaced' if i == 0 else 'random    '
             if res.cost < best_cost:
                 best_cost = res.cost
                 best_res = res
-                print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}  ← best")
+                print(f'    Restart {i:2d} ({tag}): cost={res.cost:.4e}  ← best')
             else:
-                print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}")
+                print(f'    Restart {i:2d} ({tag}): cost={res.cost:.4e}')
         if best_res is None:
             raise RuntimeError('All restarts failed.')
         popt_work = from_scaled(best_res.x)
         message = best_res.message
     elif optimizer == 'de':
-        print(f"  Differential evolution: popsize={de_popsize}, "
-              f"maxiter={de_maxiter}, workers={workers}")
+        print(f'  Differential evolution: popsize={de_popsize}, '
+              f'maxiter={de_maxiter}, workers={workers}')
         bounds_log = list(bounds)
         for i in range(n_exp):
             lo_tau, hi_tau = bounds[i]
@@ -223,7 +224,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             disp=False)
         popt_work = de_res.x.copy()
         popt_work[:n_exp] = 10.0 ** popt_work[:n_exp]
-        message = f"DE success={de_res.success}, fun={de_res.fun:.4e}"
+        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
         if polish:
             print('  Running final LM polish...')
             eps = 1e-10
@@ -233,23 +234,56 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                                     method='trf', max_nfev=5000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
                 popt_work = pol.x
-                message += f"; polished cost={pol.cost:.4e}"
+                message += f'; polished cost={pol.cost:.4e}'
             except ValueError as e:
-                print(f"  Warning: LM polish failed ({e}) - using DE result")
+                print(f'  Warning: LM polish failed ({e}) - using DE result')
     else:
-        raise ValueError(f"Unknown optimizer: {optimizer!r}")
+        raise ValueError(f'Unknown optimizer: {optimizer!r}')
     popt_original = popt_work.copy()
     summary = _make_summary(popt_original, decay, tcspc_res, n_bins, irf_prompt,
                             n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
                             fit_idx, message, tvb_profile=tvb_profile,
-                            fit_tvb=fit_tvb, n_sync=n_sync)
+                            fit_tvb=fit_tvb, n_sync=n_sync, lo=lo, hi=hi)
     return popt_original, summary
 
+def _uncertainty_fields(model_fn, popt, fit_idx, lo, hi, n, tau_start, amp_start, order, extras, prefix='taus_ns'):
+    try:
+        unc = fit_uncertainties(model_fn, popt, fit_idx, lo, hi)
+    except Exception as exc:
+        print(f'  Parameter uncertainties unavailable: {exc}')
+        return dict(uncertainty_error=str(exc))
+    err = unc['stderr']
+    t_idx = np.arange(tau_start, tau_start + n)[order]
+    a_idx = np.arange(amp_start, amp_start + n)[order]
+    def tau_mean_amp(q):
+        a = q[a_idx]
+        return float(np.dot(a, q[t_idx]) / a.sum()) * 1e9
+    def tau_mean_int(q):
+        a = q[a_idx]
+        return float(np.dot(a, q[t_idx] ** 2) / np.dot(a, q[t_idx])) * 1e9
+    fractions_err = np.array([propagate_uncertainty(lambda q, i=i: q[a_idx[i]] / q[a_idx].sum(), popt, unc)
+                              for i in range(n)])
+    taus_err_ns = err[t_idx] * 1e9
+    tau_corr = unc['corr'][np.ix_(t_idx, t_idx)]
+    taus_ns = np.asarray(popt, dtype=float)[t_idx] * 1e9
+    out = {
+        prefix + '_err': taus_err_ns,
+        'amps_err': err[a_idx],
+        'fractions_err': fractions_err,
+        'tau_corr': tau_corr,
+        'uncertainty_warnings': uncertainty_warnings(taus_ns, taus_err_ns, tau_corr),
+    }
+    if prefix == 'taus_ns':
+        out['tau_mean_amp_ns_err'] = propagate_uncertainty(tau_mean_amp, popt, unc)
+        out['tau_mean_int_ns_err'] = propagate_uncertainty(tau_mean_int, popt, unc)
+    for key, (j, factor) in extras.items():
+        out[key] = err[j] * factor if np.ndim(j) else float(err[j] * factor)
+    return out
 
 def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
                   n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
                   fit_idx, message=None,
-                  tvb_profile=None, fit_tvb=False, n_sync=None):
+                  tvb_profile=None, fit_tvb=False, n_sync=None, lo=None, hi=None):
     fit_start = int(fit_idx[0])
     fit_end = int(fit_idx[-1]) + 1
     taus = popt[:n_exp]
@@ -311,6 +345,14 @@ def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
     above = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
     fwhm_pr = (above[-1] - above[0]) if len(above) > 1 else 1
     fwhm_eff = np.sqrt(fwhm_pr**2 + (2.3548 * sigma)**2) * tcspc_res * 1e9
+    extras = {'irf_shift_bins_err': (2 * n_exp, 1.0)}
+    if fit_bg:
+        extras['bg_fit_err'] = (2 * n_exp + 1 + int(fit_sigma), 1.0)
+    unc = _uncertainty_fields(
+        lambda q: reconvolution_model(q, tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed, has_tail,
+                                      fit_bg, fit_sigma, tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                                      n_sync=n_sync),
+        popt, fit_idx, lo, hi, n_exp, 0, n_exp, order, extras)
     return dict(
         tcspc_res = tcspc_res,
         taus_ns = taus * 1e9,
@@ -342,15 +384,14 @@ def _make_summary(popt, decay, tcspc_res, n_bins, irf_prompt,
         model = model,
         residuals = resid,
         optimizer_msg = message,
+        **unc,
     )
-
 
 def _basis_rows(taus, t_axis, tcspc_res, n_bins, tail, irf_fft=None, t0=0.0):
     if tail:
         return tail_basis(tcspc_res, n_bins, taus, t0)
     basis = np.stack([np.exp(-t_axis / max(tau, 1e-15)) for tau in taus])
     return np.array([np.real(np.fft.ifft(np.fft.fft(b) * irf_fft)) for b in basis])
-
 
 def fit_summed_tail(decay, tcspc_res, n_bins,
                     fit_bg, n_exp, tau_min_ns, tau_max_ns,
@@ -365,7 +406,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
-        raise ValueError(f"Unknown cost_function: {cost_function!r}")
+        raise ValueError(f'Unknown cost_function: {cost_function!r}')
     decay_work = decay.astype(float)
     if decay_work.max() == 0:
         raise ValueError('Decay has zero maximum - cannot fit.')
@@ -392,23 +433,23 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
     tvb_init = float(bg_init * n_bins) if fit_tvb else 0.0
     tvb_upper = float(decay_work.sum()) if fit_tvb else None
     if fit_tvb:
-        print(f"  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}")
-    print(f"  Cost function: {cost_function}")
-    print(f"  Tail fit: no IRF used, no reconvolution")
-    print(f"  t0 = {t0_fixed*1e9:.3f} ns (decay peak, bin {peak_bin})"
+        print(f'  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}')
+    print(f'  Cost function: {cost_function}')
+    print(f'  Tail fit: no IRF used, no reconvolution')
+    print(f'  t0 = {t0_fixed*1e9:.3f} ns (decay peak, bin {peak_bin})'
           f"{f', free within ±{t0_range_bins:.0f} bins' if fit_t0 else ', fixed'}")
-    print(f"  bg initial guess = {bg_init:.3f} cts/bin"
-          f", upper bound = {bg_upper:.3f} "
+    print(f'  bg initial guess = {bg_init:.3f} cts/bin'
+          f', upper bound = {bg_upper:.3f} '
           f"({'free param' if fit_bg else 'fixed'})")
-    print(f"  Fit window: bins {fit_start}-{fit_end} "
-          f"({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), "
-          f"{len(fit_idx)} bins fitted"
+    print(f'  Fit window: bins {fit_start}-{fit_end} '
+          f'({fit_start*tcspc_res*1e9:.2f}-{fit_end*tcspc_res*1e9:.2f} ns), '
+          f'{len(fit_idx)} bins fitted'
           f"{' (user-set)' if (fit_start_ns is not None or fit_end_ns is not None) else ' (auto)'}")
     if exclude_bins:
         for (lo_b, hi_b), (lo_n, hi_n) in zip(exclude_bins, exclude_ns):
-            print(f"    Excluded: bins {lo_b}-{hi_b} ({lo_n:.2f}-{hi_n:.2f} ns)")
+            print(f'    Excluded: bins {lo_b}-{hi_b} ({lo_n:.2f}-{hi_n:.2f} ns)')
     if n_sync:
-        print(f"  Pile-up: in forward model (N_sync={n_sync:,}), data left raw")
+        print(f'  Pile-up: in forward model (N_sync={n_sync:,}), data left raw')
     lo, hi = _build_bounds_tail(n_exp, tau_min, tau_max, decay_work.max(), fit_bg,
                                 bg_init=bg_init, bg_upper=bg_upper,
                                 fit_t0=fit_t0, t0_init=t0_fixed, t0_range=t0_range,
@@ -452,22 +493,22 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                     max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
             except Exception as exc:
-                print(f"    Restart {i:2d}: failed ({exc})")
+                print(f'    Restart {i:2d}: failed ({exc})')
                 continue
             tag = 'log-spaced' if i == 0 else 'random    '
             if res.cost < best_cost:
                 best_cost = res.cost
                 best_res = res
-                print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}  ← best")
+                print(f'    Restart {i:2d} ({tag}): cost={res.cost:.4e}  ← best')
             else:
-                print(f"    Restart {i:2d} ({tag}): cost={res.cost:.4e}")
+                print(f'    Restart {i:2d} ({tag}): cost={res.cost:.4e}')
         if best_res is None:
             raise RuntimeError('All restarts failed.')
         popt_work = best_res.x
         message = best_res.message
     elif optimizer == 'de':
-        print(f"  Differential evolution: popsize={de_popsize}, "
-              f"maxiter={de_maxiter}, workers={workers}")
+        print(f'  Differential evolution: popsize={de_popsize}, '
+              f'maxiter={de_maxiter}, workers={workers}')
         bounds_log = list(bounds)
         for i in range(n_exp):
             lo_tau, hi_tau = bounds[i]
@@ -493,7 +534,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
             disp=False)
         popt_work = de_res.x.copy()
         popt_work[:n_exp] = 10.0 ** popt_work[:n_exp]
-        message = f"DE success={de_res.success}, fun={de_res.fun:.4e}"
+        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
         if polish:
             print('  Running final LM polish...')
             eps = 1e-10
@@ -503,22 +544,22 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                     method='trf', max_nfev=5000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
                 popt_work = pol.x
-                message += f"; polished cost={pol.cost:.4e}"
+                message += f'; polished cost={pol.cost:.4e}'
             except ValueError as e:
-                print(f"  Warning: LM polish failed ({e}) - using DE result")
+                print(f'  Warning: LM polish failed ({e}) - using DE result')
     else:
-        raise ValueError(f"Unknown optimizer: {optimizer!r}")
+        raise ValueError(f'Unknown optimizer: {optimizer!r}')
     summary = _make_summary_tail(popt_work, decay, tcspc_res, n_bins,
                                  n_exp, bg_fixed, fit_bg, fit_idx, message,
                                  fit_t0=fit_t0, t0_fixed=t0_fixed,
-                                 tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+                                 tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync,
+                                 lo=lo, hi=hi)
     return popt_work, summary
-
 
 def _make_summary_tail(popt, decay, tcspc_res, n_bins,
                        n_exp, bg_fixed, fit_bg, fit_idx, message=None,
                        fit_t0=False, t0_fixed=0.0,
-                       tvb_profile=None, fit_tvb=False, n_sync=None):
+                       tvb_profile=None, fit_tvb=False, n_sync=None, lo=None, hi=None):
     fit_start = int(fit_idx[0])
     fit_end = int(fit_idx[-1]) + 1
     taus, amps, t0, bg_fit, tvb_scale = unpack_tail_params(
@@ -548,6 +589,16 @@ def _make_summary_tail(popt, decay, tcspc_res, n_bins,
     tau_int = float(np.dot(amps, taus**2) / np.dot(amps, taus))
     intensities = amps * taus / tcspc_res
     i_sum = float(intensities.sum())
+    extras = {}
+    if fit_t0:
+        extras['t0_ns_err'] = (2 * n_exp, 1e9)
+    if fit_bg:
+        extras['bg_fit_err'] = (2 * n_exp + int(fit_t0), 1.0)
+    unc = _uncertainty_fields(
+        lambda q: tail_model(q, tcspc_res, n_bins, n_exp, bg_fixed, fit_bg, fit_t0=fit_t0,
+                             t0_fixed=t0_fixed, tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                             n_sync=n_sync),
+        popt, fit_idx, lo, hi, n_exp, 0, n_exp, order, extras)
     return dict(
         fit_model = 'tail',
         tcspc_res = tcspc_res,
@@ -580,8 +631,8 @@ def _make_summary_tail(popt, decay, tcspc_res, n_bins,
         model = model,
         residuals = resid,
         optimizer_msg = message,
+        **unc,
     )
-
 
 def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   has_tail, fit_bg, fit_sigma,
@@ -729,12 +780,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         calibrated_chi2_r = np.full((ny, nx), np.nan),
     )
     for i in range(n_exp):
-        maps[f"alpha_{i+1}"] = np.full((ny, nx), np.nan)
-        maps[f"frac_{i+1}"] = np.full((ny, nx), np.nan)
-        maps[f"tau_{i+1}"] = (np.full((ny, nx), np.nan)
+        maps[f'alpha_{i+1}'] = np.full((ny, nx), np.nan)
+        maps[f'frac_{i+1}'] = np.full((ny, nx), np.nan)
+        maps[f'tau_{i+1}'] = (np.full((ny, nx), np.nan)
                               if n_exp == 1 or free_tau
                               else np.full((ny, nx), taus_fixed[i] * 1e9))
-        maps[f"a{i+1}"] = maps[f"alpha_{i+1}"]
+        maps[f'a{i+1}'] = maps[f'alpha_{i+1}']
     if tvb_on:
         maps['tvb_scale'] = np.full((ny, nx), np.nan)
     fitted = skipped = 0
@@ -909,8 +960,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
                     decay_px[fit_idx], model_px)
                 for i in range(n_exp):
-                    maps[f"alpha_{i+1}"][yi, xi] = amps_px[i]
-                    maps[f"frac_{i+1}"][yi, xi] = fracs_px[i]
+                    maps[f'alpha_{i+1}'][yi, xi] = amps_px[i]
+                    maps[f'frac_{i+1}'][yi, xi] = fracs_px[i]
                 if tvb_on:
                     maps['tvb_scale'][yi, xi] = tvb_px
                 fitted += 1
@@ -1017,9 +1068,9 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                 maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
                     fit_px[fit_idx], model_sol[fit_idx])
                 for i in range(n_exp):
-                    maps[f"tau_{i+1}"][yi, xi] = taus_ns[i]
-                    maps[f"alpha_{i+1}"][yi, xi] = amps_sol[i]
-                    maps[f"frac_{i+1}"][yi, xi] = fracs_px[i]
+                    maps[f'tau_{i+1}'][yi, xi] = taus_ns[i]
+                    maps[f'alpha_{i+1}'][yi, xi] = amps_sol[i]
+                    maps[f'frac_{i+1}'][yi, xi] = fracs_px[i]
                 if tvb_on:
                     maps['tvb_scale'][yi, xi] = float(p_sol[2 * n_exp])
                 fitted += 1
@@ -1042,7 +1093,7 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
-        raise ValueError(f"Unknown cost_function: {cost_function!r}")
+        raise ValueError(f'Unknown cost_function: {cost_function!r}')
     decay_work = decay.astype(float)
     if decay_work.max() == 0:
         raise ValueError('Decay has zero maximum - cannot fit.')
@@ -1067,9 +1118,9 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
     tvb_init = float(bg_init * n_bins) if fit_tvb else 0.0
     tvb_upper = float(decay_work.sum()) if fit_tvb else None
     if fit_tvb:
-        print(f"  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}")
-    print(f"  Cost function: {cost_function}")
-    print(f"  bg initial guess = {bg_init:.3f} cts/bin, upper bound = {bg_upper:.3f} "
+        print(f'  TVB: free scale on measured profile, init={tvb_init:.1f}, upper={tvb_upper:.1f}')
+    print(f'  Cost function: {cost_function}')
+    print(f'  bg initial guess = {bg_init:.3f} cts/bin, upper bound = {bg_upper:.3f} '
           f"({'free param' if fit_bg else 'fixed'})")
     lo, hi = _build_bounds_dist(
         n_components, tau_min, tau_max, decay_work.max(),
@@ -1120,20 +1171,20 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
                 res = least_squares(residuals, p0, bounds=(lo, hi), method='trf',
                                     max_nfev=50000, ftol=1e-13, xtol=1e-13, gtol=1e-13)
             except Exception as exc:
-                print(f"    Restart {i:2d}: failed ({exc})")
+                print(f'    Restart {i:2d}: failed ({exc})')
                 continue
             if res.cost < best_cost:
                 best_cost = res.cost
                 best_res = res
-                print(f"    Restart {i:2d}: cost={res.cost:.4e}  ← best")
+                print(f'    Restart {i:2d}: cost={res.cost:.4e}  ← best')
             else:
-                print(f"    Restart {i:2d}: cost={res.cost:.4e}")
+                print(f'    Restart {i:2d}: cost={res.cost:.4e}')
         if best_res is None:
             raise RuntimeError('All restarts failed.')
         popt_work = best_res.x
         message = best_res.message
     elif optimizer == 'de':
-        print(f"  Differential evolution: popsize={de_popsize}, maxiter={de_maxiter}, workers={workers}")
+        print(f'  Differential evolution: popsize={de_popsize}, maxiter={de_maxiter}, workers={workers}')
         n = n_components
         bounds_log = list(bounds)
         for i in range(n):
@@ -1161,7 +1212,7 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
         popt_work = de_res.x.copy()
         popt_work[:n] = 10.0 ** popt_work[:n]
         popt_work[n:2*n] = 10.0 ** popt_work[n:2*n]
-        message = f"DE success={de_res.success}, fun={de_res.fun:.4e}"
+        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
         if polish:
             print('  Running final LM polish...')
             eps = 1e-10
@@ -1170,21 +1221,22 @@ def fit_summed_dist(decay, tcspc_res, n_bins, irf_prompt,
                 pol = least_squares(residuals, popt_work, bounds=(lo, hi), method='trf',
                                     max_nfev=5000, ftol=1e-13, xtol=1e-13, gtol=1e-13)
                 popt_work = pol.x
-                message += f"; polished cost={pol.cost:.4e}"
+                message += f'; polished cost={pol.cost:.4e}'
             except ValueError as e:
-                print(f"  Warning: LM polish failed ({e}) - using DE result")
+                print(f'  Warning: LM polish failed ({e}) - using DE result')
     else:
-        raise ValueError(f"Unknown optimizer: {optimizer!r}")
+        raise ValueError(f'Unknown optimizer: {optimizer!r}')
     summary = _make_summary_dist(
         popt_work, decay, tcspc_res, n_bins, irf_prompt,
         n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
-        fit_idx, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
+        fit_idx, message, tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync,
+        lo=lo, hi=hi)
     return popt_work, summary
 
 def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
                        n_components, dist_type, bg_fixed, fit_bg, fit_sigma,
                        fit_idx, message=None,
-                       tvb_profile=None, fit_tvb=False, n_sync=None):
+                       tvb_profile=None, fit_tvb=False, n_sync=None, lo=None, hi=None):
     fit_start = int(fit_idx[0])
     fit_end = int(fit_idx[-1]) + 1
     tau_centers = popt[:n_components]
@@ -1257,6 +1309,16 @@ def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
     above = np.where(irf_prompt >= irf_prompt.max() / 2)[0]
     fwhm_pr = (above[-1] - above[0]) if len(above) > 1 else 1
     fwhm_eff = np.sqrt(fwhm_pr ** 2 + (2.3548 * sigma) ** 2) * tcspc_res * 1e9
+    extras = {'irf_shift_bins_err': (3 * n_components, 1.0),
+              'widths_ns_err': (np.arange(n_components, 2 * n_components), 1e9)}
+    if fit_bg:
+        extras['bg_fit_err'] = (3 * n_components + 1 + int(fit_sigma), 1.0)
+    unc = _uncertainty_fields(
+        lambda q: dist_reconvolution_model(q, tcspc_res, n_bins, irf_prompt, n_components, dist_type,
+                                           bg_fixed, fit_bg, fit_sigma, tvb_profile=tvb_profile,
+                                           fit_tvb=fit_tvb),
+        popt, fit_idx, lo, hi, n_components, 0, 2 * n_components, np.arange(n_components), extras,
+        prefix='tau_centers_ns')
     return dict(
         dist_type = dist_type,
         n_components = n_components,
@@ -1289,8 +1351,8 @@ def _make_summary_dist(popt, decay, tcspc_res, n_bins, irf_prompt,
         model = model,
         residuals = resid,
         optimizer_msg = message,
+        **unc,
     )
-
 
 def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                        global_popt, n_components, dist_type,
@@ -1304,7 +1366,6 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                        tvb_profile=None, fit_tvb=False,
                        fit_idx=None) -> dict:
     from ..GPU._base import fit_window
-
     ny, nx, _ = stack.shape
     window = fit_window(fit_idx, n_bins)
     fit_idx = np.arange(n_bins) if window is None else window
@@ -1327,7 +1388,7 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
     w_hi = widths_g.max() * 5.0
     tau_grid = np.logspace(np.log10(max(tau_lo, 1e-12)), np.log10(tau_hi), n_tau_grid)
     width_grid = np.logspace(np.log10(max(w_lo, 1e-12)), np.log10(w_hi), n_width_grid)
-    print(f"  Building distribution basis grid ({n_tau_grid}×{n_width_grid})...")
+    print(f'  Building distribution basis grid ({n_tau_grid}×{n_width_grid})...')
     basis, param_pairs = build_dist_basis_grid(
         tcspc_res, n_bins, irf_fixed, tau_grid, width_grid, dist_type)
     basis_fit = basis[:, fit_idx]
@@ -1340,10 +1401,10 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
         calibrated_chi2_r = np.full((ny, nx), np.nan),
     )
     for i in range(n_components):
-        maps[f"tau_center_{i+1}"] = np.full((ny, nx), np.nan)
-        maps[f"width_{i+1}"] = np.full((ny, nx), np.nan)
-        maps[f"alpha_{i+1}"] = np.full((ny, nx), np.nan)
-        maps[f"frac_{i+1}"] = np.full((ny, nx), np.nan)
+        maps[f'tau_center_{i+1}'] = np.full((ny, nx), np.nan)
+        maps[f'width_{i+1}'] = np.full((ny, nx), np.nan)
+        maps[f'alpha_{i+1}'] = np.full((ny, nx), np.nan)
+        maps[f'frac_{i+1}'] = np.full((ny, nx), np.nan)
     if tvb_on:
         maps['tvb_scale'] = np.full((ny, nx), np.nan)
     if n_components == 1:
@@ -1517,8 +1578,8 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
             maps['calibrated_chi2_r'][yi, xi] = calibrated_chi2(
                 d_fit, model_fit)
             for i in range(n_components):
-                maps[f"tau_center_{i+1}"][yi, xi] = tau_cs[i] * 1e9
-                maps[f"width_{i+1}"][yi, xi] = ws[i] * 1e9
-                maps[f"alpha_{i+1}"][yi, xi] = amp_s[i]
-                maps[f"frac_{i+1}"][yi, xi] = fracs[i]
+                maps[f'tau_center_{i+1}'][yi, xi] = tau_cs[i] * 1e9
+                maps[f'width_{i+1}'][yi, xi] = ws[i] * 1e9
+                maps[f'alpha_{i+1}'][yi, xi] = amp_s[i]
+                maps[f'frac_{i+1}'][yi, xi] = fracs[i]
     return maps
