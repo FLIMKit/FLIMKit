@@ -208,3 +208,26 @@ def test_high_dataset_id(tmp_path):
     assert np.array_equal(out['dt'], np.array([1, 2, 3]))
     assert np.array_equal(out['x'], np.array([10, 20, 30]))
     assert np.array_equal(out['y'], np.array([40, 50, 60]))
+
+def test_dual_tdc_streamed_cube(tmp_path):
+    path = tmp_path / 'dual.photons'
+    x = [100, 2200, 300, 4000]
+    y = [400, 500, 3600, 4000]
+    start = [1000, 2000, 3000, 4000]
+    stop = [1500, 2400, 3800, 4100]
+    _write_datasets(path, [
+        ('/photons/x', 5, x),
+        ('/photons/y', 5, y),
+        ('/start/time', 3, start),
+        ('/stop/time', 3, stop),
+    ], {'/photons/PositionBits': '12'})
+    ps = PSFile(str(path), verbose=False, pixels=2, n_bins=4)
+    cube = ps.pixel_stack()
+    assert ps.tac_range == 801
+    assert ps.calib_source == 'dual_tdc'
+    dt = np.array(stop) - np.array(start)
+    xi = (np.array(x) * 2) // 4096; yi = (np.array(y) * 2) // 4096; di = (dt * 4) // 801
+    expect = np.zeros((2, 2, 4), dtype=np.uint32)
+    np.add.at(expect, (yi, xi, di), 1)
+    assert np.array_equal(cube, expect)
+    assert np.array_equal(ps.summed_decay(), expect.sum(axis=(0, 1)).astype(float))

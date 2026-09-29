@@ -1,6 +1,6 @@
 import numpy as np
 from pathlib import Path
-from photonsfile import read_header, read_attributes, has_dual_tdc, read_photons
+from photonsfile import read_header, read_attributes, has_dual_tdc, read_photons, iter_photons
 
 class PSFile:
     def __init__(self, path, verbose=True, channel=None, pixels=512,
@@ -19,6 +19,7 @@ class PSFile:
         self.n_y = self.pixels
         self._period_ns = period_ns
         self._streams = None
+        self._tac_checked = False
         self._total_photons = None
         self.n_records = 0
         self.n_channels = 1
@@ -27,7 +28,6 @@ class PSFile:
         self._parse_meta(period_ns)
 
     def _parse_meta(self, period_ns, announce=True):
-        # TacChannel = picoseconds per raw dt unit; dual-TDC dt is already in ps
         tac_channel = self.attrs.get('/photons/TacChannel')
         if period_ns and float(period_ns) > 0:
             period_s = float(period_ns) * 1e-9
@@ -99,35 +99,54 @@ class PSFile:
                 if dt.size:
                     self.tac_range = int(dt.max()) + 1
                     self._parse_meta(self._period_ns, announce=False)
+            self._tac_checked = True
         return self._streams
 
-    def _bin_positions(self, binning):
-        s = self._ensure_streams()
-        x = np.asarray(s['x']).astype(np.int64)
-        y = np.asarray(s['y']).astype(np.int64)
-        dt = np.asarray(s['dt']).astype(np.int64)
-        n = min(x.shape[0], y.shape[0], dt.shape[0])
-        x, y, dt = x[:n], y[:n], dt[:n]
-        valid = ((x >= 0) & (x < self.pos_range) & (y >= 0) & (y < self.pos_range)
-                 & (dt >= 0) & (dt < self.tac_range))
-        x, y, dt = x[valid], y[valid], dt[valid]
+    def _ensure_tac_range(self):
+        if self._tac_checked == True or self.dual_tdc == False:
+            return
+        self._tac_checked = True
+        top = -1
+        for ch in iter_photons(self.path, ('dt',)):
+            if ch['dt'].size:
+                top = max(top, int(ch['dt'].max()))
+        if top >= 0:
+            self.tac_range = top + 1
+            self._parse_meta(self._period_ns, announce=False)
+
+    def _grid(self, binning):
         p = self.pixels
-        xi = (x * p) // self.pos_range
-        yi = (y * p) // self.pos_range
-        di = (dt * self.n_bins) // self.tac_range
         if binning > 1:
-            xi = xi // binning
-            yi = yi // binning
             p = (p + binning - 1) // binning
-        return xi, yi, di, p
+        return p
+
+    def _binned_chunks(self, binning):
+        self._ensure_tac_range()
+        p = self.pixels
+        for ch in iter_photons(self.path):
+            x = ch['x'].astype(np.int64)
+            y = ch['y'].astype(np.int64)
+            dt = ch['dt'].astype(np.int64)
+            valid = ((x >= 0) & (x < self.pos_range) & (y >= 0) & (y < self.pos_range)
+                     & (dt >= 0) & (dt < self.tac_range))
+            xi = (x[valid] * p) // self.pos_range
+            yi = (y[valid] * p) // self.pos_range
+            di = (dt[valid] * self.n_bins) // self.tac_range
+            if binning > 1:
+                xi = xi // binning
+                yi = yi // binning
+            yield xi, yi, di
 
     def pixel_stack(self, channel=None, binning=1):
-        xi, yi, di, p = self._bin_positions(binning)
+        p = self._grid(binning)
         b = self.n_bins
         if p == 0 or b == 0:
             return np.zeros((p, p, b), dtype=np.uint32)
-        flat = (yi * p + xi) * b + di
-        cube = np.bincount(flat, minlength=p * p * b).reshape(p, p, b).astype(np.uint32)
+        cube = np.zeros(p * p * b, dtype=np.uint32)
+        for xi, yi, di in self._binned_chunks(binning):
+            u, c = np.unique((yi * p + xi) * b + di, return_counts=True)
+            cube[u] += c.astype(np.uint32)
+        cube = cube.reshape(p, p, b)
         self.n_y, self.n_x = cube.shape[0], cube.shape[1]
         self._total_photons = int(cube.sum())
         self.n_records = self._total_photons
@@ -139,21 +158,24 @@ class PSFile:
         return self.pixel_stack(channel=channel, binning=binning)
 
     def summed_decay(self, channel=None):
-        s = self._ensure_streams()
-        dt = np.asarray(s['dt']).astype(np.int64)
-        dt = dt[(dt >= 0) & (dt < self.tac_range)]
-        di = (dt * self.n_bins) // self.tac_range
-        decay = np.bincount(di, minlength=self.n_bins).astype(float)
+        self._ensure_tac_range()
+        decay = np.zeros(self.n_bins, dtype=float)
+        for ch in iter_photons(self.path, ('dt',)):
+            dt = ch['dt'].astype(np.int64)
+            dt = dt[(dt >= 0) & (dt < self.tac_range)]
+            di = (dt * self.n_bins) // self.tac_range
+            decay += np.bincount(di, minlength=self.n_bins)[:self.n_bins]
         self._total_photons = int(decay.sum())
-        return decay[:self.n_bins]
+        return decay
 
     def intensity_image(self, channel=None, binning=1):
-        xi, yi, _, p = self._bin_positions(binning)
+        p = self._grid(binning)
         if p == 0:
             return np.zeros((0, 0), dtype=np.uint64)
-        flat = yi * p + xi
-        img = np.bincount(flat, minlength=p * p).reshape(p, p).astype(np.uint64)
-        return img
+        img = np.zeros(p * p, dtype=np.uint64)
+        for xi, yi, _ in self._binned_chunks(binning):
+            img += np.bincount(yi * p + xi, minlength=p * p).astype(np.uint64)
+        return img.reshape(p, p)
 
 def _metadata(ps, data):
     return {

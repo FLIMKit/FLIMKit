@@ -14,7 +14,7 @@ pandas==3.0.1
 Pillow>=10.0.0
 psutil
 phasorpy==0.12
-photonsfile
+photonsfile>=2026.9.29
 ptufile
 PyWavelets>=1.4.0
 scipy==1.17.1
