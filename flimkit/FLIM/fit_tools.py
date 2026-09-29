@@ -2,11 +2,9 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 
-
 def distribution_dof(n_fit, n_components=1, fit_tvb=False):
     n_params = 3 * n_components + 1 + int(fit_tvb)
     return max(int(n_fit) - n_params, 1)
-
 
 def chi2_terms(data, model, axis=None, dtype=float):
     data_arr, model_arr = np.broadcast_arrays(
@@ -22,7 +20,6 @@ def chi2_terms(data, model, axis=None, dtype=float):
         expected = np.sum(np.minimum(model_arr, one), axis=axis)
     return numerator, expected, valid
 
-
 def calibrated_from_terms(numerator, expected, valid):
     if np.ndim(expected) == 0:
         return (float(numerator / expected)
@@ -32,13 +29,11 @@ def calibrated_from_terms(numerator, expected, valid):
         numerator, expected, out=result,
         where=valid & (expected > 0) & np.isfinite(numerator))
 
-
 def calibrated_chi2(data, model, axis=None):
     numerator, expected, valid = chi2_terms(data, model, axis=axis)
     if np.ndim(expected) == 0:
         return float(numerator / expected) if valid and expected > 0 else np.nan
     return calibrated_from_terms(numerator, expected, valid)
-
 
 def coates_pileup_correction(decay: np.ndarray, n_sync: int):
     m = np.asarray(decay, dtype=float)
@@ -50,7 +45,6 @@ def coates_pileup_correction(decay: np.ndarray, n_sync: int):
             f'n_sync={n_s:,.0f} for {total:,.0f} photons. N_sync must exceed the photon count.')
     cumulative = np.concatenate([[0.0], np.cumsum(m[:-1])])
     denom = n_s - cumulative
-    # Argument of log: 1 - M(t)/(N_s - C(t))
     with np.errstate(divide='ignore', invalid='ignore'):
         ratio = np.where(denom > 0, m / denom, 0.0)
         arg = 1.0 - ratio
@@ -62,9 +56,6 @@ def bins_from_ns(value_ns, tcspc_res):
     return int(round(float(value_ns) * 1e-9 / tcspc_res))
 
 def build_fit_idx(fit_start, fit_end, n_bins, exclude_bins=None):
-    # explicit bin set the fit runs over: a contiguous window minus any excluded
-    # bands (eg a reflection peak mid-decay). Dropping bins keeps the fit linear
-    # in the amplitudes, so the per-pixel projection is unaffected.
     idx = np.arange(max(0, int(fit_start)), min(int(n_bins), int(fit_end)), dtype=int)
     if exclude_bins:
         keep = np.ones(idx.shape, dtype=bool)
@@ -78,7 +69,6 @@ def build_fit_idx(fit_start, fit_end, n_bins, exclude_bins=None):
 def find_irf_peak_bin(decay: np.ndarray, smooth_sigma: float = 1.5):
     smoothed = gaussian_filter1d(decay.astype(float), sigma=smooth_sigma)
     deriv = np.gradient(smoothed)
-    # Only search in the first half of the histogram (rising edge region)
     half = len(decay) // 2
     peak_bin = int(np.argmax(deriv[:half]))
     return peak_bin
@@ -108,7 +98,6 @@ def find_fit_start(decay: np.ndarray, irf_prompt: np.ndarray,
     onset = int(onset_bins[0])
     fit_start = max(0, onset - pre_bins)
     return fit_start
-
 
 def find_tail_fit_start(decay, peak_bin, n_bins, frac=0.9):
     d = np.asarray(decay, dtype=float)
@@ -165,8 +154,8 @@ def find_fit_end(decay, peak_bin, tau_max_s, tcspc_res, n_bins):
     if len(spikes) > 0:
         spike_abs = search_start + spikes[0]
         if spike_abs < candidate:
-            print(f"  Next-period artefact at bin {spike_abs} "
-                  f"({spike_abs*tcspc_res*1e9:.2f} ns). Truncating fit window.")
+            print(f'  Next-period artefact at bin {spike_abs} '
+                  f'({spike_abs*tcspc_res*1e9:.2f} ns). Truncating fit window.')
             candidate = spike_abs
     return candidate
 
@@ -207,7 +196,6 @@ def _build_bounds_dist(n_components, tau_min, tau_max, decay_peak,
         lo += [0.0];  hi += [_tvb_hi]
     return lo, hi
 
-
 def _pack_p0_dist(n_components, tau_min, tau_max, decay_peak,
                   fit_bg, fit_sigma, bg_init, fit_tvb=False, tvb_init=0.0):
     tmin = max(tau_min, 1e-14) * 1.001
@@ -223,7 +211,6 @@ def _pack_p0_dist(n_components, tau_min, tau_max, decay_peak,
     if fit_tvb:
         base = np.concatenate([base, [tvb_init]])
     return base
-
 
 def _pack_p0(n_exp, tau_min, tau_max, decay_peak,
              has_tail, fit_bg, fit_sigma, bg_init,
@@ -245,3 +232,84 @@ def _pack_p0(n_exp, tau_min, tau_max, decay_peak,
     if has_tail:
         base = np.concatenate([base, [0.5, 20.0]])
     return base
+
+def _param_scale(p, lo, hi):
+    span = hi - lo
+    scale = np.where(np.abs(p) > 0, np.abs(p), np.where(np.isfinite(span), span, 1.0))
+    return np.maximum(scale, 1e-300)
+
+def fit_uncertainties(model_fn, popt, fit_idx, lo=None, hi=None, rel_step=1e-4):
+    p = np.asarray(popt, dtype=float)
+    k = p.size
+    lo = np.full(k, -np.inf) if lo is None else np.asarray(lo, dtype=float)
+    hi = np.full(k, np.inf) if hi is None else np.asarray(hi, dtype=float)
+    span = hi - lo
+    tol = np.where(np.isfinite(span), 1e-6 * span, 0.0)
+    free = ~((p - lo <= tol) | (hi - p <= tol))
+    scale = _param_scale(p, lo, hi)
+    m0 = np.asarray(model_fn(p), dtype=float)[fit_idx]
+    jac = np.zeros((len(fit_idx), k))
+    for j in np.flatnonzero(free):
+        h = rel_step * scale[j]
+        up = p.copy()
+        dn = p.copy()
+        if hi[j] - p[j] >= h and p[j] - lo[j] >= h:
+            up[j] += h
+            dn[j] -= h
+            width = 2.0 * h
+        elif hi[j] - p[j] >= h:
+            up[j] += h
+            width = h
+        else:
+            dn[j] -= h
+            width = h
+        diff = np.asarray(model_fn(up), dtype=float)[fit_idx] - np.asarray(model_fn(dn), dtype=float)[fit_idx]
+        jac[:, j] = diff / width * scale[j]
+    live = free & np.any(jac != 0.0, axis=0)
+    idx = np.flatnonzero(live)
+    cov = np.full((k, k), np.nan)
+    if idx.size:
+        js = jac[:, idx]
+        weight = 1.0 / np.maximum(m0, 1.0)
+        fisher = js.T @ (js * weight[:, None])
+        try:
+            cov_s = np.linalg.inv(fisher)
+        except np.linalg.LinAlgError:
+            cov_s = np.linalg.pinv(fisher)
+        cov[np.ix_(idx, idx)] = cov_s * np.outer(scale[idx], scale[idx])
+    diag = np.diag(cov)
+    stderr = np.where(np.isfinite(diag) & (diag >= 0), np.sqrt(np.abs(diag)), np.nan)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        corr = cov / np.outer(stderr, stderr)
+    return dict(cov=cov, stderr=stderr, corr=corr, free=live, scale=scale)
+
+def propagate_uncertainty(fn, popt, unc, rel_step=1e-4):
+    p = np.asarray(popt, dtype=float)
+    idx = np.flatnonzero(unc['free'])
+    if idx.size == 0:
+        return np.nan
+    grad = np.zeros(idx.size)
+    for n, j in enumerate(idx):
+        h = rel_step * unc['scale'][j]
+        up = p.copy()
+        dn = p.copy()
+        up[j] += h
+        dn[j] -= h
+        grad[n] = (float(fn(up)) - float(fn(dn))) / (2.0 * h)
+    var = float(grad @ unc['cov'][np.ix_(idx, idx)] @ grad)
+    return float(np.sqrt(var)) if np.isfinite(var) and var >= 0 else np.nan
+
+def uncertainty_warnings(taus_ns, taus_err_ns, tau_corr, rel_limit=0.1, corr_limit=0.95):
+    notes = []
+    taus_ns = np.atleast_1d(np.asarray(taus_ns, dtype=float))
+    errs = np.atleast_1d(np.asarray(taus_err_ns, dtype=float))
+    for i, (tau, err) in enumerate(zip(taus_ns, errs), start=1):
+        if np.isfinite(err) and tau > 0 and err / tau > rel_limit:
+            notes.append(f'τ{i} is poorly determined: ±{err:.3g} ns on {tau:.3g} ns ({100 * err / tau:.0f}%)')
+    corr = np.atleast_2d(np.asarray(tau_corr, dtype=float))
+    for i in range(corr.shape[0]):
+        for j in range(i + 1, corr.shape[1]):
+            if np.isfinite(corr[i, j]) and abs(corr[i, j]) > corr_limit:
+                notes.append(f'τ{i + 1} and τ{j + 1} are strongly correlated (r = {corr[i, j]:+.2f}): '
+                             f'the data cannot separate them well')
+    return notes

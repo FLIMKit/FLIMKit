@@ -9,6 +9,7 @@
 - `update.py` rebuilds an app built into `dist/` after it pulls, and `--app-path` copies the new build over the app you open. `--release` and `--dev-release` replace an app with the latest build from GitHub without touching the clone.
 - Phasor plot and cursor image as PNG, in Export Images and Export all. It writes `<scan>_phasor.png`, the phasor histogram on the semicircle with the cursors, and `<scan>_phasor_image.png`, the image coloured by cursor, both with a legend giving each cursor's pixel count and median τφ. They are drawn from the file's saved phasor session, so a file needs to have been through Phasor Analysis first.
 - Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
+- Standard errors on every summed fit: a 1σ error for each lifetime, amplitude and fraction, both mean lifetimes, the IRF shift and the background, plus the correlation between lifetimes. They show as ± rows in the Fit Summary and in the terminal output. A lifetime with more than 10% error, or two lifetimes correlated beyond |r| = 0.95, gets a ⚠ row. The fitted values don't change.
 
 ### Changed
 - New work goes to a `dev` branch, which is merged into `main` for each release. FLIMKitDEV is built from pushes to `dev` now, not `main`, and a push to `main` builds nothing until its version tag. Tests run on both branches, and the PyPI workflow refuses to run from `dev`.

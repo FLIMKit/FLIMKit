@@ -474,15 +474,18 @@ Fit Summary tab, row by row:
 | Row | Meaning |
 |---|---|
 | τ1, τ2, τ3 | Component lifetimes from the summed fit, in ns. |
+| τ1 ± (1σ), τ2 ± (1σ), τ3 ± (1σ) | Standard error of each lifetime, in ns. See [Fit Diagnostics](#fit-diagnostics). |
 | α1, α2, α3 | Component amplitudes, in counts. |
 | f1, f2, f3 (amp frac) | Amplitude fractions, αᵢ / Σα. |
 | τ_mean (amp-weighted) | Σαᵢτᵢ / Σαᵢ. Weighted towards the short, high-amplitude components (1.125 ns here). |
 | τ_mean (int-weighted) | Σαᵢτᵢ² / Σαᵢτᵢ. Weighted towards the long components, closer to what a phasor or a mean arrival time gives (2.834 ns here). |
+| τ_mean ± (1σ) | Standard error of each mean lifetime. |
 | Background (fitted) | Constant offset per bin. |
 | IRF shift | How far the IRF was moved to match the decay, in bins (0.913 bins, about 88 ps). |
 | IRF σ (broadening) | Extra Gaussian width. 0 unless a broadening IRF method is used. |
 | IRF FWHM (eff.) | Effective IRF width after any broadening. |
 | χ²_r(tail) Neyman / Pearson | Reduced χ² over the tail of the decay, kept for comparison with LAS X. See [Fit Diagnostics](#fit-diagnostics). |
+| ⚠ rows | A lifetime the data can't pin down: more than 10% error, or two lifetimes correlated beyond \|r\| = 0.95. |
 
 Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
 
@@ -1340,6 +1343,30 @@ $$Q_{\mathrm{cal}} = \frac{\sum_i (Y_i-m_i)^2/\max(m_i,1)}{\sum_i \min(m_i,1)}.$
 The fixed-model expectation is one. Parameter fitting and data-selected windows
 can introduce a smaller additional shift, so this diagnostic is not a classical
 chi-square p-value.
+
+#### Parameter uncertainties
+
+Every summed fit (reconvolution, tail and distribution) reports a 1σ standard
+error for each lifetime, amplitude and amplitude fraction, both mean lifetimes,
+the IRF shift and the fitted background, in fields ending `_err`. They come from
+the curvature of the fit at its solution. The model's derivatives over the fit
+window, weighted by the Poisson variance of each bin, give the Fisher
+information, and its inverse is the covariance. A parameter sitting on one of
+its bounds is treated as fixed and has no error. `tau_corr` holds the
+correlation between the lifetimes.
+
+On ATTO488 (2.46 million photons) the tail fit gives 4.187 ± 0.0034 ns, where
+SymPhoTime 64's bootstrap gives 4.189 ± 0.0029 ns. Over 20 simulated
+1-exponential decays (τ = 2.5 ns, 200,000 photons) the predicted error was
+0.0061 ns and the spread of the fitted values was 0.0057 ns. For 2-exponential
+decays (3.0 and 0.8 ns) the prediction was about 1.4 times the spread, so it errs
+large there.
+
+These are local estimates. They can't see a different solution elsewhere that
+fits just as well, so for a 3-exponential fit they are a lower bound on the real
+uncertainty. A lifetime with more than 10% relative error, or two lifetimes
+correlated beyond |r| = 0.95, adds a ⚠ row to the Fit Summary and a warning to
+the terminal output.
 
 ---
 
