@@ -48,22 +48,36 @@ def _datainfo(did, offset):
 def _attr(key, val):
     return _ld(0x12, _ld(0x0a, key.encode()) + _ld(0x12, val.encode()))
 
+def _append(f, entry, page=16384):
+    start = len(f)
+    begin = True
+    d = entry
+    while len(d) > 0:
+        left = page - len(f) % page
+        if left < 2:
+            f += b'\x00' * left
+        n = min(len(d), page - len(f) % page - 2)
+        h = n | (0x8000 if begin else 0) | (0x4000 if n == len(d) else 0)
+        f += bytes([h & 0xff, h >> 8]) + d[:n]
+        d = d[n:]
+        begin = False
+    return start
+
 def _write_datasets(path, datasets, attrs):
-    logical = bytearray(_header(datasets))
+    f = bytearray()
+    _append(f, _header(datasets))
     offsets = {}
     for did, (name, tc, values) in enumerate(datasets):
-        offsets[did] = len(logical)
-        logical += _data_block(did, values)
-    index_off = len(logical)
+        offsets[did] = _append(f, _data_block(did, values))
     body = bytearray()
     for did in range(len(datasets)):
-        body += _datainfo(did, offsets[did] + 2)
+        body += _datainfo(did, offsets[did])
     for k, v in attrs.items():
         body += _attr(k, v)
-    logical += _ld(0x1a, bytes(body))
-    epi = bytes([0x08]) + _uv(index_off + 2) + _ld(0x12, b'End of D7 Photons Data File')
-    logical += _ld(0x22, epi)
-    path.write_bytes(b'\x00\x00' + bytes(logical))
+    index_off = _append(f, _ld(0x1a, bytes(body)))
+    epi = bytes([0x08]) + _uv(index_off) + _ld(0x12, b'End of D7 Photons Data File')
+    _append(f, _ld(0x22, epi))
+    path.write_bytes(bytes(f))
     return path
 
 _ATTRS = {'/photons/PositionBits': '12', '/photons/TacBits': '12',
