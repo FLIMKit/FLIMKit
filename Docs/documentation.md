@@ -571,6 +571,7 @@ Export Images..., under the Fit Summary table, saves the images shown in the pre
 | Include scale bar (µm) in the image | Draws a µm scale bar in the bottom right corner of the PNGs. The pixel size comes from the file, 0.189 µm for `Ado_1.ptu`, so the bar was 20 µm. A file with no pixel size gets no bar, and the export says so when it finishes. |
 | Save colour scale bar as a separate PNG | Writes `<scan>_lifetime_colorbar.png` and `<scan>_intensity_colorbar.png`, the colour scales from the preview with their values, to place beside the images in a figure. |
 | Include ROI annotations | Draws the regions on the images. |
+| Phasor plot and cursor image as PNG | Writes `<scan>_phasor.png`, the phasor histogram on the universal semicircle with the cursors, and `<scan>_phasor_image.png`, the image coloured by cursor. Both carry a legend giving each cursor's pixel count and median τφ. It is drawn from the saved `<file>_phasor.npz` with its filter, so the box is greyed out until the file has been through Phasor Analysis. |
 | PNG | The images as displayed in the preview: the lifetime map with the FLIM min, max, gamma, colormap and τ weighting, and the intensity image with its own min, max and colormap. For slides and quick looks. |
 | OME-TIFF | `<scan>_lifetime.ome.tiff` as 32-bit floats in ns, with unfitted pixels left as NaN, and `<scan>_intensity.ome.tiff` as 32-bit photon counts. The pixel size goes into the OME metadata when the file carries one. These are the ones to measure from in Fiji/ImageJ. |
 | OME-Zarr | One compressed store named after the scan, each image a channel ([OME-Zarr export](#ome-zarr-export)). |
@@ -642,7 +643,7 @@ Clicking Ado_2 afterwards reloads its saved fit, residual plot included. The res
 
 ![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
 
-Once two or more single-FOV files in the project have a fit, Export all... under the list exports them in one go. It has the same image, rendering and format options as the export dialog, and writes every file into one folder (`exports` in the project by default), each named after its scan. Each file is exported with its own saved display settings and ROIs. Two more boxes add each file's ROIs as `<scan>_all_rois.geojson` and its fit summary table as `<scan>_fit_summary.txt`. A file with no ROIs gets no GeoJSON, and the dialog at the end says which.
+Once two or more single-FOV files in the project have a fit, Export all... under the list exports them in one go. It has the same image, rendering and format options as the export dialog, and writes every file into one folder (`exports` in the project by default), each named after its scan. Each file is exported with its own saved display settings and ROIs. Two more boxes add each file's ROIs as `<scan>_all_rois.geojson` and its fit summary table as `<scan>_fit_summary.txt`, and a third adds the phasor plot and cursor image of every file that has a phasor session. A file with no ROIs gets no GeoJSON and a file with no phasor session gets no phasor PNGs, and the dialog at the end says which. Only fitted files are listed, so a file that has a phasor session but no fit isn't exported.
 
 ### Step 14: Fit a z-stack
 
@@ -715,6 +716,7 @@ Files FLIMKit writes:
 | `<file>_phasor.npz` | Phasor mode, automatically, or Save session | Calibrated G and S before filtering, the mean intensity, frequency, the cursors (ellipses and polygons), their size and the filter applied. Restored when the file is loaded again. |
 | `<scan>_intensity.png`, `<scan>_lifetime.png`, `<scan>_summed_decay.png` | Export Images..., PNG | The images as displayed, for slides. |
 | `<scan>_intensity_colorbar.png`, `<scan>_lifetime_colorbar.png` | Export Images..., PNG, with the colour scale bar ticked | The preview's colour scales with their values. |
+| `<scan>_phasor.png`, `<scan>_phasor_image.png` | Export Images... or Export all..., with the phasor box ticked | The phasor plot with its cursors, and the image coloured by cursor, each with a legend of cursor pixel counts and median τφ. |
 | `<scan>_intensity.ome.tiff`, `<scan>_lifetime.ome.tiff` | Export Images..., OME-TIFF | Intensity as 32-bit photon counts, lifetime as 32-bit floats in ns with NaN where nothing was fitted, and the pixel size when known. |
 | `<prefix>_*.tif` | Fits from `fit_cli.py`, batch, z-stack, timelapse, stitch and tile fits | The intensity and lifetime maps, with the pixel size in the TIFF resolution tags, scaled for binning. |
 | `<scan>.ome.zarr` | Export Images..., OME-Zarr | One compressed store, each image a channel, the fit summary in the metadata. |

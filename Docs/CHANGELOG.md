@@ -7,6 +7,7 @@
 - `update.py` updates a clone: it fast-forwards to the latest code, reruns `install.py`, and reinstalls a separate installed copy of flimkit from the clone so the stale one isn't imported. It stops without changing anything when there are uncommitted changes or local commits.
 - Help > Check for Updates in the compiled app offers to download and install a newer build from GitHub, and restarts into it. A release is offered the latest release and FLIMKitDEV the latest dev build. The old copy stays until the new one is in place.
 - `update.py` rebuilds an app built into `dist/` after it pulls, and `--app-path` copies the new build over the app you open. `--release` and `--dev-release` replace an app with the latest build from GitHub without touching the clone.
+- Phasor plot and cursor image as PNG, in Export Images and Export all. It writes `<scan>_phasor.png`, the phasor histogram on the semicircle with the cursors, and `<scan>_phasor_image.png`, the image coloured by cursor, both with a legend giving each cursor's pixel count and median τφ. They are drawn from the file's saved phasor session, so a file needs to have been through Phasor Analysis first.
 - Setting up a Python environment, in the installation docs and the README: conda and uv, and what separates them.
 
 ### Changed

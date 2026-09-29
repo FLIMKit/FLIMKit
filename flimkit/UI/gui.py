@@ -2105,6 +2105,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ttk.Checkbutton(opt_frame, text='Include scale bar (µm) in the image', variable=bv_scalebar).pack(anchor='w', pady=3)
             ttk.Checkbutton(opt_frame, text='Save colour scale bar as a separate PNG', variable=bv_colorbar).pack(anchor='w', pady=3)
             ttk.Checkbutton(opt_frame, text='Include ROI annotations', variable=bv_annotations).pack(anchor='w', pady=3)
+            phasor_session = self._phasor_session_for(self._fov_preview._ptu_path or self.sv_ptu.get().strip())
+            bv_phasor = tk.BooleanVar(value=phasor_session is not None)
+            phasor_text = 'Phasor plot and cursor image as PNG' if phasor_session else 'Phasor plot and cursor image as PNG (run phasor analysis on this file first)'
+            ttk.Checkbutton(opt_frame, text=phasor_text, variable=bv_phasor,
+                            state='normal' if phasor_session else 'disabled').pack(anchor='w', pady=3)
             fmt_frame = ttk.LabelFrame(dlg, text='Image Format', padding=10)
             fmt_frame.pack(fill='x', padx=20, pady=5)
             bv_format = tk.StringVar(value='png')
@@ -2155,7 +2160,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                                        with_annotations=bv_annotations.get(),
                                        format=fmt,
                                        fit_result=image_dict,
-                                       with_colorbar=bv_colorbar.get())
+                                       with_colorbar=bv_colorbar.get(),
+                                       open_folder=not bv_phasor.get())
+                    if bv_phasor.get():
+                        self._export_phasor_plot(phasor_session, export_dir, self._current_scan_stem() or 'results')
+                        self._open_folder(export_dir)
                     dlg.destroy()
                     notes = getattr(self, '_export_warnings', [])
                     extra = ('\n\n' + '\n'.join(notes)) if notes else ''
@@ -2389,6 +2398,35 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             print(f'✗ Export images error: {e}')
             import traceback
             traceback.print_exc()
+
+    @staticmethod
+    def _phasor_session_for(source):
+        if not source:
+            return None
+        p = Path(source)
+        candidate = p.parent / f'{p.stem}_phasor.npz'
+        return candidate if candidate.exists() else None
+
+    def _export_phasor_plot(self, session_path, output_dir, stem):
+        from flimkit.phasor_launcher import load_session
+        from flimkit.phasor.export import savePhasorPlots
+        try:
+            min_photons = float(self.sv_ph_minph.get() or 0.01)
+        except (AttributeError, ValueError):
+            min_photons = 0.01
+        written = savePhasorPlots(load_session(str(session_path)), output_dir, stem,
+                                  min_photons=min_photons)
+        for f in written:
+            print(f'\u2713 Exported phasor PNG: {f.name}')
+        return written
+
+    @staticmethod
+    def _open_folder(path):
+        try:
+            import subprocess
+            subprocess.Popen(['open', str(path)])
+        except Exception as e:
+            print(f'[Export] Could not open folder: {e}')
 
     def _get_pixel_size_um(self) -> 'float | None':
         try:
@@ -3621,6 +3659,9 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         bv_txt = tk.BooleanVar(value=False)
         ttk.Checkbutton(extra_frame, text='ROIs as GeoJSON (files that have ROIs)', variable=bv_geojson).pack(anchor='w', pady=2)
         ttk.Checkbutton(extra_frame, text='Fit summary as .txt', variable=bv_txt).pack(anchor='w', pady=2)
+        bv_phasor = tk.BooleanVar(value=False)
+        ttk.Checkbutton(extra_frame, text='Phasor plot and cursor image as PNG (files that have a phasor session)',
+                        variable=bv_phasor).pack(anchor='w', pady=2)
         loc_frame = ttk.LabelFrame(frm, text='Save Location', padding=8)
         loc_frame.pack(fill='x', pady=(8, 0))
         export_path = tk.StringVar(value=str(project.project_dir / 'exports'))
@@ -3638,7 +3679,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if not stems:
                 messagebox.showinfo('Export all', 'Tick at least one file.', parent=dlg)
                 return
-            if not images and not bv_geojson.get() and not bv_txt.get():
+            if not images and not bv_geojson.get() and not bv_txt.get() and not bv_phasor.get():
                 messagebox.showinfo('Export all', 'Tick at least one thing to export.', parent=dlg)
                 return
             out_dir = export_path.get().strip()
@@ -3662,6 +3703,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 'annotations': bv_annotations.get(),
                 'geojson': bv_geojson.get(),
                 'txt': bv_txt.get(),
+                'phasor': bv_phasor.get(),
             }
             dlg.destroy()
             self._export_all(stems, out_dir, opts)
@@ -3694,7 +3736,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'out': self.sv_out_fov.get(),
             'session': str(Path(shown).parent / f'{Path(shown).stem}.roi_session.npz') if shown else '',
         }
-        results = {'ok': [], 'failed': [], 'no_rois': [], 'no_summary': []}
+        results = {'ok': [], 'failed': [], 'no_rois': [], 'no_summary': [], 'no_phasor': []}
 
         def export_one(stem, rec):
             p = self._fov_preview
@@ -3729,6 +3771,11 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             if opts['txt']:
                 if not write_fit_summary(fit_result, out_path / f'{stem}_fit_summary.txt', name=Path(rec.source_path).name):
                     results['no_summary'].append(stem)
+            if opts['phasor']:
+                if rec.has_phasor_session:
+                    self._export_phasor_plot(rec.phasor_session_path, out_path, stem)
+                else:
+                    results['no_phasor'].append(stem)
 
         def on_ui(fn):
             done = threading.Event()
@@ -3776,6 +3823,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 notes.append('No ROIs, so no GeoJSON: ' + ', '.join(results['no_rois']))
             if results['no_summary']:
                 notes.append('No fit summary in the session: ' + ', '.join(results['no_summary']))
+            if results['no_phasor']:
+                notes.append('No phasor session, so no phasor PNGs: ' + ', '.join(results['no_phasor']))
             msg = f'Exported {len(ok)} of {len(targets)} file(s) to\n{out_path}'
             if notes:
                 msg += '\n\n' + '\n\n'.join(notes)
