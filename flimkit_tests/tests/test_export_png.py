@@ -101,3 +101,11 @@ def test_ptu_field_area_from_tags():
     class F:
         tags = {'ImgHdr_PixResol': 0.5, 'ImgHdr_PixX': 10, 'ImgHdr_PixY': 20}
     assert flim_field_area_um2(F()) == pytest.approx(0.25 * 200)
+
+def test_bh_pixel_size_tag():
+    from flimkit.utils.export_png import flim_field_area_um2
+    assert tag_pixel_size_um({'BH_PixelSize_um': 16.8}) == 16.8
+    assert tag_pixel_size_um({'BH_PixelSize_um': None}) is None
+    class F:
+        tags = {'BH_PixelSize_um': 2.0, 'BH_ImageX': 10, 'BH_ImageY': 20}
+    assert flim_field_area_um2(F()) == pytest.approx(4.0 * 200)

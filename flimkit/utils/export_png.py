@@ -1,7 +1,7 @@
 import numpy as np
 
 def tag_pixel_size_um(tags):
-    for key in ('ImgHdr_PixResol', 'ImgHdr_PixRes'):
+    for key in ('ImgHdr_PixResol', 'ImgHdr_PixRes', 'BH_PixelSize_um'):
         try:
             value = float(tags.get(key, 0) or 0)
         except (TypeError, ValueError):
@@ -23,7 +23,7 @@ def field_area_um2(pixel_size_um, shape):
 def flim_field_area_um2(flim_file):
     size = tag_pixel_size_um(getattr(flim_file, 'tags', {}) or {})
     tags = getattr(flim_file, 'tags', {}) or {}
-    shape = (tags.get('ImgHdr_PixY'), tags.get('ImgHdr_PixX'))
+    shape = (tags.get('ImgHdr_PixY', tags.get('BH_ImageY')), tags.get('ImgHdr_PixX', tags.get('BH_ImageX')))
     return field_area_um2(size, shape)
 
 def xlif_field_area_um2(xlif_path, basename, shape, binning=1):
