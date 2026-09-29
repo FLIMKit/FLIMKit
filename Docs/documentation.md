@@ -1170,6 +1170,10 @@ save_session('session.npz',
              cursors=state['cursors'], params=state['params'])
 
 sess = load_session('session.npz')
+
+# Save a session's phasor plot and cursor image as PNGs
+from flimkit.phasor.export import savePhasorPlots
+savePhasorPlots(load_session('data_phasor.npz'), 'exports', 'data')
 ```
 
 #### PTU File Reading
@@ -1468,6 +1472,9 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 
 #### `interactive.py`
 - **`phasor_cursor_tool(real_cal, imag_cal, mean, frequency, ...)`** - interactive phasor cursor widget. Works in Jupyter (ipywidgets) and standalone scripts (matplotlib.widgets). Click-to-place elliptic cursors, adjustable radius/angle, per-cursor τ_φ maps, two-component decomposition, Undo/Peaks/Export/Save.
+
+#### `export.py`
+- **`savePhasorPlots(session, output_dir, stem, min_photons=0.01, dpi=150)`** - write `<stem>_phasor.png` (the phasor histogram on the semicircle with the cursors) and `<stem>_phasor_image.png` (the image coloured by cursor), each with a legend of cursor pixel counts and median τφ. `session` is the dict `load_session` returns; its saved filter is re-applied. A point measurement gets only the phasor plot. Returns the paths written, and raises `ValueError` when no pixel reaches `min_photons`.
 
 #### `peaks.py`
 - **`find_phasor_peaks(real_cal, imag_cal, mean, frequency, ...)`** - automatic peak detection on 2-D phasor histograms via Gaussian smoothing and local maxima detection
