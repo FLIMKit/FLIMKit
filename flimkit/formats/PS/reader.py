@@ -175,6 +175,7 @@ class PSFile:
         img = np.zeros(p * p, dtype=np.uint64)
         for xi, yi, _ in self._binned_chunks(binning):
             img += np.bincount(yi * p + xi, minlength=p * p).astype(np.uint64)
+        self.n_y, self.n_x = p, p
         return img.reshape(p, p)
 
 def _metadata(ps, data):

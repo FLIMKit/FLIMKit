@@ -231,3 +231,10 @@ def test_dual_tdc_streamed_cube(tmp_path):
     np.add.at(expect, (yi, xi, di), 1)
     assert np.array_equal(cube, expect)
     assert np.array_equal(ps.summed_decay(), expect.sum(axis=(0, 1)).astype(float))
+
+def test_intensity_image_binned_shape(tmp_path):
+    path = tmp_path / 'sample.photons'
+    _sample(path)
+    img, meta = get_intensity_image(str(path), binning=2, pixels=4, n_bins=4)
+    assert img.shape == (2, 2)
+    assert meta['shape'] == (2, 2, 4)
