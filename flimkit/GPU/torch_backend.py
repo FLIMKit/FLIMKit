@@ -39,6 +39,36 @@ class TorchBackend(_BackendMixin):
     def __repr__(self):
         return f"TorchBackend(device='{self.device}')"
 
+    def _exact_float(self):
+        return self._torch.float32 if self.device.type == 'mps' else self._torch.float64
+
+    def _estimate_bg_batch(self, flat, valid_mask, pre_gap=5, chunk=32768):
+        # same order statistics as _BackendMixin._estimate_bg_batch, one sort per chunk
+        torch = self._torch
+        n_pix, n_bins = flat.shape
+        bg = np.zeros(n_pix, dtype=np.float32)
+        wanted = np.flatnonzero(np.asarray(valid_mask, dtype=bool))
+        if wanted.size == 0:
+            return bg
+        dt = torch.float32 if flat.dtype == np.float32 else self._exact_float()
+        cols = torch.arange(n_bins, device=self.device)
+        for first in range(0, wanted.size, chunk):
+            rows = wanted[first:first + chunk]
+            sub = flat[rows]
+            ends = np.maximum(sub.argmax(axis=1) - pre_gap, 0)
+            pre = ends >= 5
+            start = torch.as_tensor(np.where(pre, 0, max(n_bins - 30, 0)), device=self.device)
+            stop = torch.as_tensor(np.where(pre, ends, n_bins), device=self.device)
+            x = torch.as_tensor(sub, dtype=dt, device=self.device)
+            inside = (cols[None, :] >= start[:, None]) & (cols[None, :] < stop[:, None])
+            vals = torch.sort(torch.where(inside, x, torch.inf), dim=1).values
+            count = stop - start
+            lo = vals.gather(1, ((count - 1) // 2)[:, None])[:, 0]
+            hi = vals.gather(1, (count // 2)[:, None])[:, 0]
+            med = torch.where(count % 2 == 1, lo, (lo + hi) / 2)
+            bg[rows] = torch.clamp(med, min=0.0).cpu().numpy()
+        return bg
+
     def batch_fixed_tau(
         self,
         stack,
@@ -80,11 +110,30 @@ class TorchBackend(_BackendMixin):
             A_cpu = torch.as_tensor(A, dtype=torch.float32, device='cpu')
             A_pinv = torch.linalg.pinv(A_cpu).to(self.device)
         n_fit = A.shape[0]
+        on_device = (not with_tvb and not (correct_pileup and n_sync_px > 0)
+                     and self.device.type == 'cuda')
+        if on_device:
+            A_exact = torch.as_tensor(A, dtype=torch.float64, device=self.device)
+            win_t = None if win is None else torch.as_tensor(win, device=self.device)
         for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
                                         budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
-            if with_tvb:
+            chi2_parts = None
+            if on_device:
+                bg = self._estimate_bg_batch(decay, np.ones(decay.shape[0], dtype=bool))
+                decay_t = torch.as_tensor(decay, device=self.device)
+                bg_t = torch.as_tensor(bg, device=self.device)
+                corr_t = torch.clamp(decay_t - bg_t[:, None], min=0.0)
+                if win_t is not None:
+                    corr_t = corr_t[:, win_t]
+                    decay_t = decay_t[:, win_t]
+                amps_t = torch.clamp(corr_t @ A_pinv.T, min=0.0)
+                amps = amps_t.cpu().numpy()
+                tvb = None
+                decay_fit = None
+                chi2_parts = self._chi2_terms_device(decay_t, amps_t, A_exact, bg_t)
+            elif with_tvb:
                 data_in = (decay if win is None else decay[:, win]).copy()
                 if correct_pileup and n_sync_px > 0:
                     for row in range(data_in.shape[0]):
@@ -117,10 +166,21 @@ class TorchBackend(_BackendMixin):
                 ny = ny, nx = nx,
                 tvb = tvb,
                 tvb_profile = B_col if with_tvb else None,
+                chi2_parts = chi2_parts,
             )
             if progress_callback is not None:
                 progress_callback(last, valid_idx.size)
         return maps
+
+    def _chi2_terms_device(self, data_t, amps_t, A_exact, bg_t):
+        # chi2_terms on the device, in float64 like the numpy version
+        torch = self._torch
+        d = data_t.to(torch.float64)
+        m = amps_t.to(torch.float64) @ A_exact.T + bg_t.to(torch.float64)[:, None]
+        valid = (torch.isfinite(d) & (d >= 0) & torch.isfinite(m) & (m >= 0)).all(dim=1)
+        numerator = ((d - m) ** 2 / torch.clamp(m, min=1.0)).sum(dim=1)
+        expected = torch.clamp(m, max=1.0).sum(dim=1)
+        return numerator.cpu().numpy(), expected.cpu().numpy(), valid.cpu().numpy()
 
     def batch_grid_scan_1exp(
         self,

@@ -159,6 +159,7 @@ class _BackendMixin:
         ny, nx,
         tvb=None,
         tvb_profile=None,
+        chi2_parts=None,
     ):
         n_exp = A.shape[1]
         n_bins = A.shape[0]
@@ -171,10 +172,12 @@ class _BackendMixin:
         tau_amp = (fracs * taus_ns[None, :]).sum(axis=1)
         denom = (amps * taus_ns[None, :]).sum(axis=1)
         tau_int = np.where(denom > 0,(amps * taus_ns2[None, :]).sum(axis=1) / np.maximum(denom, 1e-30), np.nan)
-        model = amps @ A.T + bg[:, None]
-        if tvb is not None and tvb_profile is not None:
-            model = model + tvb[:, None] * tvb_profile[None, :]
-        numerator, expected, row_ok = chi2_terms(decay_valid, model, axis=1)
+        if chi2_parts is None:
+            model = amps @ A.T + bg[:, None]
+            if tvb is not None and tvb_profile is not None:
+                model = model + tvb[:, None] * tvb_profile[None, :]
+            chi2_parts = chi2_terms(decay_valid, model, axis=1)
+        numerator, expected, row_ok = chi2_parts
         chi2 = numerator
         calibrated = calibrated_from_terms(numerator, expected, row_ok)
         dof = max(n_bins - n_exp, 1)
