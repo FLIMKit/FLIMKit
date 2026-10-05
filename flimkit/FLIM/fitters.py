@@ -648,15 +648,33 @@ def _numba_free_tau_module(tail, tvb_on, n_sync_model, n_exp):
         return None
     return nb_freetau
 
+def _numba_cuda_module():
+    if os.environ.get('FLIMKIT_NUMBA_CUDA', '1') == '0':
+        return None
+    try:
+        from . import nb_freetau_cuda
+    except Exception:
+        return None
+    return nb_freetau_cuda if nb_freetau_cuda.available() == True else None
+
 def _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx, p0_px, lo_px, hi_px,
-                    min_photons, correct_pileup, n_sync_px, progress_callback, max_iter=200, tol=1e-8):
+                    min_photons, correct_pileup, n_sync_px, progress_callback, use_gpu='auto',
+                    max_iter=200, tol=1e-8):
     ny, nx, n_bins = stack.shape
+    fit_fn = nbm.fitFreeTau
+    px_per_block = 131072
+    if use_gpu is not False:
+        gpu = _numba_cuda_module()
+        if gpu is not None:
+            fit_fn = gpu.fitFreeTau
+            px_per_block = 262144
+    print('  [per-pixel] free-tau on the ' + ('GPU (numba.cuda)' if fit_fn is not nbm.fitFreeTau else 'CPU (numba)'))
     dt = tcspc_res / TAU_FIT_UNIT_S
     irf = np.ascontiguousarray(irf_fixed, dtype=np.float64)
     idx = np.ascontiguousarray(fit_idx, dtype=np.int64)
     p0, lo, hi = (np.ascontiguousarray(a, dtype=np.float64) for a in (p0_px, lo_px, hi_px))
     dof = max(len(fit_idx) - 2 * n_exp, 1)
-    rows = max(1, 131072 // max(nx, 1))
+    rows = max(1, px_per_block // max(nx, 1))
     for r0 in range(0, ny, rows):
         r1 = min(ny, r0 + rows)
         block = stack[r0:r1].reshape(-1, n_bins)
@@ -667,7 +685,14 @@ def _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx, p0_p
             if correct_pileup == True and n_sync_px > 0:
                 data = np.array([coates_pileup_correction(raw[k], n_sync_px) for k in range(len(raw))])
             bg = nbm.estimateBgRows(data)
-            p, _, _ = nbm.fitFreeTau(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
+            try:
+                p, _, _ = fit_fn(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
+            except Exception as e:
+                if fit_fn is nbm.fitFreeTau:
+                    raise
+                print('  [per-pixel] numba.cuda free-tau failed (' + type(e).__name__ + '), using the CPU')
+                fit_fn = nbm.fitFreeTau
+                p, _, _ = fit_fn(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
             numerator, expected, valid = nbm.chi2Terms(p, data, bg, irf, idx, dt)
             amps = p[:, n_exp:2 * n_exp]
             amp_sum = amps.sum(axis=1)
@@ -813,7 +838,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         fit_tvb=tvb_on,
                         fit_idx=fit_idx if _windowed else None,
                     )
-            else:
+            elif _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp) is None:
                 _tau_min_s = (tau_min_ns if tau_min_ns is not None
                               else taus_fixed.min() * 1e9 * 0.1) * 1e-9
                 _tau_max_s = (tau_max_ns if tau_max_ns is not None
@@ -1044,7 +1069,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
         if nbm is not None:
             _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx,
                             p0_px, lo_px, hi_px, min_photons, correct_pileup, _n_sync_px,
-                            progress_callback)
+                            progress_callback, use_gpu=use_gpu)
             return maps
         for yi in tqdm(range(ny), desc='  Per-pixel rows (free-τ)', disable=True):
             if progress_callback is not None:
