@@ -117,10 +117,11 @@ class SignalReader:
         if binning > 1:
             cube = _bin_cube(cube, binning)
         self._total_photons = int(cube.sum())
-        return np.ascontiguousarray(cube).astype(np.uint32)
+        # one copy, never the cached cube: callers zero masked pixels in place
+        return np.array(cube, dtype=np.uint32, order='C')
 
     def pixel_stack(self, channel=None, binning=1):
-        return self.raw_pixel_stack(channel=channel, binning=binning).astype(float)
+        return self.raw_pixel_stack(channel=channel, binning=binning)
 
     def intensity_image(self, channel=None, binning=1):
         return self.raw_pixel_stack(channel=channel, binning=binning).sum(axis=2)

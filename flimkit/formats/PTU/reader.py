@@ -182,10 +182,10 @@ class PTUFile:
         if binning > 1:
             cube = _bin_cube(cube, binning)
         self._total_photons = int(cube.sum())
-        return cube.astype(np.uint32)
+        return cube.astype(np.uint32, copy=False)
 
     def pixel_stack(self, channel=None, binning=1):
-        return self.raw_pixel_stack(channel=channel, binning=binning).astype(float)
+        return self.raw_pixel_stack(channel=channel, binning=binning)
 
     def intensity_image(self, channel=None, binning=1):
         return self.raw_pixel_stack(channel=channel, binning=binning).sum(axis=2)
