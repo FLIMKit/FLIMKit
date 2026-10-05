@@ -413,10 +413,18 @@ def _adapt_pixel_maps(pixel_maps, n_exp,
     }
     if 'calibrated_chi2_r' in pixel_maps:
         adapted['calibrated_chi2_r'] = pixel_maps['calibrated_chi2_r']
+    # each pixel's own lifetimes with their amplitudes, longest first like the
+    # summary; a fixed-tau fit keeps the summed fit's order, which is not sorted
+    taus = np.stack([pixel_maps.get('tau_' + str(k), np.full((ny, nx), taus_ns[k - 1]))
+                     for k in range(1, n_exp + 1)]).astype(np.float32)
+    amps = np.stack([pixel_maps.get('alpha_' + str(k), np.full((ny, nx), np.nan))
+                     for k in range(1, n_exp + 1)]).astype(np.float32)
+    order = np.argsort(np.where(np.isfinite(taus), -taus, np.inf), axis=0)
+    taus = np.take_along_axis(taus, order, axis=0)
+    amps = np.take_along_axis(amps, order, axis=0)
     for k in range(1, n_exp + 1):
-        adapted[f'tau{k}'] = np.full((ny, nx), taus_ns[k - 1], dtype=np.float32)
-        adapted[f'a{k}'] = pixel_maps.get(
-            f'alpha_{k}', np.full((ny, nx), np.nan, dtype=np.float32))
+        adapted['tau' + str(k)] = taus[k - 1]
+        adapted['a' + str(k)] = amps[k - 1]
     return adapted
 
 def _phase_corr_2d(patch_a, patch_b, max_shift_y=120, max_shift_x=30):
