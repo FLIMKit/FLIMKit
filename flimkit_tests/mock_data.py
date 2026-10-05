@@ -46,6 +46,7 @@ class MockPTUFile:
             self.tcspc_res = kwargs.get('tcspc_res', 97e-12)
             self.frequency = kwargs.get('frequency', 1.0 / ((self.n_bins - 0.5) * self.tcspc_res))
             self.mean_photons = kwargs.get('mean_photons', 500)
+            self.seed = kwargs.get('seed', 0)
             self.sync_rate = self.frequency
             self.time_ns = np.arange(self.n_bins) * self.tcspc_res * 1e9
             self.photon_channel = 1
@@ -80,15 +81,15 @@ class MockPTUFile:
         spatial = 1.0 - 0.5 * (r / (self.n_y / 2))
         spatial = np.clip(spatial, 0.2, 1.0)
 
-        self._stack = np.zeros((self.n_y, self.n_x, self.n_bins), dtype=np.float32)
+        # uint32 counts like the real readers: float32 sums of a whole stack drop photons
+        rng = np.random.default_rng(self.seed)
+        self._stack = np.zeros((self.n_y, self.n_x, self.n_bins), dtype=np.uint32)
         for i in range(self.n_y):
-            for j in range(self.n_x):
-                intensity = self.mean_photons * spatial[i, j]
-                photon_dist = intensity * decay_profile
-                self._stack[i, j, :] = np.random.poisson(photon_dist)
+            lam = (self.mean_photons * spatial[i, :])[:, None] * decay_profile[None, :]
+            self._stack[i] = rng.poisson(lam)
     
     def summed_decay(self, channel=None):
-        return self._stack.sum(axis=(0, 1))
+        return self._stack.sum(axis=(0, 1)).astype(float)
     
     def pixel_stack(self, channel=None, binning=1):
         if binning == 1:
