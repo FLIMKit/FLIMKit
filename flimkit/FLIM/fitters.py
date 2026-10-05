@@ -9,7 +9,7 @@ from ..FLIM.irf_tools import build_full_irf
 from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
-                              calibrated_chi2, distribution_dof,
+                              calibrated_chi2, calibrated_from_terms, distribution_dof,
                               fit_uncertainties, propagate_uncertainty, uncertainty_warnings)
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
@@ -634,6 +634,66 @@ def _make_summary_tail(popt, decay, tcspc_res, n_bins,
         **unc,
     )
 
+def _numba_free_tau_module(tail, tvb_on, n_sync_model, n_exp):
+    # the numba fit covers the reconvolution model with a fixed IRF and background;
+    # FLIMKIT_NUMBA_FREETAU=0 or a failed import keeps the scipy loop
+    if tail == True or tvb_on == True or n_sync_model is not None or n_exp > 3:
+        return None
+    if os.environ.get('FLIMKIT_NUMBA_FREETAU', '1') == '0':
+        return None
+    try:
+        from . import nb_freetau
+    except Exception as e:
+        print('  [per-pixel] numba free-tau unavailable (' + type(e).__name__ + '), using scipy')
+        return None
+    return nb_freetau
+
+def _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx, p0_px, lo_px, hi_px,
+                    min_photons, correct_pileup, n_sync_px, progress_callback, max_iter=200, tol=1e-8):
+    ny, nx, n_bins = stack.shape
+    dt = tcspc_res / TAU_FIT_UNIT_S
+    irf = np.ascontiguousarray(irf_fixed, dtype=np.float64)
+    idx = np.ascontiguousarray(fit_idx, dtype=np.int64)
+    p0, lo, hi = (np.ascontiguousarray(a, dtype=np.float64) for a in (p0_px, lo_px, hi_px))
+    dof = max(len(fit_idx) - 2 * n_exp, 1)
+    rows = max(1, 131072 // max(nx, 1))
+    for r0 in range(0, ny, rows):
+        r1 = min(ny, r0 + rows)
+        block = stack[r0:r1].reshape(-1, n_bins)
+        good = np.flatnonzero(block.sum(axis=1) >= min_photons)
+        if good.size > 0:
+            raw = np.ascontiguousarray(block[good], dtype=np.float64)
+            data = raw
+            if correct_pileup == True and n_sync_px > 0:
+                data = np.array([coates_pileup_correction(raw[k], n_sync_px) for k in range(len(raw))])
+            bg = nbm.estimateBgRows(data)
+            p, _, _ = nbm.fitFreeTau(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
+            numerator, expected, valid = nbm.chi2Terms(p, data, bg, irf, idx, dt)
+            amps = p[:, n_exp:2 * n_exp]
+            amp_sum = amps.sum(axis=1)
+            ok = (amp_sum > 0) & np.all(np.isfinite(p[:, :2 * n_exp]), axis=1)
+            order = np.argsort(p[:, :n_exp], axis=1)
+            taus_ns = np.take_along_axis(p[:, :n_exp] * TAU_FIT_UNIT_S, order, 1) * 1e9
+            amps = np.take_along_axis(amps, order, 1)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                fracs = amps / amp_sum[:, None]
+                denom = (amps * taus_ns).sum(axis=1)
+                tau_int = np.where(denom > 0, (amps * taus_ns ** 2).sum(axis=1) / denom, np.nan)
+            tau_amp = (fracs * taus_ns).sum(axis=1)
+            calibrated = calibrated_from_terms(numerator, expected, valid)
+            yi, xi = np.unravel_index(good[ok], (r1 - r0, nx))
+            yi = yi + r0
+            maps['tau_mean_int'][yi, xi] = tau_int[ok]
+            maps['tau_mean_amp'][yi, xi] = tau_amp[ok]
+            maps['chi2_r'][yi, xi] = numerator[ok] / dof
+            maps['calibrated_chi2_r'][yi, xi] = calibrated[ok]
+            for i in range(n_exp):
+                maps['tau_' + str(i + 1)][yi, xi] = taus_ns[ok, i]
+                maps['alpha_' + str(i + 1)][yi, xi] = amps[ok, i]
+                maps['frac_' + str(i + 1)][yi, xi] = fracs[ok, i]
+        if progress_callback is not None:
+            progress_callback(r1, ny)
+
 def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   has_tail, fit_bg, fit_sigma,
                   global_popt, n_exp,
@@ -980,6 +1040,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             lo_px = np.concatenate([lo_px, [0.0]])
             hi_px = np.concatenate([hi_px, [tvb_hi]])
             p0_px = np.concatenate([p0_px, [float(stack.max())]])
+        nbm = _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp)
+        if nbm is not None:
+            _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx,
+                            p0_px, lo_px, hi_px, min_photons, correct_pileup, _n_sync_px,
+                            progress_callback)
+            return maps
         for yi in tqdm(range(ny), desc='  Per-pixel rows (free-τ)', disable=True):
             if progress_callback is not None:
                 progress_callback(yi, ny)
