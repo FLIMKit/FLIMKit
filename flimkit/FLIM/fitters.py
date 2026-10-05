@@ -1026,7 +1026,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                             n_sync=_n_sync_model)
                     return reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_prompt,
-                        n_exp, _bg, has_tail, False, fit_sigma,
+                        n_exp, _bg, has_tail, fit_bg, fit_sigma,
                         n_sync=_n_sync_model)
                 w_px = np.sqrt(np.maximum(decay_px, 1.0))
                 def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):

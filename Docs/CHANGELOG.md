@@ -18,6 +18,7 @@
 - A dev build names itself FLIMKitDEV while it runs: the window title reads `FLIMKitDEV 0.13.8+dev.2026.09.28` and the About box says the same. The app is built under that name too, so the macOS menu bar and Dock show it, where before the bundle was only renamed after the build and still called itself FLIMKit inside. A release reads `FLIMKit 0.13.8`.
 
 ### Fixed
+- Free-tau per-pixel fits on the CPU used the wrong IRF whenever the IRF had a fitted tail and the background was fitted, which covers the default Gaussian IRF and the estimated and LAS X export IRFs. The per-pixel model read the background as the IRF tail amplitude and the tail amplitude as its lifetime, so the tail was dropped. On a two-component fit of a real field the intensity-weighted lifetime came out about 1 ns long, against 2 to 7 ps once fixed. The GPU backends, the machine IRF, a measured IRF, one-component fits, fixed-tau fits and summed fits were not affected. fitter_version goes to 23.
 - The compiled app's update check never looked up the latest release, because it only did so from inside a git checkout, and the app never runs in one. It now checks GitHub directly.
 
 ## [0.13.8] - 2026-09-28

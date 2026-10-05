@@ -94,6 +94,27 @@ class TestPerPixelFitting:
         assert np.isfinite(maps_free['tau_2'][0, 0])
         assert np.isfinite(maps_free['tau_mean_int'][0, 0])
 
+    def test_free_tau_cpu_keeps_irf_tail_with_fitted_bg(self):
+        # the per-pixel parameter list carries bg when fit_bg is on; the model
+        # has to be told, or it reads bg as the IRF tail amplitude. 512 bins
+        # so the circular model does not wrap decay into the bg estimate
+        from flimkit.FLIM.models import reconvolution_model
+        n_bins = 512
+        tcspc = 97e-12
+        irf = gaussian_irf_from_fwhm(n_bins, tcspc, 0.3, MOCK_IRF_CENTER)
+        global_popt = np.array([0.5e-9, 3.0e-9, 4000.0, 2000.0, 0.0, 5.0, 0.05, 20.0])
+        decay = reconvolution_model(global_popt, tcspc, n_bins, irf, 2, 0.0,
+                                    True, True, False)
+        maps = fit_per_pixel(
+            decay[None, None, :], tcspc, n_bins, irf,
+            has_tail=True, fit_bg=True, fit_sigma=False,
+            global_popt=global_popt, n_exp=2, min_photons=10,
+            free_tau=True, use_gpu=False,
+        )
+        taus = sorted([maps['tau_1'][0, 0], maps['tau_2'][0, 0]])
+        assert taus[0] == pytest.approx(0.5, rel=0.005)
+        assert taus[1] == pytest.approx(3.0, rel=0.005)
+
     def test_free_tau_skips_low_photon_pixels(self):
         """Pixels below min_photons should be NaN in free-tau mode."""
         n_bins = 128
