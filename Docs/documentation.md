@@ -1777,7 +1777,7 @@ Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). Th
 
 ## Plugins
 
-A plugin adds something to FLIMKit without changing FLIMKit itself: a Tools menu entry, a button in the ROI panel, a file format, a phasor filter, or a service that starts with the app. FLIMKit's own tools are registered the same way, so turning plugins off entirely also empties the Tools menu.
+A plugin adds something to FLIMKit without changing FLIMKit itself: a Tools menu entry, a button in the ROI panel, a file format, a phasor filter, a fit backend, or a service that starts with the app. FLIMKit's own tools are registered the same way, so turning plugins off entirely also empties the Tools menu.
 
 These add-ons are maintained alongside FLIMKit, each with its own page:
 
@@ -2355,6 +2355,33 @@ def mine(real, imag, sigma=1.0):
 ```
 
 The filter is then usable anywhere `gaussian`, `median` and `wavelet` are: the Phasor Analysis filter list, saved phasor sessions, the bridge, and `flimkit.phasor.filters.phasor_filter_methods()`. Only the keyword arguments your function declares are passed to it, out of `mean`, `sigma`, `size`, `wavelet`, `level` and `threshold_mode`. If it declares `sigma` or `size`, the Phasor Analysis panel shows that box when your filter is selected. The three built-in methods cannot be overridden.
+
+### Fit backends
+
+A plugin can take over the per-pixel fits with its own compiled code, for example a C or CUDA library loaded with `ctypes`. FLIMKit's MLX, CUDA, MPS and ROCm backends are the same kind of object, so a plugin backend gets exactly the arguments they do:
+
+```python
+from flimkit.plugins import fit_backend
+
+
+@fit_backend('my_c', 'My C kernels', priority=100)
+def make_backend():
+    lib = load_my_library()          # None when it is not built for this machine
+    return None if lib is None else MyBackend(lib)
+```
+
+The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. Accept `**kwargs` on each method, so arguments added later do not break your backend.
+
+You do not have to cover every fit. A method that is missing, raises `NotImplementedError` or returns `None` hands that fit back to FLIMKit, which tries the built-in GPU backend your backend displaced and then the CPU. So a backend that only does free-τ fits, or only the simple case without a fit window, is fine.
+
+How one is chosen:
+
+- With `auto`, the default, add-on backends are tried first, lowest `priority` first, and the first one whose factory returns an object is used. Installing one is a deliberate act, so it goes ahead of the built-ins.
+- For a free-τ fit, an add-on backend also goes ahead of FLIMKit's numba fit. If it declines, numba runs before any built-in GPU backend, as it would without the add-on.
+- A factory that raises is reported in the Progress log and skipped.
+- `FLIMKIT_FIT_BACKEND` overrides `auto`: an add-on id, a built-in (`mlx`, `cuda`, `mps`, `rocm`), or `cpu` for no backend at all. Use it to compare an add-on against the built-ins without uninstalling it, or to pin one for a published analysis.
+
+Compiled code cannot be imported from a wheel dropped into `~/.flimkit/plugins/`, since Python does not load `.so`, `.dylib` or `.pyd` files from a zip. Ship the plugin as a folder instead, with the shared library inside it next to `__init__.py`. FLIMKit loads a folder from disk, so `ctypes.CDLL` can open a path next to `__file__`, and this works in the compiled app as well. [flimkit-accelerator-plugin](https://github.com/FLIMKit/flimkit-accelerator-plugin) is a worked example: a C fixed-τ kernel, its ctypes wrapper, and a `build.py` that compiles it and copies the folder into place.
 
 ### Running at startup
 

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `@fit_backend`, a plugin hook for per-pixel fit backends, so the fits can run on a plugin's own C or CUDA code. A plugin backend can cover only some fits, and anything it declines goes to the built-in GPU backend it displaced, then to the CPU. Plugin backends are tried before the built-in ones, and for free-τ fits before numba. `FLIMKIT_FIT_BACKEND` picks one by name, or `cpu` for none. [flimkit-accelerator-plugin](https://github.com/FLIMKit/flimkit-accelerator-plugin) is a worked C example loaded through ctypes, with a `build.py` that compiles and installs it. Existing v1 plugins are unaffected.
 - Export all, under Apply fit settings in the project list. It turns on once two or more single FOV files in the project have a fit, and exports each of them with the export dialog's image, scale bar, colour bar, ROI and format options, using each file's own saved display settings and ROIs. It can also write each file's ROIs as GeoJSON and its fit summary table as a `.txt`.
 - `update.py` updates a clone: it fast-forwards to the latest code, reruns `install.py`, and reinstalls a separate installed copy of flimkit from the clone so the stale one isn't imported. It stops without changing anything when there are uncommitted changes or local commits.
 - Help > Check for Updates in the compiled app offers to download and install a newer build from GitHub, and restarts into it. A release is offered the latest release and FLIMKitDEV the latest dev build. The old copy stays until the new one is in place.

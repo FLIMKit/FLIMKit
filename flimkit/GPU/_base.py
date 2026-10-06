@@ -54,6 +54,7 @@ class GPUBackend:
         n_sync_px,
         progress_callback,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -68,6 +69,7 @@ class GPUBackend:
         n_sync_px,
         progress_callback,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -87,6 +89,7 @@ class GPUBackend:
         lr,
         fit_idx=None,
         n_sync_model=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -105,6 +108,7 @@ class GPUBackend:
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -408,3 +412,9 @@ class _BackendMixin:
             valid_b[b]   = True
 
         return taus_out, amps_out, chi2r_out, chi2c_out, model_out, valid_b, tvb_out
+
+
+class PluginBackend(_BackendMixin, GPUBackend):
+    # base for an add-on fit backend: methods it leaves out raise NotImplementedError,
+    # which hands that fit back, and the mixin gives it the built-ins' map helpers
+    pass
