@@ -1,0 +1,7 @@
+*.so
+*.dylib
+*.dll
+*.obj
+*.lib
+*.exp
+__pycache__/

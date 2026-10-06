@@ -9,6 +9,7 @@ _sniffers = []
 _phasor_filters = {}
 _panel_buttons = {}
 _startups = {}
+_fit_backends = {}
 _version = 0
 _current_source = None
 MODALITIES = ('time', 'frequency', 'intensity')
@@ -117,7 +118,8 @@ def version():
 def count():
     with _lock:
         return (len(_tools) + len(_formats) + len(_sniffers)
-                + len(_phasor_filters) + len(_panel_buttons) + len(_startups))
+                + len(_phasor_filters) + len(_panel_buttons) + len(_startups)
+                + len(_fit_backends))
 
 
 def register_tool(id, label, callback, menu='Tools', order=100, source=None):
@@ -363,10 +365,81 @@ def get_phasor_filter(id):
         return _phasor_filters.get(str(id).lower())
 
 
+class FitBackend:
+
+    def __init__(self, id, label, factory, priority, source):
+        self.id = id
+        self.label = label
+        self.factory = factory
+        self.priority = priority
+        self.source = source
+
+    def create(self):
+        # the factory returns None when its library or device is missing on this machine
+        backend = self.factory()
+        if backend is None:
+            return None
+        if not any(callable(getattr(backend, m, None)) for m in FIT_BACKEND_METHODS):
+            raise PluginError(
+                f'fit backend {self.id!r} returned {backend!r}, which has none of '
+                f'{", ".join(FIT_BACKEND_METHODS)}')
+        try:
+            backend.plugin_id = self.id
+        except AttributeError:
+            pass
+        return backend
+
+    def __repr__(self):
+        return f'<FitBackend {self.id} priority={self.priority} source={self.source!r}>'
+
+
+FIT_BACKEND_METHODS = ('batch_fixed_tau', 'batch_grid_scan_1exp',
+                       'batch_free_tau_fit', 'batch_dist_scan_unimodal')
+BUILTIN_FIT_BACKENDS = ('auto', 'cpu', 'mlx', 'cuda', 'mps', 'rocm')
+
+
+def register_fit_backend(id, label, factory, priority=100, source=None):
+    if not id or not isinstance(id, str):
+        raise PluginError(f'fit backend id must be a non-empty string, got {id!r}')
+    if not callable(factory):
+        raise PluginError(f'fit backend {id!r} factory is not callable: {factory!r}')
+    id = id.lower()
+    if id in BUILTIN_FIT_BACKENDS:
+        raise PluginError(f'fit backend id {id!r} is a built-in backend name')
+    with _lock:
+        existing = _fit_backends.get(id)
+        if existing is not None:
+            raise PluginError(
+                f'fit backend id {id!r} already registered by {existing.source!r}, '
+                f'refused from {source or _source()!r}')
+        _fit_backends[id] = FitBackend(id, label, factory, priority, source or _source())
+        _bump()
+    return _fit_backends[id]
+
+
+def fit_backend(id, label, priority=100):
+    def decorate(factory):
+        register_fit_backend(id, label, factory, priority=priority)
+        return factory
+    return decorate
+
+
+def fit_backends():
+    with _lock:
+        found = list(_fit_backends.values())
+    found.sort(key=lambda b: (b.priority, b.id))
+    return found
+
+
+def get_fit_backend(id):
+    with _lock:
+        return _fit_backends.get(str(id).lower())
+
+
 def sources():
     with _lock:
         every = (list(_tools.values()) + list(_formats.values()) + list(_sniffers)
-                 + list(_phasor_filters.values()))
+                 + list(_phasor_filters.values()) + list(_fit_backends.values()))
     return sorted({t.source for t in every})
 
 
@@ -391,6 +464,9 @@ def _rollback(source):
         dropped += [k for k, f in _phasor_filters.items() if f.source == source]
         for k in [k for k, f in _phasor_filters.items() if f.source == source]:
             del _phasor_filters[k]
+        dropped += [k for k, b in _fit_backends.items() if b.source == source]
+        for k in [k for k, b in _fit_backends.items() if b.source == source]:
+            del _fit_backends[k]
         _bump()
     return dropped
 
@@ -403,4 +479,5 @@ def clear():
         _phasor_filters.clear()
         _panel_buttons.clear()
         _startups.clear()
+        _fit_backends.clear()
         _bump()

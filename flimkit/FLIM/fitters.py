@@ -64,6 +64,26 @@ def warmup_gpu_backend():
             _gpu_backend_cache = None
     threading.Thread(target=_warmup, daemon=True).start()
 
+def _backend_call(backend, method, *args, use_fallback=True, **kwargs):
+    # an add-on backend may cover only some fits: a missing method, NotImplementedError
+    # or a None return hands the fit to the built-in GPU backend it displaced, then the CPU
+    fn = getattr(backend, method, None)
+    maps = None
+    if fn is None:
+        print(f'  [per-pixel] {backend!r} has no {method}, using the next path')
+    else:
+        try:
+            maps = fn(*args, **kwargs)
+        except NotImplementedError:
+            print(f'  [per-pixel] {backend!r} does not implement {method}, using the next path')
+        else:
+            if maps is None:
+                print(f'  [per-pixel] {backend!r} declined {method}, using the next path')
+    fallback = getattr(backend, 'fallback_backend', None)
+    if maps is None and use_fallback and fallback is not None and fallback is not backend:
+        return _backend_call(fallback, method, *args, **kwargs)
+    return maps
+
 def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                has_tail, fit_bg, fit_sigma,
                n_exp, tau_min_ns, tau_max_ns,
@@ -821,7 +841,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     _basis_grid = _basis_rows(_tau_grid, t_axis, tcspc_res, n_bins,
                                               _tail, irf_fft=irf_fft, t0=t0_px)
                     _bb_grid = np.maximum((_basis_grid ** 2).sum(axis=1), 1e-20)
-                    return _backend.batch_grid_scan_1exp(
+                    _maps = _backend_call(
+                        _backend, 'batch_grid_scan_1exp',
                         stack, _basis_grid, _bb_grid, _tau_grid,
                         min_photons, correct_pileup, _n_sync_px,
                         progress_callback,
@@ -830,7 +851,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         fit_idx=fit_idx if _windowed else None,
                     )
                 else:
-                    return _backend.batch_fixed_tau(
+                    _maps = _backend_call(
+                        _backend, 'batch_fixed_tau',
                         stack, A, taus_fixed,
                         min_photons, correct_pileup, _n_sync_px,
                         progress_callback,
@@ -838,12 +860,18 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         fit_tvb=tvb_on,
                         fit_idx=fit_idx if _windowed else None,
                     )
-            elif _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp) is None:
+                if _maps is not None:
+                    return _maps
+            # an add-on backend was installed to be used, so it goes ahead of numba;
+            # one that declines leaves the fit to numba before any built-in GPU backend
+            elif (getattr(_backend, 'plugin_id', None) is not None
+                  or _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp) is None):
                 _tau_min_s = (tau_min_ns if tau_min_ns is not None
                               else taus_fixed.min() * 1e9 * 0.1) * 1e-9
                 _tau_max_s = (tau_max_ns if tau_max_ns is not None
                               else taus_fixed.max() * 1e9 * 10.0) * 1e-9
-                return _backend.batch_free_tau_fit(
+                _maps = _backend_call(
+                    _backend, 'batch_free_tau_fit',
                     stack, irf_fixed, tcspc_res,
                     taus_fixed, _tau_min_s, _tau_max_s,
                     n_exp, min_photons, correct_pileup, _n_sync_px,
@@ -851,7 +879,11 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     fit_tvb=tvb_on,
                     fit_idx=fit_idx if _windowed else None,
                     n_sync_model=_n_sync_px if pileup_in_model else None,
+                    use_fallback=_numba_free_tau_module(
+                        _tail, tvb_on, _n_sync_model, n_exp) is None,
                 )
+                if _maps is not None:
+                    return _maps
     if bg_in_model:
         A_bg = np.column_stack([A, np.ones(n_bins)])
     if tvb_on:
@@ -1509,12 +1541,15 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                   f'({_GPU_MAX_DIST_STACK_BYTES/1e9:.1f} GB); the distribution scan is not blocked, using the CPU path')
             backend = None
         if backend is not None:
-            return backend.batch_dist_scan_unimodal(
+            _maps = _backend_call(
+                backend, 'batch_dist_scan_unimodal',
                 stack, basis_fit, bb_grid, param_pairs,
                 irf_fixed, tcspc_res, n_bins, dist_type,
                 min_photons, progress_callback,
                 tvb_profile=tvb_profile if tvb_on else None,
                 fit_tvb=tvb_on, fit_idx=fit_idx)
+            if _maps is not None:
+                return _maps
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
         ph_counts = flat.sum(axis=1)
         valid_idx = np.where(ph_counts >= min_photons)[0]
