@@ -94,10 +94,7 @@ class TestPerPixelFitting:
         assert np.isfinite(maps_free['tau_2'][0, 0])
         assert np.isfinite(maps_free['tau_mean_int'][0, 0])
 
-    def test_free_tau_cpu_keeps_irf_tail_with_fitted_bg(self):
-        # the per-pixel parameter list carries bg when fit_bg is on; the model
-        # has to be told, or it reads bg as the IRF tail amplitude. 512 bins
-        # so the circular model does not wrap decay into the bg estimate
+    def test_free_tau_keeps_irf_tail_with_fitted_bg(self):
         from flimkit.FLIM.models import reconvolution_model
         n_bins = 512
         tcspc = 97e-12

@@ -81,7 +81,6 @@ class MockPTUFile:
         spatial = 1.0 - 0.5 * (r / (self.n_y / 2))
         spatial = np.clip(spatial, 0.2, 1.0)
 
-        # uint32 counts like the real readers: float32 sums of a whole stack drop photons
         rng = np.random.default_rng(self.seed)
         self._stack = np.zeros((self.n_y, self.n_x, self.n_bins), dtype=np.uint32)
         for i in range(self.n_y):

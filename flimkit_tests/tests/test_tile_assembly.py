@@ -75,7 +75,6 @@ def test_adapter_tolerates_a_fitter_without_the_map():
 
 
 def test_adapter_keeps_each_amplitude_with_its_own_lifetime():
-    # a fixed-tau fit keeps the summed fit's tau order, which need not be sorted
     maps = raw_maps()
     for k, (tau, amp) in enumerate(((2.19, 0.2), (0.43, 0.7), (6.71, 0.1)), start=1):
         maps['tau_' + str(k)][:] = tau

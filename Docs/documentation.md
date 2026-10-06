@@ -122,7 +122,8 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `lfdfiles` | SimFCS `.b&h`, `.bhz`, `.ref`, `.r64` and ISS `.ifli`, `.iss-tdflim` decoding |
 | `photonsfile` | Photonscore LINCam `.photons` (D7) decoding |
 | `inquirer` | Interactive terminal prompts |
-| `numba` | Speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `numba` | Compiles the free-τ per-pixel fit, and speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `numba-cuda` | Runs the free-τ per-pixel fit on an NVIDIA GPU. Installed by `install.py` on NVIDIA hardware, and by `pip install "flimkit[cuda]"` |
 | `shapely` | Repairs self-intersecting ROI rings on GeoJSON export |
 | `lz4` | LZ4-compressed Becker & Hickl `.sdt` blocks |
 | `ipywidgets` | Jupyter notebook interactive support, optional |
@@ -231,6 +232,7 @@ can give you depends on the platform:
 | Apple Silicon | `pip install "flimkit[mlx]"` | MLX on Metal, the fastest path on a Mac |
 | Apple Silicon or Intel Mac | `pip install "flimkit[torch]"` | PyTorch MPS |
 | Linux, NVIDIA | `pip install "flimkit[torch]"` | CUDA. PyPI's Linux wheel pulls the CUDA runtime itself |
+| Any, NVIDIA | `pip install "flimkit[cuda]"` | numba-cuda, which runs the free-τ per-pixel fit on the GPU. Add it to `[torch]`, it does not replace it |
 | Windows, NVIDIA | see below | pip alone gives CPU only |
 | AMD, ROCm | see below | not on PyPI at all |
 
@@ -2598,7 +2600,11 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app, since a newly built default is picked up at startup, or set it in File > Preferences... > Files, which applies at once.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed.
+
+`--free-tau-perpixel` with n_exp ≥ 2 does not go through those GPU backends. It runs a numba Levenberg-Marquardt, on the CPU everywhere and on an NVIDIA GPU through numba.cuda when numba-cuda is installed. On real data that is 140 to 150x faster than the SciPy-per-pixel loop it replaced on a 10-core M4. A 4-thread PC with an RTX A2000 fits 3-component pixels at 76 µs/px on the GPU against 274 µs/px on its CPU. The tail model, a time-varying background, pile-up in the model and more than three components still run SciPy per pixel, as do `FLIMKIT_NUMBA_FREETAU=0` and a numba that will not load. `FLIMKIT_NUMBA_CUDA=0` keeps the fit on the CPU.
+
+FLIMKit asks numba for its `workqueue` threading layer unless `NUMBA_THREADING_LAYER` is already set. numba's OpenMP layer aborts the process with `OMP: Error #15` when PyTorch has already loaded its own OpenMP runtime, which happens as soon as anything touches cell masking or a torch GPU backend. The two layers fit 8,192 pixels in the same time here, 6.2 against 6.3 µs/px, so this costs nothing measurable.
 
 The per-pixel GPU fit works in blocks, and `FLIMKIT_GPU_BLOCK_BYTES` sets the budget for one block in bytes. The default is 32 MB on CUDA and ROCm and 256 MB on MLX, and either way it is clamped to half of the free device memory. The CUDA default came off an RTX A5000, where anything above 32 MB costs a flat 2x because the card has 6 MB of L2 and the fast region is where the basis and a block stay resident. It does not generalise: an RTX A2000, with less L2, shows no cliff at all and is about 10 per cent slower at 32 MB than at 256 MB. Every budget returns identical lifetimes, so this is speed only.
 

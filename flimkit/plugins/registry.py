@@ -375,7 +375,6 @@ class FitBackend:
         self.source = source
 
     def create(self):
-        # the factory returns None when its library or device is missing on this machine
         backend = self.factory()
         if backend is None:
             return None

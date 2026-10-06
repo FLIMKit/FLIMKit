@@ -6,7 +6,6 @@ BUILTIN = ('mlx', 'cuda', 'mps', 'rocm')
 
 
 def __getattr__(name):
-    # imported on first use so `import flimkit.GPU` stays light
     if name == 'PluginBackend':
         from flimkit.GPU._base import PluginBackend
         return PluginBackend
@@ -14,8 +13,6 @@ def __getattr__(name):
 
 
 def get_backend(prefer='auto'):
-    # FLIMKIT_FIT_BACKEND overrides 'auto', so an add-on backend can be bypassed
-    # (or picked by name) without uninstalling anything
     if prefer == 'auto':
         prefer = os.environ.get('FLIMKIT_FIT_BACKEND', '').strip().lower() or 'auto'
     if prefer == 'cpu':
@@ -29,7 +26,6 @@ def get_backend(prefer='auto'):
         for entry in _plugin_backends():
             b = _try_plugin(entry)
             if b is not None:
-                # fits the add-on does not cover go to the GPU backend it displaced
                 _set_fallback(b, builtin)
                 return b
         return builtin
@@ -75,7 +71,7 @@ def _try_backend(name):
         return _try_plugin(found[0])
     known = ', '.join(repr(n) for n in ('auto', 'cpu') + BUILTIN
                       + tuple(e.id for e in _plugin_backends()))
-    raise ValueError(f"Unknown backend {name!r}. Choose from: {known}.")
+    raise ValueError(f'Unknown backend {name!r}. Choose from: {known}.')
 
 
 def _try_mlx():

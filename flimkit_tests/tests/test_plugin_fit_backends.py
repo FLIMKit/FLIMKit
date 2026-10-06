@@ -21,7 +21,6 @@ N_BINS = 128
 
 @pytest.fixture(autouse=True)
 def no_builtin_gpu(monkeypatch):
-    # the machine running the tests may have a real GPU; these tests are about add-ons
     monkeypatch.setattr(GPU, 'BUILTIN', ())
     monkeypatch.delenv('FLIMKIT_FIT_BACKEND', raising=False)
     loader.reset()
@@ -32,7 +31,6 @@ def no_builtin_gpu(monkeypatch):
 
 
 class FreeTauOnly(PluginBackend):
-    """A backend that only covers the free-tau fit, as a C kernel library might."""
 
     def __init__(self):
         self.calls = []

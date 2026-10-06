@@ -43,7 +43,6 @@ class TorchBackend(_BackendMixin):
         return self._torch.float32 if self.device.type == 'mps' else self._torch.float64
 
     def _estimate_bg_batch(self, flat, valid_mask, pre_gap=5, chunk=32768):
-        # same order statistics as _BackendMixin._estimate_bg_batch, one sort per chunk
         torch = self._torch
         n_pix, n_bins = flat.shape
         bg = np.zeros(n_pix, dtype=np.float32)
@@ -173,7 +172,6 @@ class TorchBackend(_BackendMixin):
         return maps
 
     def _chi2_terms_device(self, data_t, amps_t, A_exact, bg_t):
-        # chi2_terms on the device, in float64 like the numpy version
         torch = self._torch
         d = data_t.to(torch.float64)
         m = amps_t.to(torch.float64) @ A_exact.T + bg_t.to(torch.float64)[:, None]

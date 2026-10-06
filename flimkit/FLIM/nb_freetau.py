@@ -1,9 +1,13 @@
-# Per-pixel free-tau reconvolution fit compiled with numba, no C compiler needed.
-# The circular convolution of r^k with the IRF obeys y[i] = r y[i-1] + (1 - r^n) irf[i],
-# so a model evaluation is O(n_bins) instead of an FFT.
+import os
 import math
 import numpy as np
 import numba as nb
+
+def _avoid_a_second_openmp_runtime():
+    if 'NUMBA_THREADING_LAYER' not in os.environ:
+        nb.config.THREADING_LAYER = 'workqueue'
+
+_avoid_a_second_openmp_runtime()
 
 @nb.njit(cache=True)
 def _exp_conv(irf, r, y, z):
@@ -79,8 +83,8 @@ def _evaluate(p, ne, d, w, bg, irf, isum, idx, dt, Y, Z, res, J, want_J):
 def fitFreeTau(data, w_data, bg, irf, idx, dt, p0, lo, hi, max_iter, tol):
     """Levenberg-Marquardt per row of data (B x n_bins) on the bins in idx, with
     weights sqrt(max(w_data, 1)). Params are taus (units of dt) then amplitudes,
-    kept in [lo, hi]; one on a bound is held there while the step points out. Returns (params, cost, iterations), iterations -1 when
-    the cost is not finite.
+    kept in [lo, hi]; one on a bound is held there while the step points out.
+    Returns (params, cost, iterations), iterations -1 when the cost is not finite.
     """
     B, n = data.shape
     npar = p0.size
@@ -109,7 +113,6 @@ def fitFreeTau(data, w_data, bg, irf, idx, dt, p0, lo, hi, max_iter, tol):
                 for k in range(npar):
                     M[k, k] += lam * max(A[k, k], 1e-30)
                 step = g.copy()
-                # a parameter on a bound that the step would push past is held there
                 for k in range(npar):
                     if (p[k] <= lo[k] and g[k] < 0.0) or (p[k] >= hi[k] and g[k] > 0.0):
                         for l in range(npar):
@@ -140,7 +143,6 @@ def fitFreeTau(data, w_data, bg, irf, idx, dt, p0, lo, hi, max_iter, tol):
 
 @nb.njit(cache=True, parallel=True)
 def estimateBgRows(data, pre_gap=5):
-    # fit_tools.estimate_bg for every row
     B = data.shape[0]
     out = np.empty(B)
     for b in nb.prange(B):
@@ -155,7 +157,6 @@ def estimateBgRows(data, pre_gap=5):
 
 @nb.njit(cache=True, parallel=True)
 def chi2Terms(params, data, bg, irf, idx, dt):
-    # fit_tools.chi2_terms of each row against its fitted model, on the bins in idx
     B, n = data.shape
     ne = params.shape[1] // 2
     isum = irf.sum()

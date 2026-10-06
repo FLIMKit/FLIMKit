@@ -1,7 +1,3 @@
-# nb_freetau.fitFreeTau on an NVIDIA GPU through numba.cuda, in double precision.
-# Each launch gives every unfinished pixel a bounded number of LM steps and saves
-# its state, so no launch outlasts the Windows display watchdog (about 2 s) and
-# finished pixels drop out between launches. The step sequence is the CPU one.
 import math
 import time
 import numpy as np
@@ -250,7 +246,6 @@ def fitFreeTau(data, w_data, bg, irf, idx, dt, p0, lo, hi, max_iter, tol, launch
     irf_sum = float(np.sum(irf))
     args = (n, ne, d_data, d_w, d_bg, d_irf, d_mask, irf_sum, float(dt), d_bd, int(max_iter), float(tol))
     active = np.arange(B, dtype=np.int32)
-    # an empty launch compiles the kernel before any launch is timed
     _fit_steps[1, block](*args, 4, cuda.to_device(active[:1]), 0, P, Ast, gst, cst, lamst, itst,
                          flags, d_c, d_it)
     cuda.synchronize()

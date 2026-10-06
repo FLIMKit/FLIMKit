@@ -312,7 +312,6 @@ class _BackendMixin:
         n_fit = n_bins if win is None else len(win)
 
         amp0    = float(raw_valid.max()) / n_exp
-        # Use the same bounds as the CPU free-tau path in fit_per_pixel
         amp_hi  = float(raw_valid.max()) * 10.0
         lo_px = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
         hi_px = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
@@ -376,7 +375,6 @@ class _BackendMixin:
             if amps_b.sum() <= 0:
                 continue
             tvb_b = float(p_sol[2 * n_exp]) if fit_tvb else 0.0
-            # Sort ascending for output (matches CPU convention)
             order   = np.argsort(taus_b)
             taus_b  = taus_b[order];  amps_b = amps_b[order]
             bg_b    = float(bg_valid[b])
@@ -415,6 +413,4 @@ class _BackendMixin:
 
 
 class PluginBackend(_BackendMixin, GPUBackend):
-    # base for an add-on fit backend: methods it leaves out raise NotImplementedError,
-    # which hands that fit back, and the mixin gives it the built-ins' map helpers
     pass

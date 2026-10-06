@@ -118,7 +118,7 @@ def _install_gpu(token, dry_run):
             _ok(f"torch ({token}) installed")
         if token == 'cuda':
             _info('Installing numba-cuda, which compiles the free-tau fit for the GPU…')
-            if _pip('numba-cuda[cu12]', dry_run=dry_run) == True:
+            if _pip('numba-cuda[cu12]', dry_run=dry_run):
                 _ok('numba-cuda installed')
     else:
         _info("No GPU detected — installing CPU-only PyTorch…")

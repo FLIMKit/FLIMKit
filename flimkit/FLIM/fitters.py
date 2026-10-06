@@ -25,6 +25,7 @@ from ..configs import MIN_PHOTONS_PERPIX
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
 _GPU_MAX_DIST_STACK_BYTES = 1_000_000_000
+_NUMBA_FREE_TAU_BLOCK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 _TAU_GRID_POINTS = 1600
 
@@ -65,8 +66,6 @@ def warmup_gpu_backend():
     threading.Thread(target=_warmup, daemon=True).start()
 
 def _backend_call(backend, method, *args, use_fallback=True, **kwargs):
-    # an add-on backend may cover only some fits: a missing method, NotImplementedError
-    # or a None return hands the fit to the built-in GPU backend it displaced, then the CPU
     fn = getattr(backend, method, None)
     maps = None
     if fn is None:
@@ -655,8 +654,6 @@ def _make_summary_tail(popt, decay, tcspc_res, n_bins,
     )
 
 def _numba_free_tau_module(tail, tvb_on, n_sync_model, n_exp):
-    # the numba fit covers the reconvolution model with a fixed IRF and background;
-    # FLIMKIT_NUMBA_FREETAU=0 or a failed import keeps the scipy loop
     if tail == True or tvb_on == True or n_sync_model is not None or n_exp > 3:
         return None
     if os.environ.get('FLIMKIT_NUMBA_FREETAU', '1') == '0':
@@ -688,6 +685,9 @@ def _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx, p0_p
         if gpu is not None:
             fit_fn = gpu.fitFreeTau
             px_per_block = 262144
+    copies = 2 if correct_pileup == True and n_sync_px > 0 else 1
+    px_per_budget = _NUMBA_FREE_TAU_BLOCK_BYTES // max(8 * n_bins * copies, 1)
+    px_per_block = max(min(px_per_block, px_per_budget), nx, 1)
     print('  [per-pixel] free-tau on the ' + ('GPU (numba.cuda)' if fit_fn is not nbm.fitFreeTau else 'CPU (numba)'))
     dt = tcspc_res / TAU_FIT_UNIT_S
     irf = np.ascontiguousarray(irf_fixed, dtype=np.float64)
@@ -862,8 +862,6 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     )
                 if _maps is not None:
                     return _maps
-            # an add-on backend was installed to be used, so it goes ahead of numba;
-            # one that declines leaves the fit to numba before any built-in GPU backend
             elif (getattr(_backend, 'plugin_id', None) is not None
                   or _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp) is None):
                 _tau_min_s = (tau_min_ns if tau_min_ns is not None
