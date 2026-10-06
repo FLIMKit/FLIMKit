@@ -178,6 +178,14 @@ class FakeBuiltin(PluginBackend):
     def __repr__(self):
         return 'FakeBuiltin()'
 
+def test_a_free_tau_fit_the_addon_does_not_cover_falls_back(capsys):
+    backend = plugins.register_fit_backend('c_fixed', 'C fixed-tau', FakeBuiltin).create()
+    maps = _fit(backend, free_tau=True)
+    assert backend.calls == []
+    assert 'from_builtin' not in maps
+    assert np.isfinite(maps['tau_1']).any()
+    assert 'does not implement batch_free_tau_fit' in capsys.readouterr().out
+
 
 def test_a_fit_the_addon_declines_goes_to_the_gpu_backend_it_displaced(monkeypatch):
     monkeypatch.setattr(GPU, 'BUILTIN', ('mlx',))
