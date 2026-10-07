@@ -7,6 +7,7 @@ lfdfiles
 lz4>=4.0
 matplotlib==3.10.8
 numba
+numba-cuda[cu12]; sys_platform != "darwin"
 numpy==2.4.2
 opencv-python-headless==4.13.0.90
 openpyxl==3.1.5

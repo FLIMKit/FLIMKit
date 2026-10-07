@@ -413,10 +413,16 @@ def _adapt_pixel_maps(pixel_maps, n_exp,
     }
     if 'calibrated_chi2_r' in pixel_maps:
         adapted['calibrated_chi2_r'] = pixel_maps['calibrated_chi2_r']
+    taus = np.stack([pixel_maps.get('tau_' + str(k), np.full((ny, nx), taus_ns[k - 1]))
+                     for k in range(1, n_exp + 1)]).astype(np.float32)
+    amps = np.stack([pixel_maps.get('alpha_' + str(k), np.full((ny, nx), np.nan))
+                     for k in range(1, n_exp + 1)]).astype(np.float32)
+    order = np.argsort(np.where(np.isfinite(taus), -taus, np.inf), axis=0)
+    taus = np.take_along_axis(taus, order, axis=0)
+    amps = np.take_along_axis(amps, order, axis=0)
     for k in range(1, n_exp + 1):
-        adapted[f'tau{k}'] = np.full((ny, nx), taus_ns[k - 1], dtype=np.float32)
-        adapted[f'a{k}'] = pixel_maps.get(
-            f'alpha_{k}', np.full((ny, nx), np.nan, dtype=np.float32))
+        adapted['tau' + str(k)] = taus[k - 1]
+        adapted['a' + str(k)] = amps[k - 1]
     return adapted
 
 def _phase_corr_2d(patch_a, patch_b, max_shift_y=120, max_shift_x=30):
@@ -1142,7 +1148,7 @@ def fit_flim_tiles(
             stack = ptu.raw_pixel_stack(
                 channel=ptu.photon_channel, binning=binning)
             if rotate_tiles:
-                stack = np.rot90(stack, k=-1, axes=(0, 1))
+                stack = np.ascontiguousarray(np.rot90(stack, k=-1, axes=(0, 1)))
             tile_h, tile_w = stack.shape[:2]
             if intensity_thr is not None:
                 px_int = stack.sum(axis=-1)
@@ -1152,7 +1158,7 @@ def fit_flim_tiles(
                                         src_tcspc_res=_tvb_bg_res, dst_tcspc_res=tcspc)
                          if _fit_tvb else None)
             pixel_maps_raw = fit_per_pixel(
-                stack.astype(float),
+                stack,
                 tcspc, n_bins, irf_tile,
                 has_tail = has_tail,
                 fit_bg = fit_bg,

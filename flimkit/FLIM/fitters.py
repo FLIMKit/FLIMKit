@@ -11,7 +11,7 @@ from ..FLIM.irf_tools import build_full_irf
 from ..FLIM.fit_tools import (TAU_FIT_UNIT_S, estimate_bg, find_fit_start, find_fit_end, _build_bounds,
                               _pack_p0, coates_pileup_correction, bins_from_ns, build_fit_idx,
                               find_tail_fit_start, _build_bounds_tail, _pack_p0_tail,
-                              calibrated_chi2, distribution_dof,
+                              calibrated_chi2, calibrated_from_terms, distribution_dof,
                               fit_uncertainties, propagate_uncertainty, uncertainty_warnings)
 from ..FLIM.models import (reconvolution_model, _DECost, _DECostLogTau,
                            _DECostPoisson, _DECostPoissonLogTau,
@@ -27,6 +27,7 @@ from ..configs import MIN_PHOTONS_PERPIX
 _GPU_BACKEND_UNSET = object()
 _gpu_backend_cache = _GPU_BACKEND_UNSET
 _GPU_MAX_DIST_STACK_BYTES = 1_000_000_000
+_NUMBA_FREE_TAU_BLOCK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 _TAU_GRID_POINTS = 1600
 DEFAULT_BOOTSTRAP = 25
@@ -66,6 +67,24 @@ def warmup_gpu_backend():
         except Exception:
             _gpu_backend_cache = None
     threading.Thread(target=_warmup, daemon=True).start()
+
+def _backend_call(backend, method, *args, use_fallback=True, **kwargs):
+    fn = getattr(backend, method, None)
+    maps = None
+    if fn is None:
+        print(f'  [per-pixel] {backend!r} has no {method}, using the next path')
+    else:
+        try:
+            maps = fn(*args, **kwargs)
+        except NotImplementedError:
+            print(f'  [per-pixel] {backend!r} does not implement {method}, using the next path')
+        else:
+            if maps is None:
+                print(f'  [per-pixel] {backend!r} declined {method}, using the next path')
+    fallback = getattr(backend, 'fallback_backend', None)
+    if maps is None and use_fallback and fallback is not None and fallback is not backend:
+        return _backend_call(fallback, method, *args, **kwargs)
+    return maps
 
 def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                has_tail, fit_bg, fit_sigma,
@@ -703,6 +722,92 @@ def _make_summary_tail(popt, decay, tcspc_res, n_bins,
         **unc,
     )
 
+def _numba_free_tau_module(tail, tvb_on, n_sync_model, n_exp):
+    if tail == True or tvb_on == True or n_sync_model is not None or n_exp > 3:
+        return None
+    if os.environ.get('FLIMKIT_NUMBA_FREETAU', '1') == '0':
+        return None
+    try:
+        from . import nb_freetau
+    except Exception as e:
+        print('  [per-pixel] numba free-tau unavailable (' + type(e).__name__ + '), using scipy')
+        return None
+    return nb_freetau
+
+def _numba_cuda_module():
+    if os.environ.get('FLIMKIT_NUMBA_CUDA', '1') == '0':
+        return None
+    try:
+        from . import nb_freetau_cuda
+    except Exception:
+        return None
+    return nb_freetau_cuda if nb_freetau_cuda.available() == True else None
+
+def _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx, p0_px, lo_px, hi_px,
+                    min_photons, correct_pileup, n_sync_px, progress_callback, use_gpu='auto',
+                    max_iter=200, tol=1e-8):
+    ny, nx, n_bins = stack.shape
+    fit_fn = nbm.fitFreeTau
+    px_per_block = 131072
+    if use_gpu is not False:
+        gpu = _numba_cuda_module()
+        if gpu is not None:
+            fit_fn = gpu.fitFreeTau
+            px_per_block = 262144
+    copies = 2 if correct_pileup == True and n_sync_px > 0 else 1
+    px_per_budget = _NUMBA_FREE_TAU_BLOCK_BYTES // max(8 * n_bins * copies, 1)
+    px_per_block = max(min(px_per_block, px_per_budget), nx, 1)
+    print('  [per-pixel] free-tau on the ' + ('GPU (numba.cuda)' if fit_fn is not nbm.fitFreeTau else 'CPU (numba)'))
+    dt = tcspc_res / TAU_FIT_UNIT_S
+    irf = np.ascontiguousarray(irf_fixed, dtype=np.float64)
+    idx = np.ascontiguousarray(fit_idx, dtype=np.int64)
+    p0, lo, hi = (np.ascontiguousarray(a, dtype=np.float64) for a in (p0_px, lo_px, hi_px))
+    dof = max(len(fit_idx) - 2 * n_exp, 1)
+    rows = max(1, px_per_block // max(nx, 1))
+    for r0 in range(0, ny, rows):
+        r1 = min(ny, r0 + rows)
+        block = stack[r0:r1].reshape(-1, n_bins)
+        good = np.flatnonzero(block.sum(axis=1) >= min_photons)
+        if good.size > 0:
+            raw = np.ascontiguousarray(block[good], dtype=np.float64)
+            data = raw
+            if correct_pileup == True and n_sync_px > 0:
+                data = np.array([coates_pileup_correction(raw[k], n_sync_px) for k in range(len(raw))])
+            bg = nbm.estimateBgRows(data)
+            try:
+                p, _, _ = fit_fn(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
+            except Exception as e:
+                if fit_fn is nbm.fitFreeTau:
+                    raise
+                print('  [per-pixel] numba.cuda free-tau failed (' + type(e).__name__ + '), using the CPU')
+                fit_fn = nbm.fitFreeTau
+                p, _, _ = fit_fn(data, raw, bg, irf, idx, dt, p0, lo, hi, max_iter, tol)
+            numerator, expected, valid = nbm.chi2Terms(p, data, bg, irf, idx, dt)
+            amps = p[:, n_exp:2 * n_exp]
+            amp_sum = amps.sum(axis=1)
+            ok = (amp_sum > 0) & np.all(np.isfinite(p[:, :2 * n_exp]), axis=1)
+            order = np.argsort(p[:, :n_exp], axis=1)
+            taus_ns = np.take_along_axis(p[:, :n_exp] * TAU_FIT_UNIT_S, order, 1) * 1e9
+            amps = np.take_along_axis(amps, order, 1)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                fracs = amps / amp_sum[:, None]
+                denom = (amps * taus_ns).sum(axis=1)
+                tau_int = np.where(denom > 0, (amps * taus_ns ** 2).sum(axis=1) / denom, np.nan)
+            tau_amp = (fracs * taus_ns).sum(axis=1)
+            calibrated = calibrated_from_terms(numerator, expected, valid)
+            yi, xi = np.unravel_index(good[ok], (r1 - r0, nx))
+            yi = yi + r0
+            maps['tau_mean_int'][yi, xi] = tau_int[ok]
+            maps['tau_mean_amp'][yi, xi] = tau_amp[ok]
+            maps['chi2_r'][yi, xi] = numerator[ok] / dof
+            maps['calibrated_chi2_r'][yi, xi] = calibrated[ok]
+            for i in range(n_exp):
+                maps['tau_' + str(i + 1)][yi, xi] = taus_ns[ok, i]
+                maps['alpha_' + str(i + 1)][yi, xi] = amps[ok, i]
+                maps['frac_' + str(i + 1)][yi, xi] = fracs[ok, i]
+        if progress_callback is not None:
+            progress_callback(r1, ny)
+
 def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   has_tail, fit_bg, fit_sigma,
                   global_popt, n_exp,
@@ -805,7 +910,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     _basis_grid = _basis_rows(_tau_grid, t_axis, tcspc_res, n_bins,
                                               _tail, irf_fft=irf_fft, t0=t0_px)
                     _bb_grid = np.maximum((_basis_grid ** 2).sum(axis=1), 1e-20)
-                    return _backend.batch_grid_scan_1exp(
+                    _maps = _backend_call(
+                        _backend, 'batch_grid_scan_1exp',
                         stack, _basis_grid, _bb_grid, _tau_grid,
                         min_photons, correct_pileup, _n_sync_px,
                         progress_callback,
@@ -814,7 +920,8 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         fit_idx=fit_idx if _windowed else None,
                     )
                 else:
-                    return _backend.batch_fixed_tau(
+                    _maps = _backend_call(
+                        _backend, 'batch_fixed_tau',
                         stack, A, taus_fixed,
                         min_photons, correct_pileup, _n_sync_px,
                         progress_callback,
@@ -822,12 +929,16 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         fit_tvb=tvb_on,
                         fit_idx=fit_idx if _windowed else None,
                     )
-            else:
+                if _maps is not None:
+                    return _maps
+            elif (getattr(_backend, 'plugin_id', None) is not None
+                  or _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp) is None):
                 _tau_min_s = (tau_min_ns if tau_min_ns is not None
                               else taus_fixed.min() * 1e9 * 0.1) * 1e-9
                 _tau_max_s = (tau_max_ns if tau_max_ns is not None
                               else taus_fixed.max() * 1e9 * 10.0) * 1e-9
-                return _backend.batch_free_tau_fit(
+                _maps = _backend_call(
+                    _backend, 'batch_free_tau_fit',
                     stack, irf_fixed, tcspc_res,
                     taus_fixed, _tau_min_s, _tau_max_s,
                     n_exp, min_photons, correct_pileup, _n_sync_px,
@@ -835,7 +946,11 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                     fit_tvb=tvb_on,
                     fit_idx=fit_idx if _windowed else None,
                     n_sync_model=_n_sync_px if pileup_in_model else None,
+                    use_fallback=_numba_free_tau_module(
+                        _tail, tvb_on, _n_sync_model, n_exp) is None,
                 )
+                if _maps is not None:
+                    return _maps
     if bg_in_model:
         A_bg = np.column_stack([A, np.ones(n_bins)])
     if tvb_on:
@@ -1049,6 +1164,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
             lo_px = np.concatenate([lo_px, [0.0]])
             hi_px = np.concatenate([hi_px, [tvb_hi]])
             p0_px = np.concatenate([p0_px, [float(stack.max())]])
+        nbm = _numba_free_tau_module(_tail, tvb_on, _n_sync_model, n_exp)
+        if nbm is not None:
+            _free_tau_numba(nbm, stack, maps, irf_fixed, tcspc_res, n_exp, fit_idx,
+                            p0_px, lo_px, hi_px, min_photons, correct_pileup, _n_sync_px,
+                            progress_callback, use_gpu=use_gpu)
+            return maps
         for yi in tqdm(range(ny), desc='  Per-pixel rows (free-τ)', disable=True):
             if progress_callback is not None:
                 progress_callback(yi, ny)
@@ -1095,7 +1216,7 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                             n_sync=_n_sync_model)
                     return reconvolution_model(
                         full_p, tcspc_res, n_bins, irf_prompt,
-                        n_exp, _bg, has_tail, False, fit_sigma,
+                        n_exp, _bg, has_tail, fit_bg, fit_sigma,
                         n_sync=_n_sync_model)
                 w_px = np.sqrt(np.maximum(decay_px, 1.0))
                 def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):
@@ -1499,12 +1620,15 @@ def fit_per_pixel_dist(stack, tcspc_res, n_bins, irf_prompt,
                   f'({_GPU_MAX_DIST_STACK_BYTES/1e9:.1f} GB); the distribution scan is not blocked, using the CPU path')
             backend = None
         if backend is not None:
-            return backend.batch_dist_scan_unimodal(
+            _maps = _backend_call(
+                backend, 'batch_dist_scan_unimodal',
                 stack, basis_fit, bb_grid, param_pairs,
                 irf_fixed, tcspc_res, n_bins, dist_type,
                 min_photons, progress_callback,
                 tvb_profile=tvb_profile if tvb_on else None,
                 fit_tvb=tvb_on, fit_idx=fit_idx)
+            if _maps is not None:
+                return _maps
         flat = stack.reshape(ny * nx, n_bins).astype(np.float32)
         ph_counts = flat.sum(axis=1)
         valid_idx = np.where(ph_counts >= min_photons)[0]

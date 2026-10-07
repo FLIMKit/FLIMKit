@@ -33,7 +33,8 @@ Three things came out of it.
 The free tau row is the wrong way round. Asking for the GPU makes that fit 1.8
 times slower than not asking, because `_scipy_parallel_free_tau_fit` in
 `_base.py` runs a thread pool over scipy while the CPU path runs a process
-pool. See G1 and G2.
+pool. Both G1 and G2 have since been fixed, so that row describes FLIMKit as
+it was in August. Section K has what replaced them and what is still open.
 
 The 32 MB disagreement reproduced to sixteen digits on a different card, which
 rules out device nondeterminism and leaves adjacent grid points tying at a
@@ -191,7 +192,8 @@ float32 argmin and a float64 one over a discrete grid.
 section of the benchmark. Pass: amplitudes non-negative, fractions summing to
 1 within 1e-6, chi-squared finite on every valid pixel.
 
-**D3. `batch_free_tau_fit`.** See G1 before spending time here.
+**D3. `batch_free_tau_fit`.** Reached only when an add-on fit backend is
+installed, or when numba is unavailable. See K before spending time here.
 
 **D4. `batch_dist_scan_unimodal`.** Pass: centre within 0.05 ns of 2.4 and
 width strictly greater than the tau floor of 0.145 ns. A width pinned at the
@@ -288,39 +290,24 @@ block, not at the end of the whole field.
 These are known or half-known. Confirming them on a second machine is the
 point of the exercise.
 
-**G1. `batch_free_tau_fit` does no GPU work.** Both `torch_backend.py:219` and
-`mlx_backend.py:328` bind the device module, then hand everything to
-`_scipy_parallel_free_tau_fit`, which runs on the CPU under the GIL. On the Mac
-the copies were 0.01 s of 74.2 s.
+**G1. `batch_free_tau_fit` does no GPU work.** Fixed, nothing to retest. Both
+`torch_backend.py` and `mlx_backend.py` bound the device module and then handed
+everything to `_scipy_parallel_free_tau_fit`, a `ThreadPoolExecutor` over scipy
+`least_squares` holding the GIL where the CPU path used a process pool. On the
+Mac the device copies were 0.01 s of 74.2 s, and on the A5000 the GPU route
+cost 55 seconds: 125.9 s against 70.4 s for the same field and the same answer.
 
-Confirmed on the A5000. It is worse than dead weight: 125.9 s against 70.4 s
-for the same field and the same answer, so the GPU route costs 55 seconds.
-`_base.py:339` runs a `ThreadPoolExecutor` over scipy `least_squares`, which
-holds the GIL, where the CPU path uses a process pool.
+A free-tau fit no longer reaches those two functions. It runs the numba kernel
+instead, on the CPU or through numba.cuda, and the built-in GPU backends get
+the fit only when an add-on backend declines it or numba will not load. See K.
 
-Test on any further machine: run a free-tau per-pixel fit with `nvidia-smi -l 1`
-open. Utilisation stays near zero and wall time tracks cores rather than the
-card. Record both timings, since the gap grows with core count.
-
-**G2. Pile-up correction is discarded on the free-tau path.** Same two
-functions compute `dc_flat`, apply Coates to it, and then fit `raw_valid`,
-which is taken from `flat` and never sees the correction.
-
-```bash
-python - <<'PY'
-import numpy as np
-print('fit the same bright stack twice, correct_pileup False then True,')
-print('n_sync large enough to matter, free_tau=True, n_exp=2')
-print('then compare tau maps')
-PY
-```
-
-Pass, meaning the bug is confirmed: the two tau maps are bit-identical. If
-they differ, the correction is reaching the fit after all and the reading of
-the code is wrong. This is the one test here whose expected result is a
-defect, so record whichever way it goes.
-
-Repeat with `free_tau=False` as the control. There the two runs must differ.
+**G2. Pile-up correction is discarded on the free-tau path.** Fixed, nothing to
+retest. Both functions computed `dc_flat`, applied Coates to it, and then fit
+`raw_valid` taken from the uncorrected `flat`. `torch_backend.py` now builds
+`fit_flat` through Coates, fits that, and passes the uncorrected counts as
+`weight_valid`, so the weights stay Neyman on what the detector measured. The
+numba kernel does the same, correcting the data it fits and weighting by the
+raw counts.
 
 **G3. Tail fits fall back to the CPU by design.** `fitters.py:647` prints a
 line saying so. Pass: the message appears and no device work happens. Nothing
@@ -378,8 +365,168 @@ scaling intact.
 **J3. Against SPCImage or LAS X, if the machine has either.** Not a pass or
 fail, just a number for the validation table.
 
+## K. The free-tau kernel
+
+The scipy-per-pixel free-tau loop is gone, replaced by a numba Levenberg-Marquardt
+on `feature/fit-backend-hook`, `fitter_version` 24. Everything in this section
+comes out of the experiment that chose it, which lived on the local branch
+`is-c-worth-it` (`aedffad`, `flimkit/FLIM/_cfit/`: the same algorithm in C with a
+ctypes loader that compiles on the user's machine). That branch is not merged and
+does not need to be.
+
+Why numba and not C. The two gave identical lifetimes, 0.0000 ps apart at worst,
+and C led by about 15 per cent on one thread and tied on four. numba needs no
+compiler on the user's machine, which C does, and Windows, macOS and Ubuntu all
+ship without one. C starts faster, 0.7 s against numba's 11.8 s first JIT, and
+0.4 s once numba's cache is warm. Prebuilt C libraries in the `build.yml` matrix,
+or cross-compiled by Zig, would close that gap if the start ever matters enough.
+Zig via pip builds the kernel in about 5 s and cross-compiles for all three
+platforms, but it is 395 MB installed, and its first Windows build took 335 s
+while it built its own C runtime.
+
+Against scipy on a clean 4 vCPU container, 256 bins, 50 ps bins, tau 0.6 and
+3.0 ns, synthetic Poisson:
+
+| | 2,000 photons/px | 50,000 photons/px |
+| --- | --- | --- |
+| scipy `least_squares` | 19.2 ms/px | 10.8 ms/px |
+| C, 1 thread | 324 us/px | 118 us/px |
+| C, 4 threads | 83 us/px | 60 us/px |
+| median / 95th tau difference against scipy | 0.04 / 1.43 ps | under 0.01 ps |
+
+**K1. A clean GPU rerun.** Every number from the first Misha run is inflated: a
+Tdarr transcoding container was taking about 345 per cent CPU throughout and was
+only noticed at the end. numba measured anywhere from 109 to 209 us/px for the
+same work across runs. What it showed, in us/px, with a torch prototype rather
+than the numba.cuda kernel that shipped:
+
+| Run | numba CPU | torch f32, active set | torch f64, active set |
+| --- | --- | --- | --- |
+| 20k px, 2,000 ph | 194 | 330 | 320 |
+| 100k px, 2,000 ph | 209 | 85 | 190 |
+| 262k px, 2,000 ph | 135 | 50 | 550 |
+| 20k px, 50,000 ph | 77 | 63 | 71 |
+
+Rerun with Tdarr stopped: numba on the CPU, and numba.cuda, at 20k and 262k
+pixels at 2,000 photons and 20k at 50,000. The shipped kernel is float64 and
+measured 76 us/px against 274 on the same machine's CPU, so the torch f64 row is
+not the kernel we have. The question K1 answers is whether the GPU still only
+wins on large images, and where the crossover is.
+
+**K2. Does float32 buy anything on top of that.** The torch prototype was 11
+times faster in float32 than float64 on the A2000 at 262k pixels, because
+consumer and workstation NVIDIA cards have poor float64 throughput. Apple has
+none at all: MPS rejects float64 and MLX runs it on the CPU. Typical float32
+error was a median 0.17 to 0.26 ps and a 99th percentile of 6 to 10 ps at 2,000
+photons, well under the roughly 67 ps shot-noise floor for a 3 ns single
+exponential at that count.
+
+It is not free. A few pixels in float32 ended up as much as 28 ns from the C
+answer, unresolved. The likely cause is the 1e-8 convergence threshold sitting at
+float32's resolution, so those pixels never stop, which also explains float32
+needing 62 rounds against float64's 25 at 50,000 photons. The fix to try is
+mixed precision: float32 for the model and the Jacobian, float64 for the cost,
+the normal equations and the convergence test. A float32-sized threshold of about
+1e-6 is the cruder alternative. Keep the GPU kernel in float64 until those
+outliers are gone.
+
+**K3. A hybrid handoff for the slow tail.** On Windows each GPU round costs about
+15 ms fixed, and the slowest pixels need around 400 rounds at 2,000 photons, so
+the tail sets the wall time. Handing the last one per cent of unconverged pixels
+to the CPU kernel is the obvious answer. The shipped kernel does something
+different, shrinking steps per launch and pixels per launch by timing, so measure
+before building anything.
+
+**K4. Dynamic chunking across threads.** Open in the original write-up, and it
+looks like a C finding rather than a numba one. The C pool went from 137.5 to
+85.5 us/px on an image with a dim block and a bright one when it took 256-pixel
+chunks instead of one block per thread. `numba.set_parallel_chunksize` does the
+same for `prange`, which is static by default. On a 10-core M4, 8,192 pixels at
+256 bins, half at 400 photons and half at 5,000 in contiguous halves, which is
+the layout that should punish static blocks:
+
+| Layer | uniform, static | uniform, 256 | mixed, static | mixed, 256 |
+| --- | --- | --- | --- | --- |
+| workqueue | 8.86 | 10.67 | 16.58 | 16.02 |
+| omp | 9.61 | 9.76 | 16.65 | 18.53 |
+
+us/px, best of three, parameters identical either way. So 0.83x to 1.04x, and
+not worth adding on that evidence. Misha has 4 cores against this machine's 10,
+which is where the C number came from, so settle it there if it matters.
+
+**K5. Neyman weighting bias.** Pre-existing, and the numba kernel keeps it
+deliberately so the two paths agree. Both scipy and the kernel weight by
+`sqrt(max(data, 1))`. On synthetic data with true tau 0.6 and 3.0 ns the median
+fitted pair came out 0.45 / 2.31 ns at 2,000 photons per pixel and 0.58 / 2.95 ns
+at 50,000, which is the known low-count Neyman bias shrinking with counts.
+Poisson maximum likelihood removes it and `models.py` already has the cost
+classes. Note that a separate measurement, 40 noise realisations against a known
+2.42 ns truth, found the weighting choice mattered about ten times less than
+whether the background is fitted, and did not reproduce an earlier claim that
+Pearson and MLE read high. Worth its own look rather than a change on this
+evidence.
+
+**K6. `_scipy_parallel_free_tau_fit` is now the fallback, not the path.**
+`torch_backend.batch_free_tau_fit` runs a batched active-set Levenberg-Marquardt
+in float64 on the device, `flimkit/GPU/torch_lm.py`, and keeps the scipy loop
+only for a time-varying background, pile-up in the model, or a device without
+float64, which means MPS. The model and its derivative in tau come from the same
+recurrence as the numba kernel, evaluated as two circular convolutions by FFT,
+and every pixel follows the same trial sequence, so the two agree: on 4,096
+pixels through torch on the CPU in float64 the lifetimes match numba to
+0.0000 ps and the chi2 numerator to 4e-14 relative.
+
+Speed on the CPU is not the point and it is not good: 96.6 us/px at 4,096 pixels
+and 289.3 us/px at 32,768 against numba's 6, because four FFTs per component per
+round cost more than an O(n_bins) recurrence when there is no parallelism to
+spend. Against the scipy loop it replaces, measured at about 2,200 us/px on the
+same data, it is 8 to 23 times faster. The case for it is the device, so K1 and
+K2 are what decide whether it earns its place.
+
+MLX still calls the scipy loop. MLX runs float64 on the CPU only, so there is
+nothing to gain there until K2 settles whether float32 is safe.
+
+**K7. The add-on's CUDA kernel is correct and currently pointless.**
+`flimkit-accelerator-plugin/flimkit_accelerator_plugin/kernels.cu` is the C
+free-tau kernel for an NVIDIA card, one thread per pixel in double precision,
+with bounded launches and per-pixel state so the Windows watchdog is safe, and a
+non-zero return falls back to the C kernel.
+
+Built and measured on cruk-ubuntu, one RTX A5000, CUDA 12.1, 48 cores. nvcc
+built it unchanged. Against the C kernel on the same data, 65,536 pixels per
+case, the worst single-pixel lifetime difference was 0.010 ps at 400 photons,
+0.0002 ps at 120, 0.740 ps on three exponentials, 2.911 ps with a fit window
+from bin 30, 0.000005 ps on one exponential and 0.000000 ps at 4,096 bins. The
+median difference is under 1e-6 ps throughout, the reduced cost ratio is exactly
+1.0 and the valid flags match. Shot noise at 4,000 photons is around 60 to 70 ps
+on a 3 ns lifetime, so none of it reaches a map.
+
+The residue is nvcc contracting multiply-adds into fma, confirmed by rebuilding
+with `-fmad=false`: the worst case drops to 0.0014 ps and the iteration counts
+then match in every case, including three exponentials, where the default build
+is the one case they diverge. That costs 4 to 30 per cent and buys nothing a
+photon can see, so fma stays on and the flag is documented for the day CPU and
+GPU maps have to be compared directly.
+
+Pixels that exhausted all 200 iterations saved their state and resumed on the
+next launch and still agreed, so the bounded-launch machinery that keeps the
+Windows watchdog happy has now been exercised rather than assumed.
+
+It is slower than the C kernel on that machine, 69.44, 9.99 and 5.11 us/px
+against 6.21, 2.81 and 2.67. The fit is float64 and an A5000 runs double
+precision at a small fraction of its float32 rate, and 48 cores is a lot of CPU
+to beat. The gap closes from 11x to 1.9x as the batch grows, which is the fixed
+per-launch cost being amortised, so a larger field narrows it further but does
+not turn it round.
+
+Open: the same comparison on four cores beside a card, which is the machine most
+users have and where the GPU should win. That is K1's machine. Until then the
+CUDA kernel is correct and not worth shipping on its own, and K2 applies to it
+too: float32 would lift the card out of its 1/64 double-precision rate, and the
+outliers are the reason not to reach for it yet.
+
 ## Reporting
 
 Keep the JSON files. Send back `bench_<gpu>.json` plus the pytest summary, and
-say which of G1, G2 and G5 reproduced. Those three are the ones that change
-what gets fixed.
+say whether G5 reproduced and what K1 and K2 measured. Those are the ones that
+change what gets fixed.

@@ -54,6 +54,7 @@ class GPUBackend:
         n_sync_px,
         progress_callback,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -68,6 +69,7 @@ class GPUBackend:
         n_sync_px,
         progress_callback,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -83,10 +85,11 @@ class GPUBackend:
         min_photons,
         correct_pileup,
         n_sync_px,
-        n_steps,
-        lr,
+        n_steps=50,
+        lr=None,
         fit_idx=None,
         n_sync_model=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -105,6 +108,7 @@ class GPUBackend:
         tvb_profile=None,
         fit_tvb=False,
         fit_idx=None,
+        **kwargs,
     ):
         raise NotImplementedError
 
@@ -159,6 +163,7 @@ class _BackendMixin:
         ny, nx,
         tvb=None,
         tvb_profile=None,
+        chi2_parts=None,
     ):
         n_exp = A.shape[1]
         n_bins = A.shape[0]
@@ -171,10 +176,12 @@ class _BackendMixin:
         tau_amp = (fracs * taus_ns[None, :]).sum(axis=1)
         denom = (amps * taus_ns[None, :]).sum(axis=1)
         tau_int = np.where(denom > 0,(amps * taus_ns2[None, :]).sum(axis=1) / np.maximum(denom, 1e-30), np.nan)
-        model = amps @ A.T + bg[:, None]
-        if tvb is not None and tvb_profile is not None:
-            model = model + tvb[:, None] * tvb_profile[None, :]
-        numerator, expected, row_ok = chi2_terms(decay_valid, model, axis=1)
+        if chi2_parts is None:
+            model = amps @ A.T + bg[:, None]
+            if tvb is not None and tvb_profile is not None:
+                model = model + tvb[:, None] * tvb_profile[None, :]
+            chi2_parts = chi2_terms(decay_valid, model, axis=1)
+        numerator, expected, row_ok = chi2_parts
         chi2 = numerator
         calibrated = calibrated_from_terms(numerator, expected, row_ok)
         dof = max(n_bins - n_exp, 1)
@@ -305,7 +312,6 @@ class _BackendMixin:
         n_fit = n_bins if win is None else len(win)
 
         amp0    = float(raw_valid.max()) / n_exp
-        # Use the same bounds as the CPU free-tau path in fit_per_pixel
         amp_hi  = float(raw_valid.max()) * 10.0
         lo_px = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
         hi_px = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
@@ -369,7 +375,6 @@ class _BackendMixin:
             if amps_b.sum() <= 0:
                 continue
             tvb_b = float(p_sol[2 * n_exp]) if fit_tvb else 0.0
-            # Sort ascending for output (matches CPU convention)
             order   = np.argsort(taus_b)
             taus_b  = taus_b[order];  amps_b = amps_b[order]
             bg_b    = float(bg_valid[b])
@@ -405,3 +410,7 @@ class _BackendMixin:
             valid_b[b]   = True
 
         return taus_out, amps_out, chi2r_out, chi2c_out, model_out, valid_b, tvb_out
+
+
+class PluginBackend(_BackendMixin, GPUBackend):
+    pass

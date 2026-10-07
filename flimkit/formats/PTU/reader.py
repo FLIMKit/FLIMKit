@@ -33,9 +33,12 @@ def _reduce_yxh(arr, dims):
     d = list(dims)
     if arr.ndim != len(d):
         d = d[-arr.ndim:]
+    keep = [i for i, x in enumerate(d) if x in ('Y', 'X', 'H') or arr.shape[i] > 1]
+    arr = arr.reshape([arr.shape[i] for i in keep])
+    d = [d[i] for i in keep]
     drop = tuple(i for i, x in enumerate(d) if x not in ('Y', 'X', 'H'))
     if drop:
-        arr = arr.sum(axis=drop)
+        arr = arr.sum(axis=drop, dtype=np.uint32 if arr.dtype.kind in 'ui' else None)
     d = [x for x in d if x in ('Y', 'X', 'H')]
     return np.transpose(arr, [d.index(x) for x in ('Y', 'X', 'H') if x in d])
 
@@ -182,10 +185,10 @@ class PTUFile:
         if binning > 1:
             cube = _bin_cube(cube, binning)
         self._total_photons = int(cube.sum())
-        return cube.astype(np.uint32)
+        return cube.astype(np.uint32, copy=False)
 
     def pixel_stack(self, channel=None, binning=1):
-        return self.raw_pixel_stack(channel=channel, binning=binning).astype(float)
+        return self.raw_pixel_stack(channel=channel, binning=binning)
 
     def intensity_image(self, channel=None, binning=1):
         return self.raw_pixel_stack(channel=channel, binning=binning).sum(axis=2)
