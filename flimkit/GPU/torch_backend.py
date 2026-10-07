@@ -3,7 +3,8 @@ import threading
 import numpy as np
 from flimkit.GPU._base import (_BackendMixin, fit_window, pixel_blocks,
                                gpu_block_bytes, CUDA_BLOCK_BYTES)
-from flimkit.FLIM.fit_tools import (calibrated_chi2, distribution_dof,
+from flimkit.FLIM.fit_tools import (TAU_FIT_UNIT_S, calibrated_chi2,
+                                    calibrated_from_terms, distribution_dof,
                                     estimate_bg, coates_pileup_correction)
 
 _MATMUL_PRECISION_LOCK = threading.Lock()
@@ -67,6 +68,53 @@ class TorchBackend(_BackendMixin):
             med = torch.where(count % 2 == 1, lo, (lo + hi) / 2)
             bg[rows] = torch.clamp(med, min=0.0).cpu().numpy()
         return bg
+
+    def _supports_float64(self):
+        return self.device.type != 'mps'
+
+    def _batched_free_tau(self, raw_valid, bg_valid, weight_valid, irf_array,
+                          tcspc_res, taus_init, tau_min_s, tau_max_s, n_exp,
+                          n_bins, fit_idx):
+        from flimkit.GPU import torch_lm
+        win = fit_window(fit_idx, n_bins)
+        idx = np.arange(n_bins) if win is None else np.asarray(win)
+        n_fit = len(idx)
+        B = raw_valid.shape[0]
+        amp_hi = float(raw_valid.max()) * 10.0
+        p0 = np.concatenate([taus_init / TAU_FIT_UNIT_S,
+                             np.full(n_exp, float(raw_valid.max()) / n_exp)])
+        lo = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
+        taus_out = np.zeros((B, n_exp), dtype=np.float32)
+        amps_out = np.zeros((B, n_exp), dtype=np.float32)
+        chi2r_out = np.full(B, np.nan)
+        chi2c_out = np.full(B, np.nan)
+        valid_b = np.zeros(B, dtype=bool)
+        dof = max(n_fit - 2 * n_exp, 1)
+        per_pixel = 8 * (6 * n_exp * n_bins + 2 * n_exp * n_fit + 4 * n_bins)
+        for first, last in pixel_blocks(B, per_pixel, budget=self.block_bytes()):
+            p, cost, _, num, expected, ok = torch_lm.fit_free_tau(
+                self._torch, self.device,
+                raw_valid[first:last].astype(np.float64),
+                weight_valid[first:last].astype(np.float64),
+                bg_valid[first:last].astype(np.float64),
+                irf_array, idx, tcspc_res / TAU_FIT_UNIT_S, p0, lo, hi)
+            taus = p[:, :n_exp]
+            amps = p[:, n_exp:2 * n_exp]
+            keep = ok & (amps.sum(axis=1) > 0) & np.all(np.isfinite(p), axis=1)
+            order = np.argsort(taus, axis=1)
+            taus = np.take_along_axis(taus, order, 1) * TAU_FIT_UNIT_S
+            amps = np.take_along_axis(amps, order, 1)
+            calibrated = calibrated_from_terms(num, expected, ok)
+            rows = np.arange(first, last)[keep]
+            taus_out[rows] = taus[keep].astype(np.float32)
+            amps_out[rows] = amps[keep].astype(np.float32)
+            chi2r_out[rows] = num[keep] / dof
+            chi2c_out[rows] = calibrated[keep]
+            valid_b[rows] = True
+        return (taus_out, amps_out, chi2r_out, chi2c_out,
+                np.zeros((B, n_bins), dtype=np.float32), valid_b,
+                np.zeros(B, dtype=np.float32))
 
     def batch_fixed_tau(
         self,
@@ -331,12 +379,20 @@ class TorchBackend(_BackendMixin):
         bg_valid = bg_flat[valid_idx].astype(np.float32)
         weight_valid = flat[valid_idx].astype(np.float32)
         B = len(valid_idx)
-        taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
-            raw_valid, bg_valid, irf_array, tcspc_res,
-            taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
-            tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
-            weight_valid=weight_valid, n_sync_model=n_sync_model,
-        )
+        on_device = (not fit_tvb and n_sync_model is None and n_exp >= 1
+                     and self._supports_float64())
+        if on_device:
+            (taus_out, amps_out, chi2r_out, chi2c_out, _,
+             valid_b, tvb_out) = self._batched_free_tau(
+                raw_valid, bg_valid, weight_valid, irf_array, tcspc_res,
+                taus_init, tau_min_s, tau_max_s, n_exp, n_bins, fit_idx)
+        else:
+            taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
+                raw_valid, bg_valid, irf_array, tcspc_res,
+                taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
+                weight_valid=weight_valid, n_sync_model=n_sync_model,
+            )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],
             taus_s=taus_out[valid_b], amps=amps_out[valid_b],
