@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.8** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.14.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -425,7 +425,7 @@ Expert Settings opens a dialog shared by the single FOV and tile pipelines. When
 | Align measured IRF peak to the decay rising edge | For a scatter PTU or `.pck` recorded in a separate acquisition, whose time zero won't match the sample's. |
 | Fit window start / end (ns) | The part of the decay that is fitted. Blank lets FLIMKit choose from the IRF onset and the end of the period. |
 | Exclude bands (ns) | Stretches of the decay to leave out, such as a reflection peak, written `7.2-8.8` or `7.2-8.8,11.0-11.5` ([Fit window and exclusion bands](#fit-window-and-exclusion-bands)). |
-| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. |
+| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. The [accelerator plugin](#fit-backends) can speed it up a lot, but nothing needs it. |
 | Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
 | Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
 | Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
@@ -2630,6 +2630,8 @@ Restart the app, since a newly built default is picked up at startup, or set it 
 That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed.
 
 `--free-tau-perpixel` with n_exp ≥ 2 does not go through those GPU backends. It runs a numba Levenberg-Marquardt, on the CPU everywhere and on an NVIDIA GPU through numba.cuda when numba-cuda is installed. On real data that is 140 to 150x faster than the SciPy-per-pixel loop it replaced on a 10-core M4. A 4-thread PC with an RTX A2000 fits 3-component pixels at 76 µs/px on the GPU against 274 µs/px on its CPU. The tail model, a time-varying background, pile-up in the model and more than three components still run SciPy per pixel, as do `FLIMKIT_NUMBA_FREETAU=0` and a numba that will not load. `FLIMKIT_NUMBA_CUDA=0` keeps the fit on the CPU.
+
+Free τ can be accelerated considerably further by [flimkit-accelerator-plugin](https://github.com/FLIMKit/flimkit-accelerator-plugin), an optional add-on with C and CUDA fit backends. It is not required: without it the numba fit above runs, and the fitted values are the same kind of answer either way. Install it, and with `auto` its backend is tried before numba (see [Fit backends](#fit-backends)). `FLIMKIT_FIT_BACKEND=cpu` turns it off again.
 
 FLIMKit asks numba for its `workqueue` threading layer unless `NUMBA_THREADING_LAYER` is already set. numba's OpenMP layer aborts the process with `OMP: Error #15` when PyTorch has already loaded its own OpenMP runtime, which happens as soon as anything touches cell masking or a torch GPU backend. The two layers fit 8,192 pixels in the same time here, 6.2 against 6.3 µs/px, so this costs nothing measurable.
 
