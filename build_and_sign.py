@@ -155,6 +155,7 @@ def build_app():
         "--hidden-import", "tkinter",
         "--hidden-import", "tkinter.ttk",
         "--hidden-import", "PIL",
+        "--hidden-import", "PIL._tkinter_finder",
         "--hidden-import", "inquirer",
         "--hidden-import", "readchar",
         "--hidden-import", "blessed",
