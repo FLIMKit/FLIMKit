@@ -213,6 +213,7 @@ jobs:
       (startsWith(github.ref, 'refs/tags/') || github.event_name == 'push' || inputs.publish_release == 'true')
     permissions:
       contents: write
+      actions: write
 
     steps:
       - name: Download all artifacts
@@ -240,6 +241,13 @@ jobs:
           tag_name: ${{ needs.get-version.outputs.tag }}
           name:     ${{ needs.get-version.outputs.title }}
           files:    release/*
+
+      - name: Publish to PyPI
+        if: needs.get-version.outputs.dev != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run publish.yml --ref "${{ needs.get-version.outputs.tag }}"
 
       - name: Create the dev pre-release
         if: needs.get-version.outputs.dev == 'true'
