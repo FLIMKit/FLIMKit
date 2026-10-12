@@ -17,7 +17,7 @@ from .utils.xml_utils import parse_xlif_tile_positions
 from .FLIM.fit_tools import find_irf_peak_bin
 from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, align_irf_to_bin, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
 from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
-                           fit_per_pixel_dist, fit_summed_tail)
+                           fit_per_pixel_dist, fit_summed_tail, DEFAULT_BOOTSTRAP)
 from .utils.xlsx_tools import load_irf_export
 from .utils.misc import print_summary
 from .utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
@@ -298,6 +298,7 @@ def stitch_and_fit_inquire():
     args.tau_display_max = tau_max_display
     args.intensity_display_min = int_min_display
     args.intensity_display_max = int_max_display
+    args.bootstrap = DEFAULT_BOOTSTRAP
     return args
 def _run_tile_stitch(args):
     print(f"\n{'='*60}")
@@ -549,6 +550,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             workers=args.workers,
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
         )
     elif _dist_type != 'discrete':
         print(f'\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...')
@@ -563,6 +565,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             workers=args.workers,
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
             fit_start_ns=getattr(args, 'fit_start_ns', None),
@@ -582,6 +585,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             workers=args.workers,
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
             fit_start_ns=getattr(args, 'fit_start_ns', None),
@@ -790,6 +794,7 @@ def single_FOV_flim_fit_inquire():
             args.intensity_threshold = 'interactive'
     else:
         args.intensity_threshold = None
+    args.bootstrap = DEFAULT_BOOTSTRAP
     return args
 def _recommended_photons(n_exp, dist_type='discrete'):
     if dist_type not in ('discrete', 'tail'):
@@ -1058,6 +1063,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 workers=args.workers,
                 polish=not args.no_polish,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
                 fit_start_ns=getattr(args, 'fit_start_ns', None),
                 fit_end_ns=getattr(args, 'fit_end_ns', None),
                 exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
@@ -1075,6 +1081,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 workers=args.workers,
                 polish=not args.no_polish,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
                 sigma_max=sigma_max,
                 irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
                 fit_start_ns=getattr(args, 'fit_start_ns', None),
@@ -1093,6 +1100,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             workers=args.workers,
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
+            bootstrap=getattr(args, 'bootstrap', 0),
             sigma_max=sigma_max,
             irf_shift_bins=getattr(args, 'irf_shift_bins', 2),
             fit_start_ns=getattr(args, 'fit_start_ns', None),
@@ -1216,6 +1224,7 @@ def single_FOV_flim_fit(interactive=False):
         ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
         ap.add_argument('--workers',       type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
+        ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--out',        default=OUT_NAME)
         ap.add_argument('--no-plots',   action='store_true')
@@ -1289,6 +1298,7 @@ def stitch_and_fit(interactive=False):
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
         ap.add_argument('--workers', type=int, default=n_workers)
         ap.add_argument('--no-polish', action='store_true')
+        ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
         ap.add_argument('--channel', type=int, default=channels)
         ap.add_argument('--irf-fwhm', type=float, default=IRF_FWHM)
         ap.add_argument('--irf-bins', type=int, default=IRF_BINS)
@@ -1399,6 +1409,7 @@ def tile_fit_inquire():
     args.out = None
     args.tau_display_min = tau_min_display
     args.tau_display_max = tau_max_display
+    args.bootstrap = DEFAULT_BOOTSTRAP
     return args
 def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_window_manager=None):
     from .formats.PTU.stitch import fit_flim_tiles
@@ -1652,6 +1663,7 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
         ap.add_argument('--workers',    type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
+        ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
         ap.add_argument('--channel',    type=int, default=channels)
         ap.add_argument('--min-photons', type=int, default=MIN_PHOTONS_PERPIX)
         ap.add_argument('--binning', type=int, default=1,

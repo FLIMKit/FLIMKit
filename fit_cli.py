@@ -5,7 +5,7 @@ import matplotlib
 import argparse
 from flimkit.formats import FLIMFile
 from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu, irf_from_pck, irf_from_measured_file, irf_from_xlsx, irf_from_xlsx_analytical, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, reconstruct_irf_from_decay, compare_irfs, machine_irf_prompt
-from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_tail, MIN_PHOTONS_PERPIX
+from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_tail, MIN_PHOTONS_PERPIX, DEFAULT_BOOTSTRAP
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from flimkit.utils.misc import print_summary
 from flimkit.utils.xlsx_tools import load_irf_export
@@ -78,6 +78,8 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
     ap.add_argument('--workers',       type=int, default=n_workers)
     ap.add_argument('--no-polish',  action='store_true')
+    ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP,
+                    help='Resampled refits for the ± errors on the summed fit (0 turns it off)')
     ap.add_argument('--channel',    type=int, default=channels)
     ap.add_argument('--out',        default=OUT_NAME)
     ap.add_argument('--no-plots',   action='store_true')
@@ -302,6 +304,7 @@ def single_FOV_flim_fit_cli():
                 workers=args.workers,
                 polish=not args.no_polish,
                 cost_function=args.cost_function,
+                bootstrap=args.bootstrap,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
                 fit_start_ns=args.fit_start_ns,
                 fit_end_ns=args.fit_end_ns,
@@ -318,6 +321,7 @@ def single_FOV_flim_fit_cli():
             workers=args.workers,
             polish=not args.no_polish,
             cost_function=args.cost_function,
+            bootstrap=args.bootstrap,
             sigma_max=sigma_max,
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
             fit_start_ns=args.fit_start_ns,

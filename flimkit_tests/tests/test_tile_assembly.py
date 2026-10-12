@@ -72,3 +72,24 @@ def test_adapter_tolerates_a_fitter_without_the_map():
     del maps['tau_mean_int']
     adapted = _adapt_pixel_maps(maps, 3, TAUS_NS)
     assert np.isnan(np.asarray(adapted['tau_mean_int'], float)).all()
+
+
+def test_adapter_keeps_each_amplitude_with_its_own_lifetime():
+    maps = raw_maps()
+    for k, (tau, amp) in enumerate(((2.19, 0.2), (0.43, 0.7), (6.71, 0.1)), start=1):
+        maps['tau_' + str(k)][:] = tau
+        maps['alpha_' + str(k)][:] = amp
+    adapted = _adapt_pixel_maps(maps, 3, [6.71, 2.19, 0.43])
+    assert [float(adapted['tau' + str(k)][0, 0]) for k in (1, 2, 3)] == pytest.approx([6.71, 2.19, 0.43])
+    assert [float(adapted['a' + str(k)][0, 0]) for k in (1, 2, 3)] == pytest.approx([0.1, 0.2, 0.7])
+    summary = derive_global_tau(one_tile_canvas(adapted), n_exp=3)
+    assert summary['tau_mean_amp_global_ns'] == pytest.approx(6.71 * 0.1 + 2.19 * 0.2 + 0.43 * 0.7, rel=1e-5)
+
+
+def test_adapter_keeps_free_tau_lifetimes_per_pixel():
+    maps = raw_maps()
+    maps['tau_1'][0, 0], maps['tau_2'][0, 0], maps['tau_3'][0, 0] = 0.5, 2.5, 8.0
+    maps['alpha_1'][0, 0], maps['alpha_2'][0, 0], maps['alpha_3'][0, 0] = 0.6, 0.3, 0.1
+    adapted = _adapt_pixel_maps(maps, 3, TAUS_NS)
+    assert [float(adapted['tau' + str(k)][0, 0]) for k in (1, 2, 3)] == pytest.approx([8.0, 2.5, 0.5])
+    assert [float(adapted['a' + str(k)][0, 0]) for k in (1, 2, 3)] == pytest.approx([0.1, 0.3, 0.6])

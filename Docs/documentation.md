@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.13.8** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.14.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -122,7 +122,8 @@ Not decoded yet: T2-mode PTUs (`ptufile` reads the records, but FLIMKit does not
 | `lfdfiles` | SimFCS `.b&h`, `.bhz`, `.ref`, `.r64` and ISS `.ifli`, `.iss-tdflim` decoding |
 | `photonsfile` | Photonscore LINCam `.photons` (D7) decoding |
 | `inquirer` | Interactive terminal prompts |
-| `numba` | Speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `numba` | Compiles the free-τ per-pixel fit, and speeds up the `.photons` decode inside `photonsfile`, with a numpy fallback |
+| `numba-cuda` | Runs the free-τ per-pixel fit on an NVIDIA GPU. Installed by `install.py` on NVIDIA hardware, and by `pip install "flimkit[cuda]"` |
 | `shapely` | Repairs self-intersecting ROI rings on GeoJSON export |
 | `lz4` | LZ4-compressed Becker & Hickl `.sdt` blocks |
 | `ipywidgets` | Jupyter notebook interactive support, optional |
@@ -146,7 +147,7 @@ to every release, built by GitHub Actions on each tag. Each release also carries
 this documentation as a PDF, `FLIMKit-docs-<version>.pdf`, so the docs for the
 version you are running stay available after the wiki moves on.
 
-Code merged after a release is built too, as FLIMKitDEV
+Code merged into `dev` after a release is built too, as FLIMKitDEV
 ([Development builds](#development-builds)).
 
 On macOS the app is self-signed, so the first launch needs right-click then
@@ -155,6 +156,44 @@ Open. A double-click will be refused.
 This route gets the desktop application only. It carries no GPU backend unless
 the build machine had one, which is covered under GPU acceleration in the
 compiled app.
+
+#### Setting up a Python environment
+
+Install FLIMKit into its own environment, not the system Python, so its
+packages don't collide with anything else. conda and uv both work. Pick one and
+use it for everything FLIMKit, plugins included: a package installed into a
+different environment is never seen.
+
+With conda (Miniforge, Miniconda or Anaconda):
+
+```bash
+conda create -n flimkit -c conda-forge python=3.14
+conda activate flimkit
+pip install "flimkit[gui]"
+```
+
+With uv:
+
+```bash
+uv venv --seed --python 3.14 flimkit-env
+source flimkit-env/bin/activate      # Windows: flimkit-env\Scripts\activate
+uv pip install "flimkit[gui]"
+```
+
+`--seed` puts pip into the environment. uv leaves it out by default, and
+`install.py` calls pip, so without it `python install.py` fails. Once the
+environment is active, every `pip install` below also works as
+`uv pip install`.
+
+FLIMKit and all of its dependencies come from PyPI as wheels, so neither tool
+gets you a different or better install. The differences are around it:
+
+- uv is a single binary, installs a lot faster than pip, and downloads Python
+  3.14 itself if you don't have it.
+- A uv environment is a folder where you created it, and you activate it by
+  path. A conda environment has a name and can be activated from anywhere.
+- If you already use conda, or a shared machine or cluster provides it, stay
+  with conda. There is nothing to gain from adding a second tool.
 
 #### From PyPI
 
@@ -193,6 +232,7 @@ can give you depends on the platform:
 | Apple Silicon | `pip install "flimkit[mlx]"` | MLX on Metal, the fastest path on a Mac |
 | Apple Silicon or Intel Mac | `pip install "flimkit[torch]"` | PyTorch MPS |
 | Linux, NVIDIA | `pip install "flimkit[torch]"` | CUDA. PyPI's Linux wheel pulls the CUDA runtime itself |
+| Any, NVIDIA | `pip install "flimkit[cuda]"` | numba-cuda, which runs the free-τ per-pixel fit on the GPU. Add it to `[torch]`, it does not replace it |
 | Windows, NVIDIA | see below | pip alone gives CPU only |
 | AMD, ROCm | see below | not on PyPI at all |
 
@@ -215,6 +255,37 @@ you want the terminal CLIs at the repository root, `fit_cli.py`,
 python install.py --dev      # also installs PyInstaller and test requirements
 python install.py --dry-run  # preview commands without executing
 ```
+
+#### Updating a clone
+
+```bash
+python update.py             # pull the latest code, then rerun install.py
+python update.py --dry-run   # show what would happen without changing anything
+python update.py --dev       # pass --dev on to install.py
+python update.py --force     # rerun install.py even with nothing to pull
+```
+
+If `dist/` holds an app you built with `build_and_sign.py`, `update.py`
+rebuilds it after pulling. `--app-path` then copies the new build over the copy
+you open, and `--no-rebuild` skips it. Rebuilding needs PyInstaller, from
+`python install.py --dev`, and stops if that app is running.
+
+```bash
+python update.py --app-path /Applications/FLIMKit.app
+python update.py --rebuild   # rebuild even when there was nothing to pull
+```
+
+`--release` and `--dev-release` leave the clone alone and replace the app at
+`--app-path` with the latest build from GitHub, the same download as the
+button in the app ([Updating the app](#updating-the-app)).
+
+Run it with the Python from your FLIMKit environment, so the requirements go
+into the right place. It only fast-forwards: with uncommitted changes to
+tracked files, or with local commits that the remote doesn't have, it stops
+and changes nothing. If a separate installed copy of flimkit sits in that
+environment, which would be imported in place of the clone, it is reinstalled
+from the clone. It needs `git` on the PATH, and works the same on macOS, Linux
+and Windows.
 
 ### Validate Installation
 
@@ -354,10 +425,11 @@ Expert Settings opens a dialog shared by the single FOV and tile pipelines. When
 | Align measured IRF peak to the decay rising edge | For a scatter PTU or `.pck` recorded in a separate acquisition, whose time zero won't match the sample's. |
 | Fit window start / end (ns) | The part of the decay that is fitted. Blank lets FLIMKit choose from the IRF onset and the end of the period. |
 | Exclude bands (ns) | Stretches of the decay to leave out, such as a reflection peak, written `7.2-8.8` or `7.2-8.8,11.0-11.5` ([Fit window and exclusion bands](#fit-window-and-exclusion-bands)). |
-| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. |
+| Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. The [accelerator plugin](#fit-backends) can speed it up a lot, but nothing needs it. |
 | Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
 | Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
 | Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
+| Bootstrap errors / resamples | On by default, with 25 resamples. Refits the summed decay 25 times on resampled copies of the data to measure the ± on each lifetime ([Parameter uncertainties](#parameter-uncertainties)). It adds about 35 s to a 1-exponential fit and a minute to a 3-exponential one, so untick it for quick trial fits. |
 | Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |
 
 For `Ado_1.ptu` I left everything at the defaults until [Step 7](#step-7-full-fit-and-binning).
@@ -405,15 +477,20 @@ Fit Summary tab, row by row:
 | Row | Meaning |
 |---|---|
 | τ1, τ2, τ3 | Component lifetimes from the summed fit, in ns. |
+| τ1 ± (1σ), τ2 ± (1σ), τ3 ± (1σ) | Standard error of each lifetime from the fit curvature, in ns. See [Fit Diagnostics](#fit-diagnostics). |
+| τ1 ± (bootstrap), ... | Standard deviation of each lifetime over the bootstrap refits. Trust this one over the curvature error when they disagree. |
 | α1, α2, α3 | Component amplitudes, in counts. |
 | f1, f2, f3 (amp frac) | Amplitude fractions, αᵢ / Σα. |
 | τ_mean (amp-weighted) | Σαᵢτᵢ / Σαᵢ. Weighted towards the short, high-amplitude components (1.125 ns here). |
 | τ_mean (int-weighted) | Σαᵢτᵢ² / Σαᵢτᵢ. Weighted towards the long components, closer to what a phasor or a mean arrival time gives (2.834 ns here). |
+| τ_mean ± (1σ) / ± (bootstrap) | Error on each mean lifetime, from the curvature and from the bootstrap. |
+| Bootstrap resamples | How many resampled refits the bootstrap errors came from. |
 | Background (fitted) | Constant offset per bin. |
 | IRF shift | How far the IRF was moved to match the decay, in bins (0.913 bins, about 88 ps). |
 | IRF σ (broadening) | Extra Gaussian width. 0 unless a broadening IRF method is used. |
 | IRF FWHM (eff.) | Effective IRF width after any broadening. |
 | χ²_r(tail) Neyman / Pearson | Reduced χ² over the tail of the decay, kept for comparison with LAS X. See [Fit Diagnostics](#fit-diagnostics). |
+| ⚠ rows | A lifetime the data can't pin down: more than 10% error, or two lifetimes correlated beyond \|r\| = 0.95. |
 
 Running the same fit twice gives identical numbers, since both optimisers are seeded. I refitted Ado_1 from a project folder in [Step 13](#step-13-work-from-a-project-folder) and every value matched to the last digit.
 
@@ -502,6 +579,7 @@ Export Images..., under the Fit Summary table, saves the images shown in the pre
 | Include scale bar (µm) in the image | Draws a µm scale bar in the bottom right corner of the PNGs. The pixel size comes from the file, 0.189 µm for `Ado_1.ptu`, so the bar was 20 µm. A file with no pixel size gets no bar, and the export says so when it finishes. |
 | Save colour scale bar as a separate PNG | Writes `<scan>_lifetime_colorbar.png` and `<scan>_intensity_colorbar.png`, the colour scales from the preview with their values, to place beside the images in a figure. |
 | Include ROI annotations | Draws the regions on the images. |
+| Phasor plot and cursor image as PNG | Writes `<scan>_phasor.png`, the phasor histogram on the universal semicircle with the cursors, and `<scan>_phasor_image.png`, the image coloured by cursor. Both carry a legend giving each cursor's pixel count and median τφ. It is drawn from the saved `<file>_phasor.npz` with its filter, so the box is greyed out until the file has been through Phasor Analysis. |
 | PNG | The images as displayed in the preview: the lifetime map with the FLIM min, max, gamma, colormap and τ weighting, and the intensity image with its own min, max and colormap. For slides and quick looks. |
 | OME-TIFF | `<scan>_lifetime.ome.tiff` as 32-bit floats in ns, with unfitted pixels left as NaN, and `<scan>_intensity.ome.tiff` as 32-bit photon counts. The pixel size goes into the OME metadata when the file carries one. These are the ones to measure from in Fiji/ImageJ. |
 | OME-Zarr | One compressed store named after the scan, each image a channel ([OME-Zarr export](#ome-zarr-export)). |
@@ -572,6 +650,8 @@ The dialog shows the model, IRF, lifetime bounds and display scales it will copy
 Clicking Ado_2 afterwards reloads its saved fit, residual plot included. The residuals are worked out from the saved decay and fitted curve. A session saved without the fitted curve has it rebuilt from the saved lifetimes, amplitudes, IRF shift and width and background, which gives back the same curve to rounding error.
 
 ![Ado_2 reopened from the project](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/guide/25_project_reopen.jpg)
+
+Once two or more single-FOV files in the project have a fit, Export all... under the list exports them in one go. It has the same image, rendering and format options as the export dialog, and writes every file into one folder (`exports` in the project by default), each named after its scan. Each file is exported with its own saved display settings and ROIs. Two more boxes add each file's ROIs as `<scan>_all_rois.geojson` and its fit summary table as `<scan>_fit_summary.txt`, and a third adds the phasor plot and cursor image of every file that has a phasor session. A file with no ROIs gets no GeoJSON and a file with no phasor session gets no phasor PNGs, and the dialog at the end says which. Only fitted files are listed, so a file that has a phasor session but no fit isn't exported.
 
 ### Step 14: Fit a z-stack
 
@@ -644,6 +724,7 @@ Files FLIMKit writes:
 | `<file>_phasor.npz` | Phasor mode, automatically, or Save session | Calibrated G and S before filtering, the mean intensity, frequency, the cursors (ellipses and polygons), their size and the filter applied. Restored when the file is loaded again. |
 | `<scan>_intensity.png`, `<scan>_lifetime.png`, `<scan>_summed_decay.png` | Export Images..., PNG | The images as displayed, for slides. |
 | `<scan>_intensity_colorbar.png`, `<scan>_lifetime_colorbar.png` | Export Images..., PNG, with the colour scale bar ticked | The preview's colour scales with their values. |
+| `<scan>_phasor.png`, `<scan>_phasor_image.png` | Export Images... or Export all..., with the phasor box ticked | The phasor plot with its cursors, and the image coloured by cursor, each with a legend of cursor pixel counts and median τφ. |
 | `<scan>_intensity.ome.tiff`, `<scan>_lifetime.ome.tiff` | Export Images..., OME-TIFF | Intensity as 32-bit photon counts, lifetime as 32-bit floats in ns with NaN where nothing was fitted, and the pixel size when known. |
 | `<prefix>_*.tif` | Fits from `fit_cli.py`, batch, z-stack, timelapse, stitch and tile fits | The intensity and lifetime maps, with the pixel size in the TIFF resolution tags, scaled for binning. |
 | `<scan>.ome.zarr` | Export Images..., OME-Zarr | One compressed store, each image a channel, the fit summary in the metadata. |
@@ -909,6 +990,7 @@ python fit_cli.py [OPTIONS]
 | `--de-maxiter INT` | DE maximum iterations (default: 5000) |
 | `--workers INT` | CPU cores for DE (-1 = all; auto-limited to 1 in compiled app) |
 | `--no-polish` | Skip LM polish step after DE |
+| `--bootstrap INT` | Resampled refits for the bootstrap ± errors (default: 25, 0 turns them off) |
 | `--cost-function {poisson,chi2}` | Cost function (default: `poisson`) |
 | `--fit-start-ns FLOAT` | Fit window start in ns (default: auto from IRF onset) |
 | `--fit-end-ns FLOAT` | Fit window end in ns (default: auto) |
@@ -1097,6 +1179,10 @@ save_session('session.npz',
              cursors=state['cursors'], params=state['params'])
 
 sess = load_session('session.npz')
+
+# Save a session's phasor plot and cursor image as PNGs
+from flimkit.phasor.export import savePhasorPlots
+savePhasorPlots(load_session('data_phasor.npz'), 'exports', 'data')
 ```
 
 #### PTU File Reading
@@ -1264,6 +1350,51 @@ The fixed-model expectation is one. Parameter fitting and data-selected windows
 can introduce a smaller additional shift, so this diagnostic is not a classical
 chi-square p-value.
 
+#### Parameter uncertainties
+
+Every summed fit (reconvolution, tail and distribution) reports a 1σ standard
+error for each lifetime, amplitude and amplitude fraction, both mean lifetimes,
+the IRF shift and the fitted background, in fields ending `_err`. They come from
+the curvature of the fit at its solution. The model's derivatives over the fit
+window, weighted by the Poisson variance of each bin, give the Fisher
+information, and its inverse is the covariance. A parameter sitting on one of
+its bounds is treated as fixed and has no error. `tau_corr` holds the
+correlation between the lifetimes.
+
+On ATTO488 (2.46 million photons) the tail fit gives 4.187 ± 0.0034 ns, where
+SymPhoTime 64's bootstrap gives 4.189 ± 0.0029 ns. Over 20 simulated
+1-exponential decays (τ = 2.5 ns, 200,000 photons) the predicted error was
+0.0061 ns and the spread of the fitted values was 0.0057 ns. For 2-exponential
+decays (3.0 and 0.8 ns) the prediction was about 1.4 times the spread, so it errs
+large there.
+
+These are local estimates. They can't see a different solution elsewhere that
+fits just as well, so for a 3-exponential fit they are a lower bound on the real
+uncertainty.
+
+The bootstrap doesn't have that problem. It draws a new Poisson count for every
+bin of the measured decay, refits with the same settings and fit window, and
+repeats (25 times by default, seeded so the same data gives the same errors).
+The spread of the refitted lifetimes is the error, and the 16th and 84th
+percentiles give a range that doesn't have to be symmetric. The summary holds
+them as `taus_ns_boot_err`, `taus_ns_boot_lo` and `taus_ns_boot_hi`
+(`tau_centers_ns_...` for a distribution fit). The GUI, `fit_cli.py` and the
+guided terminal UI run it by default for single FOV, stitched and ROI fits.
+From Python it is off unless you pass `bootstrap=25` to `fit_summed`,
+`fit_summed_tail` or `fit_summed_dist`. Batch, timelapse and z-stack fits don't
+run it.
+
+For a synthetic 3-exponential decay (4.06, 1.36 and 0.71 ns, one million
+photons) fitted 16 times with fresh noise, τ2 scattered by 51% and τ3 by 24%.
+On one of those decays the curvature errors were 5.8% and 26%, and the bootstrap
+gave 24% and 33%, with both true values inside its 16th to 84th percentile
+range. On a 1-exponential decay the two agree (both 0.1%), and on ATTO488 the
+bootstrap gives ±0.0038 ns against SymPhoTime 64's ±0.0029 ns.
+
+A lifetime with more than 10% relative error, or two lifetimes correlated beyond
+|r| = 0.95, adds a ⚠ row to the Fit Summary and a warning to the terminal
+output. When the bootstrap has run, these use its errors and correlations.
+
 ---
 
 ## Module Reference
@@ -1395,6 +1526,9 @@ Primary per-pixel output: `tau_mean_amp` = Σ(fracᵢ × τᵢ) - amplitude-weig
 
 #### `interactive.py`
 - **`phasor_cursor_tool(real_cal, imag_cal, mean, frequency, ...)`** - interactive phasor cursor widget. Works in Jupyter (ipywidgets) and standalone scripts (matplotlib.widgets). Click-to-place elliptic cursors, adjustable radius/angle, per-cursor τ_φ maps, two-component decomposition, Undo/Peaks/Export/Save.
+
+#### `export.py`
+- **`savePhasorPlots(session, output_dir, stem, min_photons=0.01, dpi=150)`** - write `<stem>_phasor.png` (the phasor histogram on the semicircle with the cursors) and `<stem>_phasor_image.png` (the image coloured by cursor), each with a legend of cursor pixel counts and median τφ. `session` is the dict `load_session` returns; its saved filter is re-applied. A point measurement gets only the phasor plot. Returns the paths written, and raises `ValueError` when no pixel reaches `min_photons`.
 
 #### `peaks.py`
 - **`find_phasor_peaks(real_cal, imag_cal, mean, frequency, ...)`** - automatic peak detection on 2-D phasor histograms via Gaussian smoothing and local maxima detection
@@ -1600,19 +1734,47 @@ The compiled app bundles whatever GPU libraries are present on the **build machi
 
 ### Development builds
 
-Every push to `main` that touches the code builds the app again as FLIMKitDEV
-and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
+New work lands on the `dev` branch first, and `dev` is merged into `main` for
+each release. Every push to `dev` that touches the code builds the app again as
+FLIMKitDEV and publishes it on the [Releases](https://github.com/FLIMKit/FLIMKit/releases)
 page as a pre-release tagged `dev-YYYY.MM.DD`, with the documentation PDF as it
-stood at that commit. It is not a release: nothing goes to PyPI, and the update
-check ignores it. A second push on the same day replaces that day's build.
+stood at that commit. It is not a release: nothing goes to PyPI, and a released
+FLIMKit is never offered it. A second push on the same day replaces that day's
+build.
 
 `FLIMKitDEV-macos.zip`, `FLIMKitDEV-windows.zip` and `FLIMKitDEV-linux.zip`
 unzip to an app named FLIMKitDEV, so it can sit beside the released FLIMKit. Its
 version reads as the last release plus the date, for example
-`0.13.8+dev.2026.09.30`. Both share the settings in `~/.flimkit`.
+`0.13.8+dev.2026.09.30`, and the window title and About box say FLIMKitDEV with
+that version, so a running dev build can't be mistaken for a release. Both share the settings in `~/.flimkit`.
 
 A push that changes `flimkit/_version.py` is a release, so the version tag
-builds it instead.
+builds it instead. Pushing to `main` builds nothing on its own; a release is
+built from its version tag.
+
+### Updating the app
+
+Help > Check for Updates shows a Download and install button when a newer build
+is on GitHub. A released FLIMKit is offered the latest release, and FLIMKitDEV
+the latest dev build. It downloads the zip for your platform (337 MB for macOS
+at 0.13.8), puts the new app where the running one is, and offers to restart.
+The old copy is kept until the new one is in place, so a failed download or a
+full disk leaves FLIMKit as it was.
+
+It downloads the build GitHub made, which carries the GPU backends of GitHub's
+machines ([GPU acceleration in the compiled app](#gpu-acceleration-in-the-compiled-app)).
+If you built the app yourself to get your GPU, update the clone and rebuild
+instead:
+
+```bash
+python update.py --rebuild --app-path /Applications/FLIMKit.app
+```
+
+On macOS, an app opened straight from the Downloads folder runs from a
+temporary read-only copy and cannot replace itself. Move it into Applications,
+or any other folder, first. On Windows the old `.exe` can't be deleted while it
+runs, so it is left as `FLIMKit.exe.old` and removed the next time FLIMKit
+starts.
 
 ### Documentation PDF
 
@@ -1642,7 +1804,7 @@ Machine IRFs are stored in `~/.flimkit/machine_irf/` (created automatically). Th
 
 ## Plugins
 
-A plugin adds something to FLIMKit without changing FLIMKit itself: a Tools menu entry, a button in the ROI panel, a file format, a phasor filter, or a service that starts with the app. FLIMKit's own tools are registered the same way, so turning plugins off entirely also empties the Tools menu.
+A plugin adds something to FLIMKit without changing FLIMKit itself: a Tools menu entry, a button in the ROI panel, a file format, a phasor filter, a fit backend, or a service that starts with the app. FLIMKit's own tools are registered the same way, so turning plugins off entirely also empties the Tools menu.
 
 These add-ons are maintained alongside FLIMKit, each with its own page:
 
@@ -2221,6 +2383,35 @@ def mine(real, imag, sigma=1.0):
 
 The filter is then usable anywhere `gaussian`, `median` and `wavelet` are: the Phasor Analysis filter list, saved phasor sessions, the bridge, and `flimkit.phasor.filters.phasor_filter_methods()`. Only the keyword arguments your function declares are passed to it, out of `mean`, `sigma`, `size`, `wavelet`, `level` and `threshold_mode`. If it declares `sigma` or `size`, the Phasor Analysis panel shows that box when your filter is selected. The three built-in methods cannot be overridden.
 
+### Fit backends
+
+A plugin can take over the per-pixel fits with its own compiled code, for example a C or CUDA library loaded with `ctypes`. FLIMKit's MLX, CUDA, MPS and ROCm backends are the same kind of object, so a plugin backend gets exactly the arguments they do:
+
+```python
+from flimkit.plugins import fit_backend
+
+
+@fit_backend('my_c', 'My C kernels', priority=100)
+def make_backend():
+    lib = load_my_library()          # None when it is not built for this machine
+    return None if lib is None else MyBackend(lib)
+```
+
+The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. Accept `**kwargs` on each method, so arguments added later do not break your backend.
+
+You do not have to cover every fit. A method that is missing, raises `NotImplementedError` or returns `None` hands that fit back to FLIMKit, which tries the built-in GPU backend your backend displaced and then the CPU. So a backend that only does free-τ fits, or only the simple case without a fit window, is fine.
+
+How one is chosen:
+
+- With `auto`, the default, add-on backends are tried first, lowest `priority` first, and the first one whose factory returns an object is used. Installing one is a deliberate act, so it goes ahead of the built-ins.
+- For a free-τ fit, an add-on backend also goes ahead of FLIMKit's numba fit. If it declines, numba runs before any built-in GPU backend, as it would without the add-on.
+- A factory that raises is reported in the Progress log and skipped.
+- `FLIMKIT_FIT_BACKEND` overrides `auto`: an add-on id, a built-in (`mlx`, `cuda`, `mps`, `rocm`), or `cpu` for no backend at all. Use it to compare an add-on against the built-ins without uninstalling it, or to pin one for a published analysis.
+
+Compiled code cannot be imported from a wheel dropped into `~/.flimkit/plugins/`, since Python does not load `.so`, `.dylib` or `.pyd` files from a zip. Ship the plugin as a folder instead, with the shared library inside it next to `__init__.py`. FLIMKit loads a folder from disk, so `ctypes.CDLL` can open a path next to `__file__`, and this works in the compiled app as well.
+
+Do not build the library with OpenMP. PyTorch carries its own OpenMP runtime, a second one in the same process aborts it with `OMP: Error #15`, and that is an abort rather than an exception, so neither your plugin nor FLIMKit can catch it. The order does not help: whichever runtime initialises second is the one that dies, and `get_backend` imports the built-in backends before it loads any add-on. `KMP_DUPLICATE_LIB_OK=TRUE` silences it, and the OpenMP documentation says it may crash or silently return wrong results, so it has no place in a fit. Thread the kernel with pthreads, or `CreateThread` on Windows. On the worked example that costs about 8 per cent against the OpenMP build and returns bit-identical amplitudes. [flimkit-accelerator-plugin](https://github.com/FLIMKit/flimkit-accelerator-plugin) is a worked example: a C fixed-τ kernel, its ctypes wrapper, and a `build.py` that compiles it and copies the folder into place.
+
 ### Running at startup
 
 A plugin that needs to be doing something from the moment FLIMKit opens registers a startup callback:
@@ -2300,7 +2491,7 @@ Start with `Help > Plugins...` ([Checking what loaded](#checking-what-loaded)) a
 
 ### It is not in the list at all
 
-- **Installed into another environment.** The package has to be in the Python FLIMKit runs from. Check from the same terminal you launch FLIMKit from, for example `python -c "import flimkit_web_ui; print('ok')"`. With conda, activate the FLIMKit environment first.
+- **Installed into another environment.** The package has to be in the Python FLIMKit runs from. Check from the same terminal you launch FLIMKit from, for example `python -c "import flimkit_web_ui; print('ok')"`. With conda or uv, activate the FLIMKit environment first.
 - **User plugins are off.** A file in `~/.flimkit/plugins/` is ignored until `Load from ~/.flimkit/plugins` is ticked in Preferences, and the change takes effect on the next start.
 - **Its name starts with `_` or `.`.** Those files are skipped.
 - **It is disabled.** A plugin unticked in `Help > Plugins...` is listed in `plugins.disabled` in `~/.flimkit/config.json`.
@@ -2436,7 +2627,13 @@ Right-click → Open on first launch. After that it should run normally.
 Restart the app, since a newly built default is picked up at startup, or set it in File > Preferences... > Files, which applies at once.
 
 **Per-pixel fitting is very slow**  
-That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed. `--free-tau-perpixel` with n_exp ≥ 2 is the exception: the backend prepares the batch and then runs SciPy per pixel on the CPU, so a GPU buys almost nothing there. Measured on an RTX A2000, 436.7s against 460.7s for 16,384 pixels, where the fixed-tau kernel is 9x and the distribution scan 22x.
+That's expected for large FOVs on CPU. Try increasing `--binning` to aggregate pixels before fitting, or switch to summed-only mode if you don't need spatial maps. If you have a supported GPU (Apple Silicon, NVIDIA, AMD) and ran `python install.py`, GPU acceleration is detected and used automatically, no extra flags needed.
+
+`--free-tau-perpixel` with n_exp ≥ 2 does not go through those GPU backends. It runs a numba Levenberg-Marquardt, on the CPU everywhere and on an NVIDIA GPU through numba.cuda when numba-cuda is installed. On real data that is 140 to 150x faster than the SciPy-per-pixel loop it replaced on a 10-core M4. A 4-thread PC with an RTX A2000 fits 3-component pixels at 76 µs/px on the GPU against 274 µs/px on its CPU. The tail model, a time-varying background, pile-up in the model and more than three components still run SciPy per pixel, as do `FLIMKIT_NUMBA_FREETAU=0` and a numba that will not load. `FLIMKIT_NUMBA_CUDA=0` keeps the fit on the CPU.
+
+Free τ can be accelerated considerably further by [flimkit-accelerator-plugin](https://github.com/FLIMKit/flimkit-accelerator-plugin), an optional add-on with C and CUDA fit backends. It is not required: without it the numba fit above runs, and the fitted values are the same kind of answer either way. Install it, and with `auto` its backend is tried before numba (see [Fit backends](#fit-backends)). `FLIMKIT_FIT_BACKEND=cpu` turns it off again.
+
+FLIMKit asks numba for its `workqueue` threading layer unless `NUMBA_THREADING_LAYER` is already set. numba's OpenMP layer aborts the process with `OMP: Error #15` when PyTorch has already loaded its own OpenMP runtime, which happens as soon as anything touches cell masking or a torch GPU backend. The two layers fit 8,192 pixels in the same time here, 6.2 against 6.3 µs/px, so this costs nothing measurable.
 
 The per-pixel GPU fit works in blocks, and `FLIMKIT_GPU_BLOCK_BYTES` sets the budget for one block in bytes. The default is 32 MB on CUDA and ROCm and 256 MB on MLX, and either way it is clamped to half of the free device memory. The CUDA default came off an RTX A5000, where anything above 32 MB costs a flat 2x because the card has 6 MB of L2 and the fast region is where the basis and a block stay resident. It does not generalise: an RTX A2000, with less L2, shows no cliff at all and is about 10 per cent slower at 32 MB than at 256 MB. Every budget returns identical lifetimes, so this is speed only.
 

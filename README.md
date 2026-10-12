@@ -36,12 +36,28 @@ to every release.
 On macOS the app is self-signed, so the first launch needs right-click then
 Open. A double-click will be refused.
 
+To update it later, Help > Check for Updates downloads the new build and swaps
+it in place. On macOS, move the app out of Downloads first.
+
 This route gets the desktop application only. Everything below is for scripting,
 the terminal, or GPU fitting.
 
 ### From PyPI
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
+
+Make an environment first, with conda or uv:
+
+```bash
+conda create -n flimkit -c conda-forge python=3.14 && conda activate flimkit
+# or
+uv venv --seed --python 3.14 flimkit-env && source flimkit-env/bin/activate
+```
+
+With uv, `uv pip install` works in place of `pip install` below. `--seed` adds
+pip, which `install.py` needs. The
+[installation docs](https://github.com/FLIMKit/FLIMKit/wiki/Requirements-and-Installation)
+cover Windows and which of the two to pick.
 
 For analysis in scripts, notebooks and the terminal:
 
@@ -68,6 +84,11 @@ For development work (PyInstaller + test dependencies):
 ```bash
 python install.py --dev
 ```
+
+To update a clone later, `python update.py` pulls the latest code and reruns
+`install.py`. It also rebuilds an app you built into `dist/`, and
+`--app-path /Applications/FLIMKit.app` copies that build over the one you open.
+`--dry-run` shows what it would do without changing anything.
 
 ## Docker / TrueNAS SCALE
 
@@ -227,7 +248,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 
 `python install.py` detects your hardware and installs the right backend automatically. No extra flags needed at runtime.
 
-**Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU - it's fast enough not to matter.
+**Limitations:** `--free-tau-perpixel` with two or more components prepares the batch on the GPU but fits each pixel with SciPy on the CPU, so a GPU gains little there. `fit_summed` (single global fit) is always CPU, and fast enough not to matter.
 
 **Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
 

@@ -4,8 +4,8 @@ import sys
 import subprocess
 import platform
 from pathlib import Path
-from flimkit._version import __version__
-APP_NAME = "FLIMKit"
+from flimkit._version import __version__, app_name
+APP_NAME = app_name
 MAIN_SCRIPT = "main.py"
 VERSION = __version__
 

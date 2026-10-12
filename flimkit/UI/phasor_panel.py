@@ -892,7 +892,6 @@ class PhasorViewPanel:
             messagebox.showwarning('Empty Selection',
                                    'The current cursor(s) select no valid pixels.')
             return
-
         def task(progress_callback=None, cancel_event=None):
             import numpy as _np
             from flimkit.formats import FLIMFile
@@ -940,6 +939,7 @@ class PhasorViewPanel:
                 tau_min_ns = params['tau_min'],
                 tau_max_ns = params['tau_max'],
                 cost_function = params['cost_function'],
+                bootstrap = params.get('bootstrap', 0),
             )
             if progress_callback:
                 progress_callback(4, 4)
@@ -955,7 +955,6 @@ class PhasorViewPanel:
                 'summary':     summary,
                 'n_exp':       params['n_exp'],
             }
-
         def on_done(result):
             if result is None:
                 return
