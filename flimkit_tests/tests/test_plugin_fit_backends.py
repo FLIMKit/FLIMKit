@@ -138,7 +138,7 @@ def _irf():
     return irf / irf.sum()
 
 
-def _fit(backend, free_tau):
+def _fit(backend, free_tau, estimator='nnls'):
     stack = np.stack([np.stack([generate_synthetic_biexp_decay(
         n_bins=N_BINS, tcspc_res=MOCK_TCSPC_RES, tau1_ns=0.5, tau2_ns=3.0,
         a1=0.6, a2=0.4, bg=5.0, peak_counts=3000.0, noise=True)
@@ -147,7 +147,7 @@ def _fit(backend, free_tau):
         stack=stack, tcspc_res=MOCK_TCSPC_RES, n_bins=N_BINS, irf_prompt=_irf(),
         has_tail=False, fit_bg=False, fit_sigma=False,
         global_popt=np.array([0.5e-9, 3.0e-9, 0.6, 0.4, 0.0]), n_exp=2,
-        min_photons=50, free_tau=free_tau, gpu_backend=backend)
+        min_photons=50, free_tau=free_tau, gpu_backend=backend, estimator=estimator)
 
 
 def test_addon_free_tau_goes_ahead_of_numba():

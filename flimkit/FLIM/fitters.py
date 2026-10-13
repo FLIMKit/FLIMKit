@@ -821,9 +821,12 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                   use_gpu='auto',
                   gpu_backend=None,
                   tvb_profile=None, fit_tvb=False,
-                  fit_model='reconv', fit_t0=False, t0_fixed=0.0):
+                  fit_model='reconv', fit_t0=False, t0_fixed=0.0,
+                  estimator='poisson'):
     ny, nx, _ = stack.shape
     _tail = fit_model == 'tail'
+    if estimator not in ('poisson', 'nnls'):
+        raise ValueError(f'estimator must be poisson or nnls, got {estimator!r}')
     if free_tau:
         n_valid = int((stack.sum(axis=2) >= min_photons).sum())
         if n_valid > _FREE_TAU_WARN_PIXELS:
@@ -890,6 +893,32 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
     if bg_in_model and use_gpu is not False:
         print('  [per-pixel] a modelled background uses the CPU path; the GPU '
               'kernels subtract it before projecting')
+    if estimator == 'poisson' and not free_tau and not _tail and n_exp > 1:
+        _poisson_blocker = ('a time-varying background' if tvb_on
+                            else 'a modelled background' if bg_in_model
+                            else 'pile-up correction' if (correct_pileup and _n_sync_px > 0)
+                            else None)
+        if _poisson_blocker is None:
+            _pb = gpu_backend if gpu_backend is not None else (
+                None if _gpu_backend_cache is _GPU_BACKEND_UNSET else _gpu_backend_cache)
+            if use_gpu is not False and _pb is not None and 'poisson' in getattr(_pb, 'estimators', ()):
+                _pm = _backend_call(
+                    _pb, 'batch_fixed_tau',
+                    stack, A, taus_fixed,
+                    min_photons, correct_pileup, _n_sync_px,
+                    progress_callback,
+                    fit_idx=fit_idx if _windowed else None,
+                    estimator='poisson',
+                    use_fallback=False,
+                )
+                if _pm is not None:
+                    return _pm
+            from .poisson_fit import fitFixedTauPoisson
+            return fitFixedTauPoisson(stack, A, taus_fixed, min_photons,
+                                      progress_callback,
+                                      fit_idx=fit_idx if _windowed else None)
+        print(f'  [per-pixel] {_poisson_blocker} is not part of the Poisson fit, '
+              f'using the projection (estimator nnls)')
     _gpu_windowed_ok = not (_windowed and n_exp == 1 and tvb_on)
     if _windowed and use_gpu is not False and not _tail and n_exp == 1 and tvb_on:
         print(f'  [per-pixel] fit window with a time-varying background is not supported '

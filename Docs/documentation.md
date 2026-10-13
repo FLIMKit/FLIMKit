@@ -428,6 +428,7 @@ Expert Settings opens a dialog shared by the single FOV and tile pipelines. When
 | Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. The [accelerator plugin](#fit-backends) can speed it up a lot, but nothing needs it. |
 | Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
 | Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
+| Earlier projection for fixed tau | Fixed-tau per-pixel fits estimate the amplitudes by Poisson maximum likelihood with a fitted offset. Ticking this restores the earlier route: subtract a background estimate, project onto the basis, clamp negatives at zero. The tail fit, free τ, a time-varying or modelled background and pile-up correction always use the projection. |
 | Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
 | Bootstrap errors / resamples | On by default, with 25 resamples. Refits the summed decay 25 times on resampled copies of the data to measure the ± on each lifetime ([Parameter uncertainties](#parameter-uncertainties)). It adds about 35 s to a 1-exponential fit and a minute to a 3-exponential one, so untick it for quick trial fits. |
 | Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- Fixed-tau per-pixel fits with two or more components estimate the amplitudes by Poisson maximum likelihood with a fitted constant offset, where they used to subtract a background estimate, project onto the basis and clamp negatives at zero. `fitter_version` goes to 25. On a Leica R 142 tile at about 13 photons per pixel the amplitudes correlate with LAS X at 0.99 or better, against 0.54 to 0.86 for the earlier projection, with the same lifetimes and the same IRF in both. On one bi- and one tri-exponential synthetic file thinned to 15 photons per pixel the fraction error is lower for four of the five components. The fitted photon total equals the measured total by construction, so it is not evidence.
+- The earlier projection is still there: tick Earlier projection for fixed tau in Expert Settings, or pass `--estimator nnls`. The tail fit, free-tau fits, the time-varying background, a modelled background and pile-up correction keep the projection and say so when they are used.
+- A fit backend from a plugin sees fixed-tau fits only when the estimator is `nnls`. The Poisson fit runs in numba on the CPU.
+
 ## [0.14.0] - 2026-10-12
 
 ### Added

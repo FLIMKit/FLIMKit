@@ -1169,6 +1169,7 @@ def fit_flim_tiles(
                 tau_min_ns = tau_min_ns,
                 tau_max_ns = tau_max_ns,
                 correct_pileup = getattr(args, 'correct_pileup', False),
+                estimator = getattr(args, 'estimator', 'poisson'),
                 n_sync = getattr(ptu, 'n_sync', None),
                 fit_idx = global_summary.get('fit_idx'),
                 free_tau = getattr(args, 'free_tau_perpixel', False),

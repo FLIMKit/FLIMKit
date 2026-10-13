@@ -2552,6 +2552,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.pileup_in_model = ex['pileup_in_model']
         if 'bg_in_model' in ex:
             a.bg_in_model = ex['bg_in_model']
+        if 'estimator' in ex:
+            a.estimator = ex['estimator']
         if 'align_irf' in ex:
             a.align_irf = ex['align_irf']
         if 'fit_start_ns' in ex:
