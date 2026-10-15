@@ -2398,7 +2398,7 @@ def make_backend():
     return None if lib is None else MyBackend(lib)
 ```
 
-The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. Accept `**kwargs` on each method, so arguments added later do not break your backend.
+The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. A backend that can run the Poisson fixed-τ fit sets `estimators = ('nnls', 'poisson')` and gets `estimator='poisson'` in `batch_fixed_tau`, which is the default; one without that attribute is only asked for the earlier projection, and anything it declines runs in numba. Accept `**kwargs` on each method, so arguments added later do not break your backend.
 
 You do not have to cover every fit. A method that is missing, raises `NotImplementedError` or returns `None` hands that fit back to FLIMKit, which tries the built-in GPU backend your backend displaced and then the CPU. So a backend that only does free-τ fits, or only the simple case without a fit window, is fine.
 
@@ -2670,6 +2670,15 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 
 **photonsfile** - Photonscore LINCam `.photons` (D7) decoding:
 > Hunt, A. and A. Akram. photonsfile. Zenodo. https://doi.org/10.5281/zenodo.21360199
+
+**Poisson maximum-likelihood amplitudes** - the default estimator for fixed-lifetime per-pixel fits, which finds the amplitudes and a constant offset that maximise the Poisson likelihood by the multiplicative expectation-maximisation update. Why a Poisson likelihood for decay counts:
+> Maus, M. et al. (2001). An experimental comparison of the maximum likelihood estimation and nonlinear least-squares fluorescence lifetime analysis of single molecules. *Analytical Chemistry* 73(9), 2078-2086.
+> Kim, J. and Seok, J. (2013). Statistical properties of amplitude and decay parameter estimators for fluorescence lifetime imaging. *Optics Express* 21(5), 6061-6075. https://doi.org/10.1364/OE.21.006061
+> Laurence, T.A. and Chromy, B.A. (2010). Efficient maximum likelihood estimator fitting of histograms. *Nature Methods* 7(5), 338-339.
+
+The update itself:
+> Shepp, L.A. and Vardi, Y. (1982). Maximum likelihood reconstruction for emission tomography. *IEEE Transactions on Medical Imaging* 1(2), 113-122.
+> Lee, D.D. and Seung, H.S. (2000). Algorithms for non-negative matrix factorization. *Advances in Neural Information Processing Systems* 13. With the basis held fixed, their update for the generalised Kullback-Leibler divergence is the one FLIMKit runs.
 
 **Tile stitching** - phase-correlation registration algorithm:
 > Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463-1465. https://doi.org/10.1093/bioinformatics/btp184

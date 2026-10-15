@@ -308,13 +308,22 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. 
 
-Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. This assistance supported implementation, testing, and documentation. Zhen Yuan directed and reviewed the work and remains responsible for the submitted implementations.
+Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. 
 
-FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. FLIMKit's own `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl for the SPCM file-structure documentation and sample `.sdt` files, to ISS for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. 
 
-Thank you to the users who have contributed features and reported problems: to Lin Yangchen (@linyangchen) for the request to accept LAS X calculated-IRF exports as CSV as well as XLSX, and to zhen yuan (@zhenyuan992) for implementing that support, including the delimiter and decimal-comma handling needed for locale-specific exports.
+FLIMKit's original `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+
+Thank you to the users who have contributed features and reported problems! Many features would not exist without you!
+
+## AI Disclosure
+
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the implementation. All scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work. All AI generated content was reviewed, edited and tested on both real and synthetic FLIM data by the author. The author remains responsible for the submitted implementations and their scientific validity.
+
+Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. Zhen Yuan directed and reviewed the work. Both he and Alex Hunt have independently reviewed and tested the AI-assisted contributions to ensure scientific validity and correctness.
+
 
 ## Contact
 
