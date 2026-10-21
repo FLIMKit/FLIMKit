@@ -3,7 +3,7 @@ import glob
 import numpy as np
 import pytest
 from flimkit.formats import FLIMFile, detect_format
-from flimkit.formats.BH.reader import BHFile, read_bh, get_flim_data, get_intensity_image
+from flimkit.formats.BH.reader import BHFile, read_bh, get_flim_data, get_intensity_image, _pixel_size_um
 from .sdt_writer import _write_sdt, _write_sdt_multi, _known_cube
 
 def test_channel_auto_select_brightest(tmp_path):
@@ -99,3 +99,37 @@ def test_real_sample_surface():
     assert set(meta).issuperset({'frequency', 'tcspc_resolution', 'n_bins',
                                  'time_ns', 'dims', 'shape', 'photon_channel'})
     assert int(data.sum()) > 0
+
+def _minfo(image_x, image_size=None):
+    fields = [('image_x', '<i4')]
+    if image_size is not None:
+        fields.append(('minfo_ext', [('image_size', '<f4')]))
+    rec = np.zeros(1, dtype=fields)[0]
+    rec['image_x'] = image_x
+    if image_size is not None:
+        rec['minfo_ext']['image_size'] = image_size
+    return rec
+
+def test_pixel_size_from_image_size():
+    assert _pixel_size_um(_minfo(1024, 17200.0)) == pytest.approx(17200.0 / 1024)
+    assert _pixel_size_um(_minfo(512, 0.0)) is None
+    assert _pixel_size_um(_minfo(512)) is None
+    assert _pixel_size_um(_minfo(0, 100.0)) is None
+
+def test_old_measure_info_has_no_pixel_size(tmp_path):
+    path = tmp_path / 'sample.sdt'
+    _write_sdt(path, _known_cube())
+    data, meta = read_bh(str(path))
+    assert meta['x_pixel_size'] == 0
+    assert meta['tags']['BH_PixelSize_um'] is None
+
+_PIGSKIN = os.path.expanduser('~/Desktop/Validation paper data/pigskin-1024-10-lifint.sdt')
+
+@pytest.mark.skipif(not os.path.exists(_PIGSKIN), reason='pigskin B&H sample not present')
+def test_real_sample_pixel_size():
+    from flimkit.utils.export_png import tag_pixel_size_um, flim_field_area_um2
+    bh = BHFile(_PIGSKIN, verbose=False)
+    assert bh.tags['BH_PixelSize_um'] == pytest.approx(17200.0 / 1024)
+    assert tag_pixel_size_um(bh.tags) == pytest.approx(17200.0 / 1024)
+    assert flim_field_area_um2(bh) == pytest.approx(17200.0 ** 2)
+    bh.close()

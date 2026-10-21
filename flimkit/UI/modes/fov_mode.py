@@ -77,7 +77,6 @@ class FovMode(BaseMode):
                         value=1).pack(side='left', padx=1)
         ttk.Radiobutton(dist_frame, text='2 (bimodal)', variable=self.b.iv_ncomp_dist_fov,
                         value=2).pack(side='left', padx=1)
-        
         tail_note = ttk.Label(fp, text='Tail fit: no IRF used, fitted past the decay peak',
                               foreground='#888')
         def _on_fov_model_change(*_):
@@ -107,13 +106,13 @@ class FovMode(BaseMode):
                         value='summed').pack(side='left', padx=2)
         ttk.Label(mode_row, text='(fast = no FLIM image)',
                   foreground='grey').pack(side='left', padx=(10, 0))
-        ttk.Label(fp, text='Fit window (ns):').grid(row=3, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='τ bounds (ns):').grid(row=3, column=0, sticky='w', **PAD)
         self.b.state.sv_tau_min_fov = tk.StringVar(value=str(_C()['Tau_min']))
         self.b.state.sv_tau_max_fov = tk.StringVar(value=str(_C()['Tau_max']))
         ttk.Entry(fp, textvariable=self.b.sv_tau_min_fov, width=7).grid(row=3, column=1, sticky='w', padx=4)
         ttk.Label(fp, text='to').grid(row=3, column=2)
         ttk.Entry(fp, textvariable=self.b.sv_tau_max_fov, width=7).grid(row=3, column=3, sticky='w', padx=4)
-        ttk.Label(fp, text='ns  (fitting range)', foreground='grey').grid(row=3, column=4, sticky='w')
+        ttk.Label(fp, text='ns  (lifetime search range)', foreground='grey').grid(row=3, column=4, sticky='w')
         ttk.Label(fp, text='Output prefix:').grid(row=4, column=0, sticky='w', **PAD)
         self.b.state.sv_out_fov = tk.StringVar(value='flim_out')
         ttk.Entry(fp, textvariable=self.b.sv_out_fov, width=35).grid(

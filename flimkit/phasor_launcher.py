@@ -28,6 +28,14 @@ def _pick_save_file(title: str, default_name: str) -> str | None:
     return ask_save_path(title, default_name, defaultextension='.npz',
                          filetypes=[('NumPy archive', '*.npz'), ('All files', '*')])
 
+def _cursor_centre(c):
+    if 'center_g' in c:
+        return float(c['center_g']), float(c['center_s'])
+    verts = np.asarray(c.get('vertices', []), dtype=float)
+    if verts.size == 0:
+        return float('nan'), float('nan')
+    return float(verts[:, 0].mean()), float(verts[:, 1].mean())
+
 def save_session(path, *,
                  real_cal,
                  imag_cal,
@@ -37,11 +45,17 @@ def save_session(path, *,
                  params,
                  ptu_file=None,
                  irf_file=None,
-                 display_image=None):
+                 display_image=None,
+                 phasor_filter=None):
+    import json
     n = len(cursors)
-    cursor_g = np.array([c['center_g'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
-    cursor_s = np.array([c['center_s'] for c in cursors], dtype=float) if n else np.array([], dtype=float)
+    centres = [_cursor_centre(c) for c in cursors]
+    cursor_g = np.array([g for g, _ in centres], dtype=float) if n else np.array([], dtype=float)
+    cursor_s = np.array([s for _, s in centres], dtype=float) if n else np.array([], dtype=float)
     cursor_colors = np.array([c['color'] for c in cursors], dtype='U10') if n else np.array([], dtype='U10')
+    cursor_types = np.array([c.get('type', 'ellipse') for c in cursors], dtype='U10') if n else np.array([], dtype='U10')
+    vertices = [[[float(x), float(y)] for x, y in c.get('vertices', [])] for c in cursors]
+    filt = dict(phasor_filter or {})
     save_kw = dict(
         real_cal=real_cal,
         imag_cal=imag_cal,
@@ -50,9 +64,14 @@ def save_session(path, *,
         cursor_g=cursor_g,
         cursor_s=cursor_s,
         cursor_colors=cursor_colors,
+        cursor_types=cursor_types,
+        cursor_vertices=np.array(json.dumps(vertices)),
         param_radius=np.float64(params.get('radius', 0.05)),
         param_radius_minor=np.float64(params.get('radius_minor', 0.03)),
         param_angle_mode=np.array(params.get('angle_mode', 'semicircle')),
+        filter_method=np.array(str(filt.get('method') or 'none')),
+        filter_sigma=np.float64(filt.get('sigma', 1.0)),
+        filter_size=np.int64(filt.get('size', 3)),
         ptu_file=np.array(ptu_file or ''),
         irf_file=np.array(irf_file or ''),
     )
@@ -62,21 +81,37 @@ def save_session(path, *,
     print(f'Session saved → {path}  ({n} cursor(s))')
 
 def load_session(path):
+    import json
     d = np.load(path, allow_pickle=False)
-    cursors = []
     g = d['cursor_g']
     s = d['cursor_s']
     colors = d['cursor_colors']
+    types = d['cursor_types'] if 'cursor_types' in d else np.array(['ellipse'] * len(g))
+    vertices = json.loads(str(d['cursor_vertices'])) if 'cursor_vertices' in d else [[] for _ in range(len(g))]
+    cursors = []
     for i in range(len(g)):
-        cursors.append(dict(
-            center_g=float(g[i]),
-            center_s=float(s[i]),
-            color=str(colors[i]),
-        ))
+        if str(types[i]) == 'poly' and vertices[i]:
+            cursors.append(dict(
+                type='poly',
+                vertices=[(float(x), float(y)) for x, y in vertices[i]],
+                color=str(colors[i]),
+            ))
+        else:
+            cursors.append(dict(
+                type='ellipse',
+                center_g=float(g[i]),
+                center_s=float(s[i]),
+                color=str(colors[i]),
+            ))
     params = dict(
         radius=float(d['param_radius']),
         radius_minor=float(d['param_radius_minor']),
         angle_mode=str(d['param_angle_mode']),
+    )
+    phasor_filter = dict(
+        method=str(d['filter_method']) if 'filter_method' in d else 'none',
+        sigma=float(d['filter_sigma']) if 'filter_sigma' in d else 1.0,
+        size=int(d['filter_size']) if 'filter_size' in d else 3,
     )
     return dict(
         real_cal=d['real_cal'],
@@ -85,6 +120,7 @@ def load_session(path):
         frequency=float(d['frequency']),
         cursors=cursors,
         params=params,
+        phasor_filter=phasor_filter,
         ptu_file=str(d['ptu_file']) or None,
         irf_file=str(d['irf_file']) or None,
         display_image=d['display_image'] if 'display_image' in d else None,

@@ -48,22 +48,36 @@ def _datainfo(did, offset):
 def _attr(key, val):
     return _ld(0x12, _ld(0x0a, key.encode()) + _ld(0x12, val.encode()))
 
+def _append(f, entry, page=16384):
+    start = len(f)
+    begin = True
+    d = entry
+    while len(d) > 0:
+        left = page - len(f) % page
+        if left < 2:
+            f += b'\x00' * left
+        n = min(len(d), page - len(f) % page - 2)
+        h = n | (0x8000 if begin else 0) | (0x4000 if n == len(d) else 0)
+        f += bytes([h & 0xff, h >> 8]) + d[:n]
+        d = d[n:]
+        begin = False
+    return start
+
 def _write_datasets(path, datasets, attrs):
-    logical = bytearray(_header(datasets))
+    f = bytearray()
+    _append(f, _header(datasets))
     offsets = {}
     for did, (name, tc, values) in enumerate(datasets):
-        offsets[did] = len(logical)
-        logical += _data_block(did, values)
-    index_off = len(logical)
+        offsets[did] = _append(f, _data_block(did, values))
     body = bytearray()
     for did in range(len(datasets)):
-        body += _datainfo(did, offsets[did] + 2)
+        body += _datainfo(did, offsets[did])
     for k, v in attrs.items():
         body += _attr(k, v)
-    logical += _ld(0x1a, bytes(body))
-    epi = bytes([0x08]) + _uv(index_off + 2) + _ld(0x12, b'End of D7 Photons Data File')
-    logical += _ld(0x22, epi)
-    path.write_bytes(b'\x00\x00' + bytes(logical))
+    index_off = _append(f, _ld(0x1a, bytes(body)))
+    epi = bytes([0x08]) + _uv(index_off) + _ld(0x12, b'End of D7 Photons Data File')
+    _append(f, _ld(0x22, epi))
+    path.write_bytes(bytes(f))
     return path
 
 _ATTRS = {'/photons/PositionBits': '12', '/photons/TacBits': '12',
@@ -208,3 +222,33 @@ def test_high_dataset_id(tmp_path):
     assert np.array_equal(out['dt'], np.array([1, 2, 3]))
     assert np.array_equal(out['x'], np.array([10, 20, 30]))
     assert np.array_equal(out['y'], np.array([40, 50, 60]))
+
+def test_dual_tdc_streamed_cube(tmp_path):
+    path = tmp_path / 'dual.photons'
+    x = [100, 2200, 300, 4000]
+    y = [400, 500, 3600, 4000]
+    start = [1000, 2000, 3000, 4000]
+    stop = [1500, 2400, 3800, 4100]
+    _write_datasets(path, [
+        ('/photons/x', 5, x),
+        ('/photons/y', 5, y),
+        ('/start/time', 3, start),
+        ('/stop/time', 3, stop),
+    ], {'/photons/PositionBits': '12'})
+    ps = PSFile(str(path), verbose=False, pixels=2, n_bins=4)
+    cube = ps.pixel_stack()
+    assert ps.tac_range == 801
+    assert ps.calib_source == 'dual_tdc'
+    dt = np.array(stop) - np.array(start)
+    xi = (np.array(x) * 2) // 4096; yi = (np.array(y) * 2) // 4096; di = (dt * 4) // 801
+    expect = np.zeros((2, 2, 4), dtype=np.uint32)
+    np.add.at(expect, (yi, xi, di), 1)
+    assert np.array_equal(cube, expect)
+    assert np.array_equal(ps.summed_decay(), expect.sum(axis=(0, 1)).astype(float))
+
+def test_intensity_image_binned_shape(tmp_path):
+    path = tmp_path / 'sample.photons'
+    _sample(path)
+    img, meta = get_intensity_image(str(path), binning=2, pixels=4, n_bins=4)
+    assert img.shape == (2, 2)
+    assert meta['shape'] == (2, 2, 4)

@@ -36,6 +36,7 @@ def check_dependencies():
         'numpy': 'NumPy',
         'scipy': 'SciPy',
         'tifffile': 'TiffFile',
+        'zarr': 'Zarr (OME-Zarr export)',
         'ptufile': 'ptufile (PicoQuant .ptu reading)',
         'sdtfile': 'sdtfile (Becker & Hickl .sdt reading)',
         'phasorpy': 'PhasorPy',
@@ -414,20 +415,26 @@ def check_gpu_backend():
         finally:
             _BackendMixin._scipy_parallel_free_tau_fit = staticmethod(orig_sp)
         n_valid = int((~np.isnan(gpu_maps['tau_mean_amp'])).sum())
-        assert pixel_calls[0] > 0, 'No pixels reached the scipy solver'
-        assert pixel_calls[0] >= n_valid
-        print_success(
-            f'Pixel solver: {pixel_calls[0]} pixels fitted, '
-            f'{n_valid} valid in output'
-        )
-        print_warning(
-            f'Free-tau fitting uses parallel CPU threads (scipy TRF), '
-            f'not {backend_name} GPU hardware'
-        )
-        print_warning(
-            'Fixed-tau fitting uses real GPU matrix ops — '
-            'GPU acceleration is active for that path'
-        )
+        assert n_valid > 0, 'Backend returned no valid pixels'
+        if pixel_calls[0] == 0:
+            print_success(
+                f'Pixel solver: backend fitted all {n_valid} pixels natively '
+                f'(scipy fallback not needed)'
+            )
+        else:
+            assert pixel_calls[0] >= n_valid
+            print_success(
+                f'Pixel solver: {pixel_calls[0]} pixels fitted, '
+                f'{n_valid} valid in output'
+            )
+            print_warning(
+                f'Free-tau fitting uses parallel CPU threads (scipy TRF), '
+                f'not {backend_name} GPU hardware'
+            )
+            print_warning(
+                'Fixed-tau fitting uses real GPU matrix ops — '
+                'GPU acceleration is active for that path'
+            )
         return True
     except Exception as e:
         print_error(f'GPU backend check failed: {e}')

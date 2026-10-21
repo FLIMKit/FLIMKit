@@ -4,8 +4,8 @@ import sys
 import subprocess
 import platform
 from pathlib import Path
-from flimkit._version import __version__
-APP_NAME = "FLIMKit"
+from flimkit._version import __version__, app_name
+APP_NAME = app_name
 MAIN_SCRIPT = "main.py"
 VERSION = __version__
 
@@ -155,6 +155,7 @@ def build_app():
         "--hidden-import", "tkinter",
         "--hidden-import", "tkinter.ttk",
         "--hidden-import", "PIL",
+        "--hidden-import", "PIL._tkinter_finder",
         "--hidden-import", "inquirer",
         "--hidden-import", "readchar",
         "--hidden-import", "blessed",
@@ -167,6 +168,10 @@ def build_app():
         "--hidden-import", "scipy",
         "--hidden-import", "xarray",
         "--hidden-import", "tifffile",
+        "--hidden-import", "zarr",
+        "--hidden-import", "numcodecs",
+        "--collect-submodules", "zarr",
+        "--collect-submodules", "numcodecs",
         "--hidden-import", "ptufile",
         "--hidden-import", "sdtfile",
         "--hidden-import", "openpyxl",

@@ -33,9 +33,12 @@ def _reduce_yxh(arr, dims):
     d = list(dims)
     if arr.ndim != len(d):
         d = d[-arr.ndim:]
+    keep = [i for i, x in enumerate(d) if x in ('Y', 'X', 'H') or arr.shape[i] > 1]
+    arr = arr.reshape([arr.shape[i] for i in keep])
+    d = [d[i] for i in keep]
     drop = tuple(i for i, x in enumerate(d) if x not in ('Y', 'X', 'H'))
     if drop:
-        arr = arr.sum(axis=drop)
+        arr = arr.sum(axis=drop, dtype=np.uint32 if arr.dtype.kind in 'ui' else None)
     d = [x for x in d if x in ('Y', 'X', 'H')]
     return np.transpose(arr, [d.index(x) for x in ('Y', 'X', 'H') if x in d])
 
@@ -102,20 +105,20 @@ class PTUFile:
         self.rec_type = int(self.tags.get('TTResultFormat_TTTRRecType', 0))
         self._total_photons = None
         if self.verbose:
-            print(f"  PTU      : {Path(self.path).name}")
-            print(f"  RecType  : 0x{self.rec_type:08X}")
-            print(f"  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps")
+            print(f'  PTU      : {Path(self.path).name}')
+            print(f'  RecType  : 0x{self.rec_type:08X}')
+            print(f'  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps')
             if self.n_bins_stored > self.n_bins:
-                print(f"             ({self.n_bins_stored} stored, using {self.n_bins} within one laser period)")
-            print(f"  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)")
+                print(f'             ({self.n_bins_stored} stored, using {self.n_bins} within one laser period)')
+            print(f'  Laser    : {self.sync_rate/1e6:.3f} MHz  ({self.period_ns:.3f} ns)')
             if self.is_image:
-                print(f"  Image    : {self.n_x} x {self.n_y} px, {self.n_channels} channel(s)")
+                print(f'  Image    : {self.n_x} x {self.n_y} px, {self.n_channels} channel(s)')
             else:
-                print(f"  Point    : {self.n_channels} channel(s)")
-            print(f"  Records  : {self.n_records:,}  ({self.n_photons:,} photons)")
+                print(f'  Point    : {self.n_channels} channel(s)')
+            print(f'  Records  : {self.n_records:,}  ({self.n_photons:,} photons)')
             if self.n_sync:
-                print(f"  Sync     : {self.n_sync:,} pulses over {self.acq_time_s or 0.0:.1f} s"
-                      f"  ({self.n_photons / self.n_sync:.4f} photons/pulse)")
+                print(f'  Sync     : {self.n_sync:,} pulses over {self.acq_time_s or 0.0:.1f} s'
+                      f'  ({self.n_photons / self.n_sync:.4f} photons/pulse)')
             print(' ')
 
     def close(self):
@@ -156,6 +159,7 @@ class PTUFile:
             self.photon_channel = self._active[pos] if self._active else 0
         else:
             pos = self._ch_pos(channel)
+            self.photon_channel = self._active[pos] if self._active else pos
         decay = _fit_bins(h[pos], self.n_bins).astype(float)
         self._total_photons = int(decay.sum())
         return decay
@@ -181,10 +185,10 @@ class PTUFile:
         if binning > 1:
             cube = _bin_cube(cube, binning)
         self._total_photons = int(cube.sum())
-        return cube.astype(np.uint32)
+        return cube.astype(np.uint32, copy=False)
 
     def pixel_stack(self, channel=None, binning=1):
-        return self.raw_pixel_stack(channel=channel, binning=binning).astype(float)
+        return self.raw_pixel_stack(channel=channel, binning=binning)
 
     def intensity_image(self, channel=None, binning=1):
         return self.raw_pixel_stack(channel=channel, binning=binning).sum(axis=2)

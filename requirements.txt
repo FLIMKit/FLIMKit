@@ -7,6 +7,7 @@ lfdfiles
 lz4>=4.0
 matplotlib==3.10.8
 numba
+numba-cuda[cu12]; sys_platform != "darwin"
 numpy==2.4.2
 opencv-python-headless==4.13.0.90
 openpyxl==3.1.5
@@ -14,7 +15,7 @@ pandas==3.0.1
 Pillow>=10.0.0
 psutil
 phasorpy==0.12
-photonsfile
+photonsfile>=2026.9.29.1
 ptufile
 PyWavelets>=1.4.0
 scipy==1.17.1
@@ -24,5 +25,6 @@ tifffile
 tqdm==4.67.3
 tkinterdnd2>=0.6.2
 xarray==2026.1.0
+zarr>=2.18
 TKinterModernThemes
 sv-ttk>=2.6.1

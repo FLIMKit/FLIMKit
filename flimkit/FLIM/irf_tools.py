@@ -70,13 +70,13 @@ def _extract_landmarks(arr: np.ndarray) -> dict:
 def discover_ptu_xlsx_pairs(folder: str | Path) -> list[tuple[str, Path, Path]]:
     base = Path(folder)
     if not base.exists():
-        raise FileNotFoundError(f"Folder not found: {base}")
+        raise FileNotFoundError(f'Folder not found: {base}')
     pairs: list[tuple[str, Path, Path]] = []
     for ptu_path in sorted(base.glob('*.ptu')):
         if ptu_path.name.startswith('._'):
             continue
         name = ptu_path.stem
-        xlsx_path = base / f"{name}.xlsx"
+        xlsx_path = base / f'{name}.xlsx'
         if xlsx_path.exists() and not xlsx_path.name.startswith('._'):
             pairs.append((name, ptu_path, xlsx_path))
     return pairs
@@ -138,9 +138,9 @@ def build_machine_irf_from_folder(
             output_dir = _DEFAULT_MACHINE_IRF_DIR
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        npy_path = out_dir / f"{output_name}.npy"
-        csv_path = out_dir / f"{output_name}.csv"
-        meta_path = out_dir / f"{output_name}_meta.json"
+        npy_path = out_dir / f'{output_name}.npy'
+        csv_path = out_dir / f'{output_name}.csv'
+        meta_path = out_dir / f'{output_name}_meta.json'
         np.save(npy_path, machine_irf.astype(np.float64))
         np.savetxt(csv_path, machine_irf.astype(np.float64), delimiter=',')
         meta = {
@@ -170,13 +170,13 @@ def build_machine_irf_from_folder(
         'peak_bins_before_alignment': peaks,
     }
     if verbose:
-        print(f"Machine IRF built from {len(pairs)} pairs")
-        print(f"  anchor={align_anchor}, reducer={reducer}, n_bins={common_nbins}")
+        print(f'Machine IRF built from {len(pairs)} pairs')
+        print(f'  anchor={align_anchor}, reducer={reducer}, n_bins={common_nbins}')
         print(f"  landmarks={meta['landmarks']}")
         if out_paths:
             print('  saved:')
             for _, p in out_paths.items():
-                print(f"    {p}")
+                print(f'    {p}')
     return {
         'irf': machine_irf,
         'pairs': pairs,
@@ -188,24 +188,37 @@ def gaussian_irf_from_fwhm(n_bins: int,
                             tcspc_res: float,
                             fwhm_ns: float,
                             peak_bin: int) -> np.ndarray:
-    t   = np.arange(n_bins, dtype=float) * tcspc_res * 1e9
+    t = np.arange(n_bins, dtype=float) * tcspc_res * 1e9
     t0 = peak_bin * tcspc_res * 1e9
     irf = np.exp(-(t - t0)**2 * 4.0 * np.log(2) / fwhm_ns**2)
     return irf / irf.sum()
 
 def irf_from_scatter_ptu(path: str, ptu_ref: PTUFile,
                          channel: int | None = None) -> np.ndarray:
-    scatter = FLIMFile(path, verbose=False)
-    decay   = scatter.summed_decay(channel=channel)
+    kw = {}
+    if str(path).lower().endswith('.photons'):
+        kw['n_bins'] = ptu_ref.n_bins
+        ref_period = getattr(ptu_ref, '_period_ns', None)
+        if ref_period:
+            kw['period_ns'] = ref_period
+    scatter = FLIMFile(path, verbose=False, **kw)
+    ref_res = getattr(ptu_ref, 'tcspc_res', None)
+    irf_res = getattr(scatter, 'tcspc_res', None)
+    if isinstance(ref_res, float) and isinstance(irf_res, float) and ref_res > 0 and irf_res > 0:
+        if not np.isclose(irf_res, ref_res, rtol=1e-3, atol=0.0):
+            raise ValueError(f'IRF file {path!r} has {irf_res * 1e12:.2f} ps bins but the data has '
+                             f'{ref_res * 1e12:.2f} ps bins. Record the IRF with the same TCSPC '
+                             f'settings, or bin the data to match.')
+    decay = scatter.summed_decay(channel=channel)
     s = decay.sum()
     if s == 0 and channel is not None:
         decay = scatter.summed_decay(channel=None)
         s = decay.sum()
         if s > 0:
-            print(f"  Scatter PTU has no photons on channel {channel}; "
-                  f"using auto-detected channel {scatter.photon_channel} instead")
+            print(f'  Scatter PTU has no photons on channel {channel}; '
+                  f'using auto-detected channel {scatter.photon_channel} instead')
     if s == 0:
-        raise ValueError(f"Scatter PTU {path!r} has no photons.")
+        raise ValueError(f'Scatter PTU {path!r} has no photons.')
     n = ptu_ref.n_bins
     if decay.size < n:
         decay = np.concatenate([decay, np.zeros(n - decay.size)])
@@ -213,8 +226,8 @@ def irf_from_scatter_ptu(path: str, ptu_ref: PTUFile,
         decay = decay[:n]
     s = decay.sum()
     if s == 0:
-        raise ValueError(f"Scatter PTU {path!r} has no photons in the first {n} bins.")
-    print(f"  IRF from scatter PTU: {s:,.0f} photons")
+        raise ValueError(f'Scatter PTU {path!r} has no photons in the first {n} bins.')
+    print(f'  IRF from scatter PTU: {s:,.0f} photons')
     return decay / s
 
 def irf_from_pck(path: str, n_bins: int, channel=None) -> np.ndarray:
@@ -280,17 +293,17 @@ def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
     try:
         popt, _ = curve_fit(
             _model, t_fit, c_fit,
-            p0 = [t0_guess, 0.15,  0.05, 0.5,  c_pts.max()],
-            bounds=([t0_guess - 0.5, 0.05, 0.0,  0.05, 0],
-                    [t0_guess + 0.5, 0.5,  2.0,  10.0, c_pts.max() * 2]),
+            p0 = [t0_guess, 0.15, 0.05, 0.5, c_pts.max()],
+            bounds=([t0_guess - 0.5, 0.05, 0.0, 0.05, 0],
+                    [t0_guess + 0.5, 0.5, 2.0, 10.0, c_pts.max() * 2]),
             maxfev=20000
         )
         t0, fwhm, tail_amp, tail_tau, A = popt
     except Exception as e:
-        raise RuntimeError(f"Analytical IRF fit failed: {e}. "
-                           f"Try --irf-xlsx with a higher-count IRF export.") from e
+        raise RuntimeError(f'Analytical IRF fit failed: {e}. '
+                           f'Try --irf-xlsx with a higher-count IRF export.') from e
     tcspc_ns = tcspc_res * 1e9
-    t_full    = np.arange(n_bins, dtype=float) * tcspc_ns
+    t_full = np.arange(n_bins, dtype=float) * tcspc_ns
     irf_full = np.maximum(_model(t_full, t0, fwhm, tail_amp, tail_tau, A), 0.0)
     s = irf_full.sum()
     if s == 0:
@@ -298,22 +311,22 @@ def irf_from_xlsx_analytical(xlsx: dict, n_bins: int, tcspc_res: float,
     irf_norm = irf_full / s
     params = dict(t0_ns=t0, fwhm_ns=fwhm, tail_amp=tail_amp, tail_tau_ns=tail_tau)
     if verbose:
-        print(f"  Analytical IRF fit (FLIM microscope model):")
-        print(f"    t0       = {t0:.4f} ns  (bin {t0/tcspc_ns:.2f})")
-        print(f"    FWHM     = {fwhm*1000:.2f} ps")
-        print(f"    tail_amp = {tail_amp:.4f}")
-        print(f"    tail_tau = {tail_tau:.4f} ns")
+        print(f'  Analytical IRF fit (FLIM microscope model):')
+        print(f'    t0 = {t0:.4f} ns  (bin {t0/tcspc_ns:.2f})')
+        print(f'    FWHM = {fwhm*1000:.2f} ps')
+        print(f'    tail_amp = {tail_amp:.4f}')
+        print(f'    tail_tau = {tail_tau:.4f} ns')
         above = np.where(irf_norm >= irf_norm.max() / 2)[0]
         fwhm_meas = (above[-1] - above[0]) * tcspc_ns if len(above) > 1 else fwhm
-        print(f"    FWHM (measured on grid) = {fwhm_meas*1000:.2f} ps")
-        print(f"    Peak bin = {np.argmax(irf_norm)}")
+        print(f'    FWHM (measured on grid) = {fwhm_meas*1000:.2f} ps')
+        print(f'    Peak bin = {np.argmax(irf_norm)}')
     return irf_norm, params
 
 def irf_from_xlsx(xlsx: dict, n_bins: int, tcspc_res: float) -> np.ndarray:
     if xlsx['irf_t'] is None or xlsx['irf_c'] is None:
         raise ValueError('XLSX does not contain IRF columns.')
     tcspc_ns = tcspc_res * 1e9
-    t_full     = np.arange(n_bins, dtype=float) * tcspc_ns
+    t_full = np.arange(n_bins, dtype=float) * tcspc_ns
     t_pts = np.array(xlsx['irf_t'], dtype=float)
     c_pts = np.array(xlsx['irf_c'], dtype=float)
     c_pts = np.maximum(c_pts, 0.0)
@@ -326,7 +339,7 @@ def irf_from_xlsx(xlsx: dict, n_bins: int, tcspc_res: float) -> np.ndarray:
     return irf_interp / s
 
 def gaussian_irf(n_bins: int, peak_bin: int, fwhm_bins: float) -> np.ndarray:
-    bins  = np.arange(n_bins, dtype=float)
+    bins = np.arange(n_bins, dtype=float)
     sigma = fwhm_bins / 2.3548
     irf = np.exp(-0.5 * ((bins - peak_bin) / sigma)**2)
     return irf / irf.sum()
@@ -372,13 +385,13 @@ def reconstruct_irf_from_decay(decay: np.ndarray,
         n_rising = peak_idx - start_idx
         above = np.where(irf_norm >= irf_norm.max() / 2)[0]
         fwhm = (above[-1] - above[0]) * tcspc_ns if len(above) > 1 else tcspc_ns
-        print(f"  IRF reconstructed from decay rising edge:")
-        print(f"    Peak bin (decay)  = {peak_idx}  →  IRF peak bin = {peak_idx}")
-        print(f"    Rising edge       = {n_rising} bins")
-        print(f"    Bins after peak   = {bap}")
-        print(f"    IRF extent        = bins {start_idx}..{cut_idx}  "
-              f"({cut_idx - start_idx + 1} bins)")
-        print(f"    FWHM (grid)       = {fwhm * 1000:.1f} ps")
+        print(f'  IRF reconstructed from decay rising edge:')
+        print(f'    Peak bin (decay) = {peak_idx}  →  IRF peak bin = {peak_idx}')
+        print(f'    Rising edge = {n_rising} bins')
+        print(f'    Bins after peak = {bap}')
+        print(f'    IRF extent = bins {start_idx}..{cut_idx}  '
+              f'({cut_idx - start_idx + 1} bins)')
+        print(f'    FWHM (grid) = {fwhm * 1000:.1f} ps')
     return irf_norm
 
 def estimate_irf_from_decay_raw(decay, tcspc_res, n_bins,
@@ -395,7 +408,7 @@ def estimate_irf_from_decay_raw(decay, tcspc_res, n_bins,
     total = irf_raw.sum()
     if total == 0:
         raise ValueError('Extracted IRF region has zero counts.')
-    irf_full          = np.zeros(n_bins, dtype=float)
+    irf_full = np.zeros(n_bins, dtype=float)
     irf_full[start:end] = irf_raw / total
     return irf_full
 
@@ -414,8 +427,8 @@ def estimate_irf_from_decay_parametric(decay, tcspc_res, n_bins,
     t_peak_ns = time_ns[peak_bin]
     start_ns = max(0, t_peak_ns - fit_window_width_ns / 2)
     end_ns = min(time_ns[-1], t_peak_ns + fit_window_width_ns / 2)
-    sb        = np.searchsorted(time_ns, start_ns, side='left')
-    eb        = np.searchsorted(time_ns, end_ns,   side='right')
+    sb = np.searchsorted(time_ns, start_ns, side='left')
+    eb = np.searchsorted(time_ns, end_ns, side='right')
     if eb - sb < 3:
         raise ValueError('Fit window too narrow.')
     t_fit = time_ns[sb:eb] - time_ns[sb]
@@ -427,7 +440,7 @@ def estimate_irf_from_decay_parametric(decay, tcspc_res, n_bins,
                              bounds=([0.01, 0], [10.0, np.inf]))
         t0, amp = popt
     except Exception as e:
-        print(f"Parametric fit failed: {e}, falling back to raw extraction.")
+        print(f'Parametric fit failed: {e}, falling back to raw extraction.')
         return estimate_irf_from_decay_raw(decay, tcspc_res, n_bins)
     t_full_ns = time_ns - time_ns[sb]
     irf_full = np.maximum(_irf_parametric(t_full_ns, t0, amp), 0.0)
@@ -441,7 +454,7 @@ def build_full_irf(irf_prompt: np.ndarray,
                    tail_tau_bins: float,
                    n_bins:     int) -> np.ndarray:
     peak_bin = int(np.argmax(irf_prompt))
-    bins     = np.arange(n_bins, dtype=float)
+    bins = np.arange(n_bins, dtype=float)
     tail = np.where(
         bins >= peak_bin,
         tail_amp * np.exp(-(bins - peak_bin) / max(tail_tau_bins, 0.1)),
@@ -451,7 +464,7 @@ def build_full_irf(irf_prompt: np.ndarray,
     s = irf_aug.sum()
     if s > 0:
         irf_aug /= s
-    x_orig      = np.arange(n_bins, dtype=float)
+    x_orig = np.arange(n_bins, dtype=float)
     irf_shifted = np.interp(x_orig - shift_bins, x_orig, irf_aug,
                             left=0.0, right=0.0)
     if sigma_bins > 0.05:
@@ -514,7 +527,7 @@ def compare_irfs(irf_estimated:  np.ndarray,
         bc = float(np.sum(np.sqrt(a * b)))
         return dict(label=label, pearson_r=r, rmse=rmse,
                     overlap_score=max(0.0, 1.0 - rmse), bhattacharyya=bc)
-    m_raw = _metrics(est,         ref, 'raw     (unaligned)')
+    m_raw = _metrics(est, ref, 'raw     (unaligned)')
     m_aligned = _metrics(est_aligned, ref, 'aligned (peak-shift corrected)')
     fwhm_est = _fwhm_ns(est, tcspc_res)
     fwhm_ref = _fwhm_ns(ref, tcspc_res)
@@ -536,7 +549,7 @@ def compare_irfs(irf_estimated:  np.ndarray,
     print(f"  {'FWHM (ns)':<28} {fwhm_est:>12.4f} {fwhm_ref:>12.4f}")
     print(f"  {'Peak position (ns)':<28} {peak_est_ns:>12.4f} {peak_ref_ns:>12.4f}")
     print(f"  {'Peak shift (est − xlsx)':<28} "
-          f"{shift_bins * tcspc_res * 1e9:>+11.4f} ns  ({shift_bins:+d} bins)")
+          f'{shift_bins * tcspc_res * 1e9:>+11.4f} ns  ({shift_bins:+d} bins)')
     print(f"  {'─'*54}")
     for m in (m_raw, m_aligned):
         print(f"  [{m['label']}]")
@@ -546,17 +559,17 @@ def compare_irfs(irf_estimated:  np.ndarray,
         print(f"    {'Bhattacharyya coeff.':<26} {m['bhattacharyya']:>12.4f}")
     bc_a = m_aligned['bhattacharyya']
     if bc_a >= 0.99:
-        print(f"\n  Excellent shape match after alignment (BC={bc_a:.4f})")
-        print(f"    → Use --irf-fwhm with adjusted peak; shape is correct.")
+        print(f'\n  Excellent shape match after alignment (BC={bc_a:.4f})')
+        print(f'    → Use --irf-fwhm with adjusted peak; shape is correct.')
     elif bc_a >= 0.90:
-        print(f"\n  ~ Acceptable shape match after alignment (BC={bc_a:.4f})")
-        print(f"    → Shape is reasonable but consider --xlsx for fitting.")
+        print(f'\n  ~ Acceptable shape match after alignment (BC={bc_a:.4f})')
+        print(f'    → Shape is reasonable but consider --xlsx for fitting.')
     else:
-        print(f"\n  Poor shape match even after alignment (BC={bc_a:.4f})")
-        print(f"    → FWHM or IRF model is wrong. Use --xlsx for fitting.")
+        print(f'\n  Poor shape match even after alignment (BC={bc_a:.4f})')
+        print(f'    → FWHM or IRF model is wrong. Use --xlsx for fitting.')
     if abs(shift_bins) >= 2:
-        print(f"  Peak misaligned by {shift_bins:+d} bins ({shift_bins*tcspc_res*1e12:+.0f} ps) "
-              f"- IRF peak bin estimate may be off.")
+        print(f'  Peak misaligned by {shift_bins:+d} bins ({shift_bins*tcspc_res*1e12:+.0f} ps) '
+              f'- IRF peak bin estimate may be off.')
     plt.rcParams.update({'figure.dpi': 130, 'font.size': 10,
                           'axes.spines.top': False, 'axes.spines.right': False,
                           'text.color': 'black', 'axes.labelcolor': 'black',
@@ -568,25 +581,25 @@ def compare_irfs(irf_estimated:  np.ndarray,
     support = (est > 1e-8) | (ref > 1e-8)
     idx_sup = np.where(support)[0]
     if len(idx_sup):
-        x_lo = max(0,        idx_sup[0]  - 10) * tcspc_res * 1e9
+        x_lo = max(0, idx_sup[0] - 10) * tcspc_res * 1e9
         x_hi = min(n_bins-1, idx_sup[-1] + 10) * tcspc_res * 1e9
     else:
         x_lo, x_hi = t_ns[0], t_ns[-1]
     row_labels = ['Unaligned', 'Peak-aligned']
     for row, (e_plot, m) in enumerate([(est, m_raw), (est_aligned, m_aligned)]):
         diff = e_plot - ref
-        axes[row, 0].plot(t_ns, ref,    'b-',  lw=2,   label='xlsx IRF')
+        axes[row, 0].plot(t_ns, ref,    'b-', lw=2, label='xlsx IRF')
         axes[row, 0].plot(t_ns, e_plot, 'r--', lw=1.8, label='estimated')
         axes[row, 0].set_xlim(x_lo, x_hi)
         axes[row, 0].set_ylabel('Normalised amplitude')
-        axes[row, 0].set_title(f"{row_labels[row]} - linear")
+        axes[row, 0].set_title(f'{row_labels[row]} - linear')
         axes[row, 0].legend(fontsize=8)
         if row == 1:
             axes[row, 0].set_xlabel('Time (ns)')
-        axes[row, 1].semilogy(t_ns, np.clip(ref,    1e-8, None), 'b-',  lw=2)
+        axes[row, 1].semilogy(t_ns, np.clip(ref, 1e-8, None), 'b-', lw=2)
         axes[row, 1].semilogy(t_ns, np.clip(e_plot, 1e-8, None), 'r--', lw=1.8)
         axes[row, 1].set_xlim(x_lo, x_hi)
-        axes[row, 1].set_title(f"{row_labels[row]} - log")
+        axes[row, 1].set_title(f'{row_labels[row]} - log')
         if row == 1:
             axes[row, 1].set_xlabel('Time (ns)')
         axes[row, 2].fill_between(t_ns, diff, where=diff >= 0,
@@ -601,17 +614,17 @@ def compare_irfs(irf_estimated:  np.ndarray,
         if row == 1:
             axes[row, 2].set_xlabel('Time (ns)')
         txt = (f"Pearson r = {m['pearson_r']:.4f}\n"
-               f"BC        = {m['bhattacharyya']:.4f}\n"
-               f"FWHM est  = {fwhm_est:.4f} ns\n"
-               f"FWHM xlsx = {fwhm_ref:.4f} ns")
+               f"BC = {m['bhattacharyya']:.4f}\n"
+               f'FWHM est = {fwhm_est:.4f} ns\n'
+               f'FWHM xlsx = {fwhm_ref:.4f} ns')
         if row == 0:
-            txt += f"\nΔpeak = {shift_bins*tcspc_res*1e12:+.0f} ps ({shift_bins:+d} bins)"
+            txt += f'\nΔpeak = {shift_bins*tcspc_res*1e12:+.0f} ps ({shift_bins:+d} bins)'
         axes[row, 2].text(0.97, 0.97, txt, transform=axes[row, 2].transAxes,
                           va='top', ha='right', fontsize=8, family='monospace',
                           bbox=dict(boxstyle='round,pad=0.3', fc='#f7f7f7', alpha=0.9))
     plt.tight_layout()
-    out = f"{out_prefix}_irf_comparison.png"
+    out = f'{out_prefix}_irf_comparison.png'
     plt.savefig(out, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f"  Saved: {out}")
+    print(f'  Saved: {out}')
     return metrics

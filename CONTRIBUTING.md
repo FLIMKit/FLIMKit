@@ -94,7 +94,7 @@ If the extension is ambiguous (`.tif`, `.json`, `.bin`), add a content sniff in 
 
 ## Pull requests
 
-- Branch from `main`, using a descriptive branch name (`feature/...`, `fix/...`).
+- Branch from `dev`, using a descriptive branch name (`feature/...`, `fix/...`), and open the pull request against `dev`. `main` only takes releases, merged in from `dev`.
 - Keep the pull request focused on one change.
 - Make sure the test suite passes.
 - Describe what you changed and how you verified it. If you could not verify part of it (no sample file for a format, no access to the hardware), say so explicitly rather than implying it was tested.

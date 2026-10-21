@@ -3,7 +3,8 @@ import threading
 import numpy as np
 from flimkit.GPU._base import (_BackendMixin, fit_window, pixel_blocks,
                                gpu_block_bytes, CUDA_BLOCK_BYTES)
-from flimkit.FLIM.fit_tools import (calibrated_chi2, distribution_dof,
+from flimkit.FLIM.fit_tools import (TAU_FIT_UNIT_S, calibrated_chi2,
+                                    calibrated_from_terms, distribution_dof,
                                     estimate_bg, coates_pileup_correction)
 
 _MATMUL_PRECISION_LOCK = threading.Lock()
@@ -38,6 +39,82 @@ class TorchBackend(_BackendMixin):
 
     def __repr__(self):
         return f"TorchBackend(device='{self.device}')"
+
+    def _exact_float(self):
+        return self._torch.float32 if self.device.type == 'mps' else self._torch.float64
+
+    def _estimate_bg_batch(self, flat, valid_mask, pre_gap=5, chunk=32768):
+        torch = self._torch
+        n_pix, n_bins = flat.shape
+        bg = np.zeros(n_pix, dtype=np.float32)
+        wanted = np.flatnonzero(np.asarray(valid_mask, dtype=bool))
+        if wanted.size == 0:
+            return bg
+        dt = torch.float32 if flat.dtype == np.float32 else self._exact_float()
+        cols = torch.arange(n_bins, device=self.device)
+        for first in range(0, wanted.size, chunk):
+            rows = wanted[first:first + chunk]
+            sub = flat[rows]
+            ends = np.maximum(sub.argmax(axis=1) - pre_gap, 0)
+            pre = ends >= 5
+            start = torch.as_tensor(np.where(pre, 0, max(n_bins - 30, 0)), device=self.device)
+            stop = torch.as_tensor(np.where(pre, ends, n_bins), device=self.device)
+            x = torch.as_tensor(sub, dtype=dt, device=self.device)
+            inside = (cols[None, :] >= start[:, None]) & (cols[None, :] < stop[:, None])
+            vals = torch.sort(torch.where(inside, x, torch.inf), dim=1).values
+            count = stop - start
+            lo = vals.gather(1, ((count - 1) // 2)[:, None])[:, 0]
+            hi = vals.gather(1, (count // 2)[:, None])[:, 0]
+            med = torch.where(count % 2 == 1, lo, (lo + hi) / 2)
+            bg[rows] = torch.clamp(med, min=0.0).cpu().numpy()
+        return bg
+
+    def _supports_float64(self):
+        return self.device.type != 'mps'
+
+    def _batched_free_tau(self, raw_valid, bg_valid, weight_valid, irf_array,
+                          tcspc_res, taus_init, tau_min_s, tau_max_s, n_exp,
+                          n_bins, fit_idx):
+        from flimkit.GPU import torch_lm
+        win = fit_window(fit_idx, n_bins)
+        idx = np.arange(n_bins) if win is None else np.asarray(win)
+        n_fit = len(idx)
+        B = raw_valid.shape[0]
+        amp_hi = float(raw_valid.max()) * 10.0
+        p0 = np.concatenate([taus_init / TAU_FIT_UNIT_S,
+                             np.full(n_exp, float(raw_valid.max()) / n_exp)])
+        lo = np.array([float(tau_min_s) / TAU_FIT_UNIT_S] * n_exp + [0.0] * n_exp)
+        hi = np.array([float(tau_max_s) / TAU_FIT_UNIT_S] * n_exp + [amp_hi] * n_exp)
+        taus_out = np.zeros((B, n_exp), dtype=np.float32)
+        amps_out = np.zeros((B, n_exp), dtype=np.float32)
+        chi2r_out = np.full(B, np.nan)
+        chi2c_out = np.full(B, np.nan)
+        valid_b = np.zeros(B, dtype=bool)
+        dof = max(n_fit - 2 * n_exp, 1)
+        per_pixel = 8 * (6 * n_exp * n_bins + 2 * n_exp * n_fit + 4 * n_bins)
+        for first, last in pixel_blocks(B, per_pixel, budget=self.block_bytes()):
+            p, cost, _, num, expected, ok = torch_lm.fit_free_tau(
+                self._torch, self.device,
+                raw_valid[first:last].astype(np.float64),
+                weight_valid[first:last].astype(np.float64),
+                bg_valid[first:last].astype(np.float64),
+                irf_array, idx, tcspc_res / TAU_FIT_UNIT_S, p0, lo, hi)
+            taus = p[:, :n_exp]
+            amps = p[:, n_exp:2 * n_exp]
+            keep = ok & (amps.sum(axis=1) > 0) & np.all(np.isfinite(p), axis=1)
+            order = np.argsort(taus, axis=1)
+            taus = np.take_along_axis(taus, order, 1) * TAU_FIT_UNIT_S
+            amps = np.take_along_axis(amps, order, 1)
+            calibrated = calibrated_from_terms(num, expected, ok)
+            rows = np.arange(first, last)[keep]
+            taus_out[rows] = taus[keep].astype(np.float32)
+            amps_out[rows] = amps[keep].astype(np.float32)
+            chi2r_out[rows] = num[keep] / dof
+            chi2c_out[rows] = calibrated[keep]
+            valid_b[rows] = True
+        return (taus_out, amps_out, chi2r_out, chi2c_out,
+                np.zeros((B, n_bins), dtype=np.float32), valid_b,
+                np.zeros(B, dtype=np.float32))
 
     def batch_fixed_tau(
         self,
@@ -80,11 +157,30 @@ class TorchBackend(_BackendMixin):
             A_cpu = torch.as_tensor(A, dtype=torch.float32, device='cpu')
             A_pinv = torch.linalg.pinv(A_cpu).to(self.device)
         n_fit = A.shape[0]
+        on_device = (not with_tvb and not (correct_pileup and n_sync_px > 0)
+                     and self.device.type == 'cuda')
+        if on_device:
+            A_exact = torch.as_tensor(A, dtype=torch.float64, device=self.device)
+            win_t = None if win is None else torch.as_tensor(win, device=self.device)
         for first, last in pixel_blocks(valid_idx.size, 4 * (2 * n_bins + n_fit + n_exp),
                                         budget=self.block_bytes()):
             block = valid_idx[first:last]
             decay = raw[block].astype(np.float32)
-            if with_tvb:
+            chi2_parts = None
+            if on_device:
+                bg = self._estimate_bg_batch(decay, np.ones(decay.shape[0], dtype=bool))
+                decay_t = torch.as_tensor(decay, device=self.device)
+                bg_t = torch.as_tensor(bg, device=self.device)
+                corr_t = torch.clamp(decay_t - bg_t[:, None], min=0.0)
+                if win_t is not None:
+                    corr_t = corr_t[:, win_t]
+                    decay_t = decay_t[:, win_t]
+                amps_t = torch.clamp(corr_t @ A_pinv.T, min=0.0)
+                amps = amps_t.cpu().numpy()
+                tvb = None
+                decay_fit = None
+                chi2_parts = self._chi2_terms_device(decay_t, amps_t, A_exact, bg_t)
+            elif with_tvb:
                 data_in = (decay if win is None else decay[:, win]).copy()
                 if correct_pileup and n_sync_px > 0:
                     for row in range(data_in.shape[0]):
@@ -117,10 +213,20 @@ class TorchBackend(_BackendMixin):
                 ny = ny, nx = nx,
                 tvb = tvb,
                 tvb_profile = B_col if with_tvb else None,
+                chi2_parts = chi2_parts,
             )
             if progress_callback is not None:
                 progress_callback(last, valid_idx.size)
         return maps
+
+    def _chi2_terms_device(self, data_t, amps_t, A_exact, bg_t):
+        torch = self._torch
+        d = data_t.to(torch.float64)
+        m = amps_t.to(torch.float64) @ A_exact.T + bg_t.to(torch.float64)[:, None]
+        valid = (torch.isfinite(d) & (d >= 0) & torch.isfinite(m) & (m >= 0)).all(dim=1)
+        numerator = ((d - m) ** 2 / torch.clamp(m, min=1.0)).sum(dim=1)
+        expected = torch.clamp(m, max=1.0).sum(dim=1)
+        return numerator.cpu().numpy(), expected.cpu().numpy(), valid.cpu().numpy()
 
     def batch_grid_scan_1exp(
         self,
@@ -273,12 +379,20 @@ class TorchBackend(_BackendMixin):
         bg_valid = bg_flat[valid_idx].astype(np.float32)
         weight_valid = flat[valid_idx].astype(np.float32)
         B = len(valid_idx)
-        taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
-            raw_valid, bg_valid, irf_array, tcspc_res,
-            taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
-            tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
-            weight_valid=weight_valid, n_sync_model=n_sync_model,
-        )
+        on_device = (not fit_tvb and n_sync_model is None and n_exp >= 1
+                     and self._supports_float64())
+        if on_device:
+            (taus_out, amps_out, chi2r_out, chi2c_out, _,
+             valid_b, tvb_out) = self._batched_free_tau(
+                raw_valid, bg_valid, weight_valid, irf_array, tcspc_res,
+                taus_init, tau_min_s, tau_max_s, n_exp, n_bins, fit_idx)
+        else:
+            taus_out, amps_out, chi2r_out, chi2c_out, _, valid_b, tvb_out = self._scipy_parallel_free_tau_fit(
+                raw_valid, bg_valid, irf_array, tcspc_res,
+                taus_init, tau_min_s, tau_max_s, n_exp, n_bins,
+                tvb_profile=tvb_profile, fit_tvb=fit_tvb, fit_idx=fit_idx,
+                weight_valid=weight_valid, n_sync_model=n_sync_model,
+            )
         self._scatter_free_tau(
             maps, valid_idx=valid_idx[valid_b],
             taus_s=taus_out[valid_b], amps=amps_out[valid_b],

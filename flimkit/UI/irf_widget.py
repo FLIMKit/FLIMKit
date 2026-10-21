@@ -15,6 +15,7 @@ class IRFWidget:
         ('Estimate from decay - parametric',             'parametric'),
         ('Gaussian (fallback)',                          'gaussian'),
     ]
+
     def __init__(self, parent, default='irf_xlsx', xlsx_var=None, machine_irf_default: str = ''):
         self.xlsx_var = xlsx_var
         self._machine_irf_default = machine_irf_default
@@ -23,11 +24,15 @@ class IRFWidget:
         self.frame = _section(parent, 'Instrument Response Function (IRF)',
                               help_topic='irf')
         self.frame.columnconfigure(1, weight=1)
-        for i, (lbl, val) in enumerate(self.CHOICES):
-            ttk.Radiobutton(self.frame, text=lbl, variable=self.sv_method,
-                            value=val, command=self._update).grid(
-                row=i, column=0, columnspan=3, sticky='w', padx=4, pady=1)
-        r = len(self.CHOICES)
+        self._by_label = dict(self.CHOICES)
+        self._by_key = {val: lbl for lbl, val in self.CHOICES}
+        self.sv_label = tk.StringVar(value=self._by_key.get(default, self.CHOICES[0][0]))
+        self._combo = ttk.Combobox(self.frame, textvariable=self.sv_label, state='readonly',
+                                   values=[lbl for lbl, _ in self.CHOICES], width=48)
+        self._combo.grid(row=0, column=0, columnspan=3, sticky='ew', padx=4, pady=3)
+        self._combo.bind('<<ComboboxSelected>>', self._on_pick)
+        self.sv_method.trace_add('write', self._sync_label)
+        r = 1
         self._path_lbl = ttk.Label(self.frame, text='IRF file')
         self._path_lbl.grid(row=r, column=0, sticky='e', padx=6, pady=3)
         self._path_e = ttk.Entry(self.frame, textvariable=self.sv_path, width=45)
@@ -42,6 +47,16 @@ class IRFWidget:
             foreground='grey')
         self._note.grid(row=r + 1, column=0, columnspan=3, sticky='w', padx=8, pady=3)
         self._update()
+
+    def _on_pick(self, event=None):
+        self.sv_method.set(self._by_label[self.sv_label.get()])
+
+    def _sync_label(self, *args):
+        label = self._by_key.get(self.sv_method.get())
+        if label is not None and label != self.sv_label.get():
+            self.sv_label.set(label)
+        self._update()
+
     def _browse_irf_path(self):
         if self.sv_method.get().startswith('machine_irf'):
             _browse_file(self.sv_path, 'Select machine IRF',
@@ -53,6 +68,14 @@ class IRFWidget:
                          [('FLIM / PCK / LAS X export',
                            _flim + ' *.pck *.xlsx *.csv *.tsv *.txt *.dat *.ascii *.asc'),
                           ('All', '*.*')])
+
+    def set_machine_irf_default(self, path):
+        old = self._machine_irf_default
+        self._machine_irf_default = str(path)
+        current = self.sv_path.get().strip()
+        if self.sv_method.get().startswith('machine_irf') and current in ('', str(old)):
+            self.sv_path.set(self._machine_irf_default)
+
     def _show_browse(self):
         method = self.sv_method.get()
         self._path_lbl.config(
@@ -63,16 +86,19 @@ class IRFWidget:
         self._path_e.grid()
         self._path_btn.grid()
         self._note.grid_remove()
+
     def _show_note(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid()
+
     def _hide_all(self):
         self._path_lbl.grid_remove()
         self._path_e.grid_remove()
         self._path_btn.grid_remove()
         self._note.grid_remove()
+
     def _update(self):
         method = self.sv_method.get()
         if method == 'irf_xlsx':
@@ -81,11 +107,13 @@ class IRFWidget:
             self._show_browse()
         else:
             self._hide_all()
+
     def grid(self, **kw):
         self.frame.grid(**kw)
 
     def grid_remove(self):
         self.frame.grid_remove()
+
     def get_args(self, xlsx_fallback: Optional[str] = None) -> dict:
         method = self.sv_method.get()
         path = self.sv_path.get().strip() or None

@@ -42,6 +42,18 @@ def _decode_str(value):
         return value.split(b'\x00', 1)[0].decode('ascii', 'replace').strip()
     return str(value).strip().strip('\x04').strip()
 
+def _pixel_size_um(mi):
+    if 'minfo_ext' not in (mi.dtype.names or ()):
+        return None
+    try:
+        size = float(mi['minfo_ext']['image_size'])
+        nx = int(mi['image_x'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if size > 0 and nx > 0:
+        return size / nx
+    return None
+
 class BHFile:
     def __init__(self, path, verbose=True, channel=None, sync_rate=None):
         self.path = str(path)
@@ -108,6 +120,7 @@ class BHFile:
             self.sync_source = 'measured'
         self.period_ns = (1e9 / self.sync_rate) if self.sync_rate > 0 else 0.0
         self.n_records = 0
+        self.pixel_size_um = _pixel_size_um(mi)
         self.col_time_s = float(mi['col_t']) or None
         self.acq_time_s = float(stop['stop_time']) or self.col_time_s
         if self.sync_rate > 0 and self.acq_time_s:
@@ -127,6 +140,7 @@ class BHFile:
             'BH_TACGain': tac_g,
             'BH_ImageX': int(mi['image_x']),
             'BH_ImageY': int(mi['image_y']),
+            'BH_PixelSize_um': self.pixel_size_um,
             'BH_CollectionTime_s': float(mi['col_t']),
             'BH_MinSyncRate_Hz': self.min_sync_rate,
             'BH_MaxSyncRate_Hz': self.max_sync_rate,
@@ -135,22 +149,22 @@ class BHFile:
             'BH_Channels': self.n_channels,
         }
         if self.verbose:
-            print(f"  B&H SPC  : {Path(self.path).name}")
-            print(f"  Module   : {self.module_type}  ({self.n_channels} channel(s))")
-            print(f"  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps")
+            print(f'  B&H SPC  : {Path(self.path).name}')
+            print(f'  Module   : {self.module_type}  ({self.n_channels} channel(s))')
+            print(f'  TCSPC    : {self.n_bins} bins x {self.tcspc_res*1e12:.2f} ps')
             sync_mhz = self.sync_rate / 1e6
-            print(f"  Sync     : {sync_mhz:.2f} MHz  (period {self.period_ns:.3f} ns, {self.sync_source})")
+            print(f'  Sync     : {sync_mhz:.2f} MHz  (period {self.period_ns:.3f} ns, {self.sync_source})')
             if (self.sync_source == 'measured' and self.min_sync_rate > 0
                     and self.max_sync_rate > 0
                     and abs(self.max_sync_rate - self.min_sync_rate) > 0.01 * self.max_sync_rate):
-                print(f"  WARNING: min/max sync differ "
-                      f"({self.min_sync_rate/1e6:.3f} vs {self.max_sync_rate/1e6:.3f} MHz), using max")
+                print(f'  WARNING: min/max sync differ '
+                      f'({self.min_sync_rate/1e6:.3f} vs {self.max_sync_rate/1e6:.3f} MHz), using max')
             if self.sync_rate > 0:
                 nearest = min(_LASER_RATES_HZ, key=lambda r: abs(r - self.sync_rate))
                 if abs(nearest - self.sync_rate) > 0.02 * nearest:
-                    print(f"  NOTE     : {sync_mhz:.2f} MHz is non-standard "
-                          f"(period {self.period_ns:.3f} ns from measured sync); "
-                          f"pass sync_rate=<Hz> to override if the laser differs")
+                    print(f'  NOTE     : {sync_mhz:.2f} MHz is non-standard '
+                          f'(period {self.period_ns:.3f} ns from measured sync); '
+                          f'pass sync_rate=<Hz> to override if the laser differs')
             print(' ')
 
     @property
@@ -181,8 +195,8 @@ class BHFile:
                 self._cube_cache[idx] = cube
         if self.verbose:
             share = (100.0 * best_sum / total_all) if total_all > 0 else 0.0
-            print(f"  Channel  : auto-selected {best_idx}/{self.n_channels} "
-                  f"({best_sum:,} photons, {share:.1f}% of total)")
+            print(f'  Channel  : auto-selected {best_idx}/{self.n_channels} '
+                  f'({best_sum:,} photons, {share:.1f}% of total)')
         return best_idx
 
     def _decode_cube_for(self, idx):
@@ -255,8 +269,8 @@ def _metadata(bh, data):
         'shape': data.shape,
         'dims': ('Y', 'X', 'H'),
         'tags': bh.tags,
-        'x_pixel_size': 0,
-        'y_pixel_size': 0,
+        'x_pixel_size': bh.pixel_size_um or 0,
+        'y_pixel_size': bh.pixel_size_um or 0,
         'n_bins': bh.n_bins,
         'time_ns': bh.time_ns,
         'photon_channel': bh.photon_channel,

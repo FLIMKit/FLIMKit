@@ -36,12 +36,28 @@ to every release.
 On macOS the app is self-signed, so the first launch needs right-click then
 Open. A double-click will be refused.
 
+To update it later, Help > Check for Updates downloads the new build and swaps
+it in place. On macOS, move the app out of Downloads first.
+
 This route gets the desktop application only. Everything below is for scripting,
 the terminal, or GPU fitting.
 
 ### From PyPI
 
 Python ≥ 3.12 required (3.14 recommended, official builds use 3.14).
+
+Make an environment first, with conda or uv:
+
+```bash
+conda create -n flimkit -c conda-forge python=3.14 && conda activate flimkit
+# or
+uv venv --seed --python 3.14 flimkit-env && source flimkit-env/bin/activate
+```
+
+With uv, `uv pip install` works in place of `pip install` below. `--seed` adds
+pip, which `install.py` needs. The
+[installation docs](https://github.com/FLIMKit/FLIMKit/wiki/Requirements-and-Installation)
+cover Windows and which of the two to pick.
 
 For analysis in scripts, notebooks and the terminal:
 
@@ -69,36 +85,28 @@ For development work (PyInstaller + test dependencies):
 python install.py --dev
 ```
 
+To update a clone later, `python update.py` pulls the latest code and reruns
+`install.py`. It also rebuilds an app you built into `dist/`, and
+`--app-path /Applications/FLIMKit.app` copies that build over the one you open.
+`--dry-run` shows what it would do without changing anything.
+
 ## Docker / TrueNAS SCALE
 
-A pre-built image is available on Docker Hub. It runs the full desktop GUI in a browser via xpra (no installation needed on the client).
-
-**Pull and run:**
+Pre-built images are on Docker Hub as `alex1075/flimkit`. They run FLIMKit with the [web UI](https://github.com/FLIMKit/flimkit-web-ui), so the whole app is used from a browser with nothing installed on the client.
 
 ```bash
 docker run -d \
   -p 14500:14500 \
+  -e FLIMKIT_PASSWORD=choose-a-password \
   -v /path/to/your/data:/data \
+  -v /path/to/flimkit-config:/config \
   --name flimkit \
   alex1075/flimkit:latest
 ```
 
-Then open **http://localhost:14500** in your browser. PTU files and data should be placed in the folder you mount to `/data` - use the file dialog inside the app to navigate there.
+Then open http://localhost:14500 and log in as `flimkit` with that password.
 
-**TrueNAS SCALE (Custom App):**
-
-1. Apps → Discover Apps → Custom App
-2. Paste the contents of `docker/docker-compose.yaml` from this repo
-3. Edit the volume paths to match your pool (e.g. `/mnt/tank/microscopy:/data`)
-4. Deploy - TrueNAS will pull the image automatically
-
-**Build from source** (required if you want to push your own changes):
-
-```bash
-python docker/build_docker.py        # builds linux/amd64, pushes to Docker Hub
-```
-
-Requires Docker Desktop with buildx. On Apple Silicon, buildx cross-compiles for `linux/amd64` automatically.
+The images are built in [flimkit-docker](https://github.com/FLIMKit/flimkit-docker), which lists the tags (Cellpose, CUDA, ROCm, the noVNC desktop and the headless bridge images), the settings, the compose file for a TrueNAS SCALE custom app, and how to build one yourself.
 
 ## Usage
 
@@ -240,7 +248,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 
 `python install.py` detects your hardware and installs the right backend automatically. No extra flags needed at runtime.
 
-**Limitations:** `--free-tau-perpixel` mode uses batched Adam on GPU when a backend is available (n_exp ≥ 2). `fit_summed` (single global fit) is always CPU - it's fast enough not to matter.
+**Limitations:** `--free-tau-perpixel` with two or more components prepares the batch on the GPU but fits each pixel with SciPy on the CPU, so a GPU gains little there. `fit_summed` (single global fit) is always CPU, and fast enough not to matter.
 
 **Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
 
@@ -263,6 +271,7 @@ python run_tests.py integration  # integration tests only
 |---|---|
 | PNG | Intensity and lifetime map images |
 | OME-TIFF | Lossless export with metadata - opens in Fiji/ImageJ |
+| OME-Zarr | Lossless and compressed, one channel per map (OME-NGFF 0.4) |
 | GeoJSON | ROI geometries and stats - imports directly into QuPath |
 | CSV | Fit summaries and per-ROI statistics |
 | NPZ | Session files for restoring analysis state |
@@ -299,13 +308,22 @@ Fitted lifetimes from FLIMKit will typically read slightly higher than FLIM micr
 
 ## Acknowledgements
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the GUI implementation, the add-on system, compiled app builds, code debugging, and Docker packaging; all scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work.
+FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. 
 
-Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. This assistance supported implementation, testing, and documentation. Zhen Yuan directed and reviewed the work and remains responsible for the submitted implementations.
+Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. 
 
-FLIMKit reads several instrument formats. PicoQuant `.ptu` and Becker & Hickl `.sdt` reading is delegated to Christoph Gohlke's `ptufile` and `sdtfile` libraries, the SimFCS (`.b&h`, `.bhz`, `.ref`, `.r64`) and ISS (`.ifli`, `.iss-tdflim`) formats to his `lfdfiles`, and all TIFF reading, including ImSpector FLIM TIFF and PhasorPy OME-TIFF, to his `tifffile`; thank you to Christoph Gohlke for maintaining them, and for PhasorPy, which FLIMKit uses as its phasor backbone. Photonscore `.photons` reading is delegated to `photonsfile`, which was written for FLIMKit and spun out as a standalone library so it can be used without FLIMKit. Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl (in particular Dr. Jens Balke and Enzo Marscheck) for the SPCM file-structure documentation and sample `.sdt` files, to ISS (in particular Dr. Shih-Chu Liao, and to Anand Yethiraj at the University of Guelph for the introduction) for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. FLIMKit's own `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+Becker & Hickl GmbH, ISS, Inc. and Photonscore GmbH supported the original readers directly: thank you to Becker & Hickl for the SPCM file-structure documentation and sample `.sdt` files, to ISS for the FastFLIM / Vista format specifications, and to Photonscore GmbH for the LINCam SDK, a sample `.photons` file, and for open-sourcing the D7 format. 
 
-Thank you to the users who have contributed features and reported problems: to Lin Yangchen (@linyangchen) for the request to accept LAS X calculated-IRF exports as CSV as well as XLSX, and to zhen yuan (@zhenyuan992) for implementing that support, including the delimiter and decimal-comma handling needed for locale-specific exports.
+FLIMKit's original `.ptu` and `.sdt` decoders (the `.ptu` one written from PicoQuant's published documentation, without direct input from PicoQuant) are kept as cross-checked references in the `flim-native-decoders` repository. Per-format provenance is in each reader's `NOTICE.md` (`flimkit/formats/<FORMAT>/NOTICE.md`).
+
+Thank you to the users who have contributed features and reported problems! Many features would not exist without you!
+
+## AI Disclosure
+
+FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the implementation. All scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work. All AI generated content was reviewed, edited and tested on both real and synthetic FLIM data by the author. The author remains responsible for the submitted implementations and their scientific validity.
+
+Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. Zhen Yuan directed and reviewed the work. Both he and Alex Hunt have independently reviewed and tested the AI-assisted contributions to ensure scientific validity and correctness.
+
 
 ## Contact
 

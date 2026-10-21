@@ -10,6 +10,7 @@ from flimkit.FLIM.irf_tools import (
     reconstruct_irf_from_decay,
     compare_irfs,
     gaussian_irf_from_fwhm,
+    irf_from_scatter_ptu,
 )
 from flimkit_tests.mock_data import MOCK_TCSPC_RES, MOCK_IRF_CENTER, MOCK_IRF_FWHM_BINS
 
@@ -17,19 +18,19 @@ from flimkit_tests.mock_data import MOCK_TCSPC_RES, MOCK_IRF_CENTER, MOCK_IRF_FW
 class TestBuildMachineIRF:
     @pytest.fixture
     def paired_folder(self, tmp_path):
-        ptu_dir = tmp_path / "pairs"
+        ptu_dir = tmp_path / 'pairs'
         ptu_dir.mkdir()
         for i in range(1, 4):
-            (ptu_dir / f"sample{i}.ptu").touch()
-            (ptu_dir / f"sample{i}.xlsx").touch()
+            (ptu_dir / f'sample{i}.ptu').touch()
+            (ptu_dir / f'sample{i}.xlsx').touch()
         return ptu_dir
 
     def test_minimum_pairs_required(self, tmp_path):
-        ptu_dir = tmp_path / "single"
+        ptu_dir = tmp_path / 'single'
         ptu_dir.mkdir()
-        (ptu_dir / "sample1.ptu").touch()
-        (ptu_dir / "sample1.xlsx").touch()
-        with pytest.raises(ValueError, match="at least 2"):
+        (ptu_dir / 'sample1.ptu').touch()
+        (ptu_dir / 'sample1.xlsx').touch()
+        with pytest.raises(ValueError, match='at least 2'):
             build_machine_irf_from_folder(ptu_dir)
 
     @patch('flimkit.FLIM.irf_tools.FLIMFile')
@@ -53,8 +54,8 @@ class TestBuildMachineIRF:
         mock_ptu.return_value.n_bins = 256
         mock_ptu.return_value.tcspc_res = 97e-12
         mock_load_xlsx.side_effect = lambda p: {'irf_t': np.linspace(0,5,21), 'irf_c': np.ones(21)}
-        out_dir = tmp_path / "machine_irf"
-        with pytest.raises(RuntimeError, match="confirm_save=False"):
+        out_dir = tmp_path / 'machine_irf'
+        with pytest.raises(RuntimeError, match='confirm_save=False'):
             build_machine_irf_from_folder(paired_folder, save=True, confirm_save=False, output_dir=out_dir)
 
     @patch('flimkit.FLIM.irf_tools.FLIMFile')
@@ -63,12 +64,12 @@ class TestBuildMachineIRF:
         mock_ptu.return_value.n_bins = 256
         mock_ptu.return_value.tcspc_res = 97e-12
         mock_load_xlsx.side_effect = lambda p: {'irf_t': np.linspace(0,5,21), 'irf_c': np.ones(21)}
-        out_dir = tmp_path / "machine_irf"
+        out_dir = tmp_path / 'machine_irf'
         out_dir.mkdir()
-        result = build_machine_irf_from_folder(paired_folder, save=True, confirm_save=True, output_name="test_irf", output_dir=out_dir)
-        assert (out_dir / "test_irf.npy").exists()
-        assert (out_dir / "test_irf.csv").exists()
-        assert (out_dir / "test_irf_meta.json").exists()
+        result = build_machine_irf_from_folder(paired_folder, save=True, confirm_save=True, output_name='test_irf', output_dir=out_dir)
+        assert (out_dir / 'test_irf.npy').exists()
+        assert (out_dir / 'test_irf.csv').exists()
+        assert (out_dir / 'test_irf_meta.json').exists()
 
 
 class TestReconstructIRF:
@@ -85,7 +86,7 @@ class TestReconstructIRF:
         assert irf.sum() == pytest.approx(1.0)
 
     def test_zero_decay_raises(self):
-        with pytest.raises(ValueError, match="empty or all zeros"):
+        with pytest.raises(ValueError, match='empty or all zeros'):
             reconstruct_irf_from_decay(np.zeros(100), 1e-9, 100)
 
 
@@ -97,7 +98,7 @@ class TestCompareIRFs:
         est = gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, 50)
         ref = gaussian_irf_from_fwhm(n_bins, tcspc_res, fwhm_ns, 53)
         xlsx = {'irf_t': np.arange(n_bins) * tcspc_res * 1e9, 'irf_c': ref * ref.sum()}
-        metrics = compare_irfs(est, xlsx, tcspc_res, n_bins, "test", "out")
+        metrics = compare_irfs(est, xlsx, tcspc_res, n_bins, 'test', 'out')
         assert metrics['raw']['bhattacharyya'] < 0.9
         assert metrics['aligned']['bhattacharyya'] > 0.99
         assert metrics['peak_shift_bins'] == -3
@@ -105,4 +106,49 @@ class TestCompareIRFs:
     def test_missing_xlsx_returns_none(self):
         est = np.ones(100) / 100
         xlsx = {'irf_t': None, 'irf_c': None}
-        assert compare_irfs(est, xlsx, 1e-9, 100, "test", "out") is None
+        assert compare_irfs(est, xlsx, 1e-9, 100, 'test', 'out') is None
+
+
+class _FakeScatter:
+    calls = []
+
+    def __init__(self, path, **kw):
+        _FakeScatter.calls.append(kw)
+        self.n_bins = kw.get('n_bins', 256)
+        self.tcspc_res = kw.get('period_ns', 40.0) * 1e-9 / self.n_bins
+        self.photon_channel = 1
+
+    def summed_decay(self, channel=None):
+        return gaussian_irf_from_fwhm(self.n_bins, self.tcspc_res, 0.2, self.n_bins // 4) * 1e5
+
+
+class _Ref:
+    def __init__(self, n_bins, period_ns=40.0):
+        self.n_bins = n_bins
+        self._period_ns = period_ns
+        self.tcspc_res = period_ns * 1e-9 / n_bins
+
+
+class TestScatterIRFBinning:
+    def setup_method(self):
+        _FakeScatter.calls.clear()
+
+    @patch('flimkit.FLIM.irf_tools.FLIMFile', _FakeScatter)
+    def test_photons_irf_uses_data_bins(self):
+        irf = irf_from_scatter_ptu('scatter.photons', _Ref(1024))
+        assert _FakeScatter.calls[0]['n_bins'] == 1024
+        assert _FakeScatter.calls[0]['period_ns'] == 40.0
+        assert irf.size == 1024
+        assert irf.sum() == pytest.approx(1.0)
+        assert int(np.argmax(irf)) == 256
+
+    @patch('flimkit.FLIM.irf_tools.FLIMFile', _FakeScatter)
+    def test_ptu_irf_does_not_force_bins(self):
+        irf_from_scatter_ptu('scatter.ptu', _Ref(256))
+        assert 'n_bins' not in _FakeScatter.calls[0]
+        assert 'period_ns' not in _FakeScatter.calls[0]
+
+    @patch('flimkit.FLIM.irf_tools.FLIMFile', _FakeScatter)
+    def test_resolution_mismatch_raises(self):
+        with pytest.raises(ValueError, match='ps bins'):
+            irf_from_scatter_ptu('scatter.ptu', _Ref(1024))

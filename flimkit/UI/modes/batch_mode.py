@@ -4,26 +4,21 @@ from tkinter import ttk
 from flimkit.UI.modes.base import BaseMode
 from flimkit.UI.utils import PAD, _C, _section, _row, _browse_file, _browse_dir, _tog, FLIM_FILETYPES
 
-
 class BatchMode(BaseMode):
     def build(self):
         outer, tab = self.b._form_inner_frames['batch']
         tab.columnconfigure(0, weight=1)
-
         self.b.state.sv_batch_mode = tk.StringVar(value='tiled')
-
         self.b._batch_mode_label = ttk.Label(
             tab, text='Mode: Multi-Tile ROI Fit',
             font=('TkDefaultFont', 9, 'bold'), foreground='#555')
         self.b._batch_mode_label.grid(row=0, column=0, sticky='w', padx=8, pady=(6, 2))
-
         ff = _section(tab, 'Input / Output')
         ff.grid(row=1, column=0, sticky='ew', pady=(0, 6))
         ff.columnconfigure(1, weight=1)
         self.b.state.sv_batch_xlif_dir = tk.StringVar()
         self.b.state.sv_batch_ptu_dir = tk.StringVar()
         self.b.state.sv_batch_out_dir = tk.StringVar()
-
         self.b._batch_xlif_fr = ttk.Frame(ff)
         self.b._batch_xlif_fr.grid(row=0, column=0, columnspan=3, sticky='ew')
         self.b._batch_xlif_fr.columnconfigure(1, weight=1)
@@ -35,10 +30,8 @@ class BatchMode(BaseMode):
                    command=lambda: _browse_dir(self.b.sv_batch_xlif_dir,
                                                'Folder of XLIF files')).grid(
             row=0, column=2, padx=4, pady=3)
-
         _row(ff, 'PTU folder *',      self.b.sv_batch_ptu_dir,  1,
              lambda: _browse_dir(self.b.sv_batch_ptu_dir,  'PTU tile directory'))
-
         self.b._batch_out_fr = ttk.Frame(ff)
         self.b._batch_out_fr.grid(row=2, column=0, columnspan=3, sticky='ew')
         self.b._batch_out_fr.columnconfigure(1, weight=1)
@@ -50,7 +43,6 @@ class BatchMode(BaseMode):
                    command=lambda: _browse_dir(self.b.sv_batch_out_dir,
                                                'Base output directory')).grid(
             row=0, column=2, padx=4, pady=3)
-
         self.b.state.bv_batch_save_beside = tk.BooleanVar(value=False)
         self.b.state.sv_batch_save_beside_preview = tk.StringVar(value='')
 
@@ -67,9 +59,7 @@ class BatchMode(BaseMode):
             else:
                 self.b._batch_out_fr.grid()
                 self.b._batch_beside_preview_lbl.pack_forget()
-
         self.b.sv_batch_ptu_dir.trace_add('write', _update_beside_preview)
-
         beside_fr = ttk.Frame(ff)
         beside_fr.grid(row=3, column=0, columnspan=3, sticky='w')
         ttk.Checkbutton(beside_fr, text='Save beside input folder  →',
@@ -80,12 +70,10 @@ class BatchMode(BaseMode):
             foreground='#5c9bd6')
         self.b._batch_beside_preview_lbl.pack(side='left', padx=2)
         self.b._batch_beside_preview_lbl.pack_forget()
-
         self.b._batch_io_help = ttk.Label(
             ff, text='One sub-folder per ROI created inside the output base dir.',
             foreground='grey')
         self.b._batch_io_help.grid(row=4, column=1, columnspan=2, sticky='w', padx=4)
-
         fi = _section(tab, 'IRF')
         fi.grid(row=2, column=0, sticky='ew', pady=(0, 6))
         fi.columnconfigure(1, weight=1)
@@ -93,7 +81,6 @@ class BatchMode(BaseMode):
         _row(fi, 'Machine IRF (.npy) *', self.b.sv_batch_mirf, 0,
              lambda: _browse_file(self.b.sv_batch_mirf, 'Machine IRF',
                                   [('NumPy', '*.npy'), ('All', '*.*')]))
-
         fp = _section(tab, 'Fitting Parameters', help_topic='fit_model')
         fp.grid(row=3, column=0, sticky='ew', pady=(0, 6))
         ttk.Label(fp, text='Fit model:').grid(row=0, column=0, sticky='w', **PAD)
@@ -106,17 +93,14 @@ class BatchMode(BaseMode):
                         value='lorentzian').grid(row=0, column=3, sticky='w', padx=1)
         ttk.Radiobutton(fp, text='n-exp tail', variable=self.b.sv_fit_model_batch,
                         value='tail').grid(row=0, column=4, sticky='w', padx=1)
-
         self.b.state.iv_nexp_batch = tk.IntVar(value=2)
         self.b.state.iv_ncomp_dist_batch = tk.IntVar(value=1)
-
         nexp_frame_batch = ttk.Frame(fp)
         nexp_frame_batch.grid(row=1, column=0, columnspan=5, sticky='w')
         ttk.Label(nexp_frame_batch, text='Components:').pack(side='left', padx=(4, 8))
         for n in (1, 2, 3):
             ttk.Radiobutton(nexp_frame_batch, text=str(n), variable=self.b.iv_nexp_batch,
                             value=n).pack(side='left', padx=4)
-
         dist_frame_batch = ttk.Frame(fp)
         ttk.Label(dist_frame_batch, text='Components:').pack(side='left', padx=(4, 8))
         ttk.Radiobutton(dist_frame_batch, text='1 (unimodal)', variable=self.b.iv_ncomp_dist_batch,
@@ -132,15 +116,13 @@ class BatchMode(BaseMode):
                 nexp_frame_batch.grid_remove()
                 dist_frame_batch.grid(row=1, column=0, columnspan=5, sticky='w')
         self.b.sv_fit_model_batch.trace_add('write', _on_batch_model_change)
-
-        ttk.Label(fp, text='Fit window (ns):').grid(row=2, column=0, sticky='w', **PAD)
+        ttk.Label(fp, text='τ bounds (ns):').grid(row=2, column=0, sticky='w', **PAD)
         self.b.state.sv_batch_tau_min = tk.StringVar(value=str(_C()['Tau_min']))
         self.b.state.sv_batch_tau_max = tk.StringVar(value=str(_C()['Tau_max']))
         ttk.Entry(fp, textvariable=self.b.sv_batch_tau_min, width=7).grid(row=2, column=1, padx=4)
         ttk.Label(fp, text='to').grid(row=2, column=2)
         ttk.Entry(fp, textvariable=self.b.sv_batch_tau_max, width=7).grid(row=2, column=3, padx=4)
         ttk.Label(fp, text='ns', foreground='grey').grid(row=2, column=4, padx=4)
-
         ttk.Label(fp, text='Colour scale (ns):').grid(row=3, column=0, sticky='w', **PAD)
         self.b.state.sv_batch_tau_lo = tk.StringVar(
             value='' if _C()['TAU_DISPLAY_MIN'] is None else str(_C()['TAU_DISPLAY_MIN']))
@@ -150,7 +132,6 @@ class BatchMode(BaseMode):
         ttk.Label(fp, text='to').grid(row=3, column=2)
         ttk.Entry(fp, textvariable=self.b.sv_batch_tau_hi, width=7).grid(row=3, column=3, padx=4)
         ttk.Label(fp, text='ns  (display only)', foreground='grey').grid(row=3, column=4, padx=4)
-
         freg = _section(tab, 'Tile Registration')
         freg.grid(row=4, column=0, sticky='ew', pady=(0, 6))
         self.b._batch_freg = freg
@@ -164,7 +145,6 @@ class BatchMode(BaseMode):
             row=1, column=1, sticky='w', padx=4)
         ttk.Label(freg, text='(increase if drift > 120px)',
                   foreground='grey').grid(row=1, column=2, sticky='w')
-
         fm = _section(tab, 'Masking', help_topic='masking')
         fm.grid(row=5, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_batch_thr = tk.BooleanVar(value=False)
@@ -180,7 +160,6 @@ class BatchMode(BaseMode):
         ttk.Checkbutton(fm, text='Apply Coates pile-up correction (recommended if pile-up > 5%)',
                         variable=self.b.bv_batch_correct_pileup).grid(
             row=1, column=0, columnspan=3, sticky='w', **PAD)
-
         ttk.Label(fm, text='Time-varying background PTU:').grid(row=2, column=0, sticky='w', **PAD)
         self.b.state.sv_batch_tvb_ptu = tk.StringVar()
         ttk.Entry(fm, textvariable=self.b.sv_batch_tvb_ptu, width=24).grid(
@@ -192,7 +171,6 @@ class BatchMode(BaseMode):
             row=2, column=2, sticky='w', padx=4)
         ttk.Label(fm, text='(optional: applied to every FOV in the batch)',
                   foreground='grey').grid(row=3, column=0, columnspan=3, sticky='w', padx=8)
-
         fexp = _section(tab, 'Image Export')
         fexp.grid(row=6, column=0, sticky='ew', pady=(0, 6))
         self.b.state.bv_batch_save_lifetime = tk.BooleanVar(value=True)
@@ -228,29 +206,24 @@ class BatchMode(BaseMode):
         ttk.Entry(fexp, textvariable=self.b.sv_batch_int_max, width=8).grid(row=5, column=1, sticky='w', padx=4)
         ttk.Label(fexp, text='(blank = auto 99th percentile)',
                   foreground='grey').grid(row=5, column=2, columnspan=3, sticky='w')
-
         ttk.Label(fexp, text='Lifetime weighting:').grid(row=6, column=0, sticky='w', **PAD)
         self.b.state.sv_batch_tau_weighting = tk.StringVar(value='amplitude')
         ttk.Combobox(fexp, textvariable=self.b.sv_batch_tau_weighting, state='readonly',
                      values=['amplitude', 'intensity'], width=11).grid(row=6, column=1, sticky='w', padx=4)
         ttk.Label(fexp, text='(τ map / lifetime image; both raw .npy saved either way)',
                   foreground='grey').grid(row=6, column=2, columnspan=3, sticky='w')
-
         ftl = _section(tab, 'Timelapse - Reference Lifetimes')
         ftl.grid(row=7, column=0, sticky='ew', pady=(0, 6))
         self.b._batch_tl_fr = ftl
-
         self.b.state.bv_tl_fix_tau = tk.BooleanVar(value=False)
         self.b.state.sv_tl_tau1 = tk.StringVar(value='')
         self.b.state.sv_tl_tau2 = tk.StringVar(value='')
         self.b.state.sv_tl_tau3 = tk.StringVar(value='')
-
         ttk.Checkbutton(ftl,
                         text='Fix reference τ values (skip pooled-decay fit)',
                         variable=self.b.bv_tl_fix_tau,
                         command=lambda: _tog_tl_entries()).grid(
             row=0, column=0, columnspan=6, sticky='w', **PAD)
-
         self.b._tl_tau_fr = ttk.Frame(ftl)
         self.b._tl_tau_fr.grid(row=1, column=0, columnspan=6, sticky='w')
 
@@ -261,7 +234,6 @@ class BatchMode(BaseMode):
             e = ttk.Entry(box, textvariable=var, width=8, state='disabled')
             e.grid(row=0, column=1, padx=4)
             return box, e
-
         self.b._tl_tau1_box, self.b._tl_tau1_e = _make_tau_box(0, 'τ₁ (ns):', self.b.sv_tl_tau1)
         self.b._tl_tau2_box, self.b._tl_tau2_e = _make_tau_box(1, 'τ₂ (ns):', self.b.sv_tl_tau2)
         self.b._tl_tau3_box, self.b._tl_tau3_e = _make_tau_box(2, 'τ₃ (ns):', self.b.sv_tl_tau3)
@@ -278,7 +250,6 @@ class BatchMode(BaseMode):
             n = self.b.iv_nexp_batch.get()
             (self.b._tl_tau2_box.grid() if n >= 2 else self.b._tl_tau2_box.grid_remove())
             (self.b._tl_tau3_box.grid() if n >= 3 else self.b._tl_tau3_box.grid_remove())
-
         self.b.iv_nexp_batch.trace_add('write', _update_tl_tau_count)
         _update_tl_tau_count()
         self.b.state.bv_tl_pool_positions = tk.BooleanVar(value=False)
@@ -287,22 +258,18 @@ class BatchMode(BaseMode):
                              '(default: each position gets its own τ)',
                         variable=self.b.bv_tl_pool_positions).grid(
             row=2, column=0, columnspan=5, sticky='w', **PAD)
-
         self.b.state.bv_tl_bound_fraction = tk.BooleanVar(value=False)
         ttk.Checkbutton(ftl,
                         text='Compute bound fraction  α₂/(α₁+α₂)  '
                              '(off by default - verify component ordering)',
                         variable=self.b.bv_tl_bound_fraction).grid(
             row=3, column=0, columnspan=5, sticky='w', **PAD)
-
         ftl.grid_remove()
-
         self.b._expert_banner_batch = ttk.Label(
             tab, text='⚙  Custom expert settings active',
             foreground='#e8a838', font=('TkDefaultFont', 9, 'bold'))
         self.b._expert_banner_batch.grid(row=8, column=0, sticky='w', padx=8)
         self.b._expert_banner_batch.grid_remove()
-
         btn_row_batch = ttk.Frame(tab)
         btn_row_batch.grid(row=9, column=0, pady=8)
         ttk.Button(btn_row_batch, text='⚙  Expert Settings',
