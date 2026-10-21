@@ -125,6 +125,10 @@ def single_FOV_flim_fit_cli():
                          'subtracting an estimate before projecting. Applies to the '
                          'one-exponential and fixed-tau per-pixel paths, and runs on '
                          'the CPU.')
+    ap.add_argument('--estimator', choices=('poisson', 'nnls'), default='poisson',
+                    help='Amplitude estimator for fixed-tau per-pixel fits. poisson (default) '
+                         'maximises the Poisson likelihood with a fitted constant offset. nnls is '
+                         'the earlier route: subtract a background estimate, project, clamp at zero.')
     ap.add_argument('--free-tau', action='store_true',
                     help='Free tau per pixel: LM fit per pixel with tau as free parameters '
                          '(slower; needed to see spatial tau variation for n_exp > 1).')
@@ -368,6 +372,7 @@ def single_FOV_flim_fit_cli():
             correct_pileup=getattr(args, 'correct_pileup', False),
             pileup_in_model=getattr(args, 'pileup_in_model', False),
             bg_in_model=getattr(args, 'bg_in_model', False),
+            estimator=getattr(args, 'estimator', 'poisson'),
             n_sync=getattr(ptu, 'n_sync', None),
             fit_idx=global_summary.get('fit_idx'),
             free_tau=getattr(args, 'free_tau', False),

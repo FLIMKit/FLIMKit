@@ -23,6 +23,7 @@ _EXPERT_DEFAULTS = {
     'free_tau_perpixel': False,
     'pileup_in_model': False,
     'bg_in_model': False,
+    'estimator': 'poisson',
     'align_irf': False,
     'fit_start_ns': None,
     'fit_end_ns': None,
@@ -167,6 +168,12 @@ class ExpertSettingsDialog(tk.Toplevel):
                         variable=self._bv_bg_model).grid(
             row=row, column=0, columnspan=4, sticky='w', **PAD)
         row += 1
+        self._bv_nnls = tk.BooleanVar(value=vals.get('estimator', 'poisson') == 'nnls')
+        ttk.Checkbutton(f, text='Earlier projection for fixed tau  (subtract a background estimate, project, '
+                                'clamp at zero - the default is the Poisson likelihood)',
+                        variable=self._bv_nnls).grid(
+            row=row, column=0, columnspan=4, sticky='w', **PAD)
+        row += 1
         self._bv_fit_t0 = tk.BooleanVar(value=bool(vals.get('fit_t0', False)))
         ttk.Checkbutton(f, text='Free t0  (tail fit only - correlated with the amplitudes, leave off unless they matter)',
                         variable=self._bv_fit_t0).grid(
@@ -220,6 +227,7 @@ class ExpertSettingsDialog(tk.Toplevel):
             'free_tau_perpixel': self._bv_free_tau.get(),
             'pileup_in_model': self._bv_pileup_model.get(),
             'bg_in_model': self._bv_bg_model.get(),
+            'estimator': 'nnls' if self._bv_nnls.get() else 'poisson',
             'fit_t0': self._bv_fit_t0.get(),
             'bootstrap': self._bv_bootstrap.get(),
             'bootstrap_resamples': max(2, int(self._sv_bootstrap_n.get() or 25)),

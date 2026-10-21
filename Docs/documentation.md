@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.14.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.14.2** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -428,6 +428,7 @@ Expert Settings opens a dialog shared by the single FOV and tile pipelines. When
 | Free τ per pixel | Lets lifetimes float in every pixel instead of locking them to the summed fit. Slower, and it shows spatial variation in τ when n_exp > 1. The [accelerator plugin](#fit-backends) can speed it up a lot, but nothing needs it. |
 | Pile-up in the model | Fits pile-up as part of the model instead of rescaling the decay. Needs free τ per pixel and n_exp > 1. |
 | Background in the model | Fits the offset instead of subtracting it. One exponential with fixed τ, CPU only. |
+| Earlier projection for fixed tau | Fixed-tau per-pixel fits estimate the amplitudes by Poisson maximum likelihood with a fitted offset. Ticking this restores the earlier route: subtract a background estimate, project onto the basis, clamp negatives at zero. The tail fit, free τ, a time-varying or modelled background and pile-up correction always use the projection. |
 | Free t0 | Tail fits only. Lets the start time float, which correlates with the amplitudes. |
 | Bootstrap errors / resamples | On by default, with 25 resamples. Refits the summed decay 25 times on resampled copies of the data to measure the ± on each lifetime ([Parameter uncertainties](#parameter-uncertainties)). It adds about 35 s to a 1-exponential fit and a minute to a 3-exponential one, so untick it for quick trial fits. |
 | Confirm / Reset Defaults / Cancel | Apply, restore the defaults, or close without changes. |
@@ -2397,7 +2398,7 @@ def make_backend():
     return None if lib is None else MyBackend(lib)
 ```
 
-The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. Accept `**kwargs` on each method, so arguments added later do not break your backend.
+The factory runs the first time a fit needs a backend. It returns an object with any of `batch_fixed_tau`, `batch_grid_scan_1exp`, `batch_free_tau_fit` and `batch_dist_scan_unimodal`, which have the signatures in `flimkit/GPU/_base.py`, or `None` when the library or device is not there. Subclassing `flimkit.GPU.PluginBackend` gets you the built-in backends' helpers for the background estimate (`_estimate_bg_batch`) and for filling in the result maps (`_init_maps`, `_scatter_fixed_tau`, `_scatter_1exp`, `_scatter_free_tau`), and the methods you leave out hand their fits back. A backend that can run the Poisson fixed-τ fit sets `estimators = ('nnls', 'poisson')` and gets `estimator='poisson'` in `batch_fixed_tau`, which is the default; one without that attribute is only asked for the earlier projection, and anything it declines runs in numba. Accept `**kwargs` on each method, so arguments added later do not break your backend.
 
 You do not have to cover every fit. A method that is missing, raises `NotImplementedError` or returns `None` hands that fit back to FLIMKit, which tries the built-in GPU backend your backend displaced and then the CPU. So a backend that only does free-τ fits, or only the simple case without a fit window, is fine.
 
@@ -2669,6 +2670,15 @@ If you use FLIMKit in published work, please also cite the relevant dependencies
 
 **photonsfile** - Photonscore LINCam `.photons` (D7) decoding:
 > Hunt, A. and A. Akram. photonsfile. Zenodo. https://doi.org/10.5281/zenodo.21360199
+
+**Poisson maximum-likelihood amplitudes** - the default estimator for fixed-lifetime per-pixel fits, which finds the amplitudes and a constant offset that maximise the Poisson likelihood by the multiplicative expectation-maximisation update. Why a Poisson likelihood for decay counts:
+> Maus, M. et al. (2001). An experimental comparison of the maximum likelihood estimation and nonlinear least-squares fluorescence lifetime analysis of single molecules. *Analytical Chemistry* 73(9), 2078-2086.
+> Kim, J. and Seok, J. (2013). Statistical properties of amplitude and decay parameter estimators for fluorescence lifetime imaging. *Optics Express* 21(5), 6061-6075. https://doi.org/10.1364/OE.21.006061
+> Laurence, T.A. and Chromy, B.A. (2010). Efficient maximum likelihood estimator fitting of histograms. *Nature Methods* 7(5), 338-339.
+
+The update itself:
+> Shepp, L.A. and Vardi, Y. (1982). Maximum likelihood reconstruction for emission tomography. *IEEE Transactions on Medical Imaging* 1(2), 113-122.
+> Lee, D.D. and Seung, H.S. (2000). Algorithms for non-negative matrix factorization. *Advances in Neural Information Processing Systems* 13. With the basis held fixed, their update for the generalised Kullback-Leibler divergence is the one FLIMKit runs.
 
 **Tile stitching** - phase-correlation registration algorithm:
 > Preibisch, S., Saalfeld, S. and Tomancak, P. (2009). Globally optimal stitching of tiled 3D microscopic image acquisitions. *Bioinformatics* 25(11), 1463-1465. https://doi.org/10.1093/bioinformatics/btp184

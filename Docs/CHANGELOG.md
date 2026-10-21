@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-21
+
+### Changed
+- Fixed-tau per-pixel fits with two or more components estimate the amplitudes by Poisson maximum likelihood with a fitted constant offset, where they used to subtract a background estimate, project onto the basis and clamp negatives at zero. `fitter_version` goes to 25. On a Leica R 142 tile at about 13 photons per pixel the amplitudes correlate with LAS X at 0.99 or better, against 0.54 to 0.86 for the earlier projection, with the same lifetimes and the same IRF in both. On one bi- and one tri-exponential synthetic file thinned to 15 photons per pixel the fraction error is lower for four of the five components. The fitted photon total equals the measured total by construction, so it is not evidence.
+- The earlier projection is still there: tick Earlier projection for fixed tau in Expert Settings, or pass `--estimator nnls`. The tail fit, free-tau fits, the time-varying background, a modelled background and pile-up correction keep the projection and say so when they are used.
+- A fit backend can take the Poisson fixed-tau fit by listing `poisson` in an `estimators` attribute, and FLIMKit asks it first. flimkit-accelerator-plugin does from ABI 4, in C and in CUDA, so rerun its `build.py` after updating. A backend that does not list `poisson`, such as an older build of that add-on, is passed over for fixed-tau fits, and the Poisson fit runs in numba on the CPU. With `nnls` selected, every backend sees fixed-tau fits as before.
+- The IRF selector is one dropdown with the same eight choices, where it used to be eight radio buttons. Setting the method from code, as a project restore does, now updates the dropdown and the path row together. No fitted number changes.
+
 ## [0.14.0] - 2026-10-12
 
 ### Added

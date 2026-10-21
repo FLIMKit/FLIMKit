@@ -24,11 +24,15 @@ class IRFWidget:
         self.frame = _section(parent, 'Instrument Response Function (IRF)',
                               help_topic='irf')
         self.frame.columnconfigure(1, weight=1)
-        for i, (lbl, val) in enumerate(self.CHOICES):
-            ttk.Radiobutton(self.frame, text=lbl, variable=self.sv_method,
-                            value=val, command=self._update).grid(
-                row=i, column=0, columnspan=3, sticky='w', padx=4, pady=1)
-        r = len(self.CHOICES)
+        self._by_label = dict(self.CHOICES)
+        self._by_key = {val: lbl for lbl, val in self.CHOICES}
+        self.sv_label = tk.StringVar(value=self._by_key.get(default, self.CHOICES[0][0]))
+        self._combo = ttk.Combobox(self.frame, textvariable=self.sv_label, state='readonly',
+                                   values=[lbl for lbl, _ in self.CHOICES], width=48)
+        self._combo.grid(row=0, column=0, columnspan=3, sticky='ew', padx=4, pady=3)
+        self._combo.bind('<<ComboboxSelected>>', self._on_pick)
+        self.sv_method.trace_add('write', self._sync_label)
+        r = 1
         self._path_lbl = ttk.Label(self.frame, text='IRF file')
         self._path_lbl.grid(row=r, column=0, sticky='e', padx=6, pady=3)
         self._path_e = ttk.Entry(self.frame, textvariable=self.sv_path, width=45)
@@ -42,6 +46,15 @@ class IRFWidget:
             text='Uses the LAS X export entered in Input Files above',
             foreground='grey')
         self._note.grid(row=r + 1, column=0, columnspan=3, sticky='w', padx=8, pady=3)
+        self._update()
+
+    def _on_pick(self, event=None):
+        self.sv_method.set(self._by_label[self.sv_label.get()])
+
+    def _sync_label(self, *args):
+        label = self._by_key.get(self.sv_method.get())
+        if label is not None and label != self.sv_label.get():
+            self.sv_label.set(label)
         self._update()
 
     def _browse_irf_path(self):
