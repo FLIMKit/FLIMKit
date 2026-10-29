@@ -44,6 +44,8 @@ def main(fast=False, cli=False, check_updates=False, no_plugins=False, plugin_pa
                 'Just stitch multiple tiles together',
                 'Timelapse batch fit',
                 'Z-stack batch fit',
+                'Batch tiled ROI fit',
+                'Batch single FOV fit',
                 'About',
                 'Exit'
             ]
@@ -70,6 +72,12 @@ def main(fast=False, cli=False, check_updates=False, no_plugins=False, plugin_pa
     elif answers['process_option'] == 'Z-stack batch fit':
         print('Z-stack batch FLIM fitting...')
         zstack_flim_fit(interactive=True)
+    elif answers['process_option'] == 'Batch tiled ROI fit':
+        from flimkit.batch_cli import tileBatchFit
+        tileBatchFit(interactive=True)
+    elif answers['process_option'] == 'Batch single FOV fit':
+        from flimkit.batch_cli import fovBatchFit
+        fovBatchFit(interactive=True)
     elif answers['process_option'] == 'About':
         print('Current version: ' + __version__)
         try:
