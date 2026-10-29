@@ -17,14 +17,14 @@ def test_tile_batch_writes_row_per_roi_and_survives_error(tmp_path, monkeypatch)
         (tmp_path / (n + '.xlif')).write_text('')
     seen = []
 
-    def fake_fit(args):
-        seen.append(args.ptu_basename)
-        if args.ptu_basename == 'b':
+    def fake_fit(xlif, ptu_dir, out, p):
+        seen.append(xlif.stem)
+        if xlif.stem == 'b':
             raise RuntimeError('boom')
-        return {'global_summary': {'tau_mean_amp_global_ns': 1.5}}
+        return {'roi': xlif.stem, 'status': 'OK', 'tau_mean_amp_global_ns': 1.5}
 
     monkeypatch.setattr(sys, 'argv', _argv_tile(tmp_path, tmp_path, tmp_path / 'out'))
-    with mock.patch('flimkit.interactive._run_tile_fit', fake_fit):
+    with mock.patch('flimkit.batch_cli.fitRoi', fake_fit):
         csv_path = batch_cli.tileBatchFit()
     rows = list(csv.DictReader(open(csv_path)))
     assert seen == ['a', 'b', 'c']
@@ -41,8 +41,23 @@ def test_fov_batch_runs_each_file(tmp_path, monkeypatch):
     (tmp_path / 'one.ptu').write_text('')
     (tmp_path / 'two.ptu').write_text('')
     monkeypatch.setattr(sys, 'argv', ['x', '--fov-dir', str(tmp_path)])
-    with mock.patch('flimkit.interactive._run_flim_fit', lambda a: {'global_summary': {'tau1': 2.0}, 'pileup_pct': 1.0}):
+    with mock.patch('flimkit.batch_cli.fitFov', lambda f, o, p: {'fov': f.stem, 'status': 'OK', 'tau1': 2.0}):
         csv_path = batch_cli.fovBatchFit()
     rows = list(csv.DictReader(open(csv_path)))
     assert [r['fov'] for r in rows] == ['one', 'two']
     assert Path(csv_path).parent == tmp_path / 'save'
+
+
+def test_params_defaults_match_gui(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, 'argv', _argv_tile(tmp_path, tmp_path, tmp_path))
+    seen = {}
+
+    def grab(xlif, ptu_dir, out, p):
+        seen['p'] = p
+        return {'roi': xlif.stem, 'status': 'OK'}
+
+    (tmp_path / 'a.xlif').write_text('')
+    with mock.patch('flimkit.batch_cli.fitRoi', grab):
+        batch_cli.tileBatchFit()
+    p = seen['p']
+    assert (p.gamma, p.tau_lo, p.tau_hi, p.save_lifetime, p.save_rgb) == (0.4, 0.0, 10.0, True, True)

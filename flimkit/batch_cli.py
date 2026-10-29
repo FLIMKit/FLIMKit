@@ -10,25 +10,6 @@ from .configs import (
     MACHINE_IRF_DEFAULT_PATH)
 
 
-def _resolve_out_dir(ptu_dir, output_dir):
-    out = Path(output_dir) if output_dir else Path(ptu_dir) / 'save'
-    out.mkdir(parents=True, exist_ok=True)
-    return out
-
-
-def _append_row(csv_path, row):
-    new_file = Path(csv_path).exists() == False
-    with open(csv_path, 'a', newline='') as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(row.keys()))
-        if new_file == True:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def _error_row(key, name, exc):
-    return {key: name, 'status': f'ERROR: {type(exc).__name__}: {str(exc)[:80]}'}
-
-
 def _batch_parser(description, input_flag, input_help, need_ptu_dir=True):
     ap = argparse.ArgumentParser(description=description)
     ap.add_argument(input_flag, required=True, help=input_help)
@@ -58,92 +39,177 @@ def _batch_parser(description, input_flag, input_help, need_ptu_dir=True):
     ap.add_argument('--intensity-display-max', type=float, default=None)
     ap.add_argument('--tau-weighting', default='amp', choices=['amp', 'int'])
     ap.add_argument('--fit-t0', action='store_true')
+    ap.add_argument('--gamma', type=float, default=0.4)
+    ap.add_argument('--no-save-npy', action='store_true')
     return ap
 
 
-def _common_args(a):
+def resolve_out_dir(ptu_dir, output_dir):
+    out = Path(output_dir) if output_dir else Path(ptu_dir) / 'save'
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def write_rows(csv_path, rows):
+    keys = []
+    for r in rows:
+        for k in r:
+            if k not in keys:
+                keys.append(k)
+    with open(csv_path, 'w', newline='') as fh:
+        writer = csv.DictWriter(fh, fieldnames=keys)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def error_row(key, name, exc):
+    return {key: name, 'status': f'ERROR: {type(exc).__name__}: {str(exc)[:80]}'}
+
+
+def _fit_args(p):
     return dict(
-        ptu_dir=a.ptu_dir, estimate_irf=a.estimate_irf, machine_irf=a.machine_irf,
-        irf=None, irf_xlsx=None, irf_xlsx_dir=None, irf_xlsx_map=None,
-        irf_bins=IRF_BINS, irf_fit_width=IRF_FIT_WIDTH, irf_fwhm=a.irf_fwhm,
-        nexp=a.nexp, tau_min=a.tau_min, tau_max=a.tau_max, mode='both',
-        binning=a.binning, min_photons=a.min_photons, optimizer=a.optimizer,
-        restarts=a.restarts, de_population=a.de_population, de_maxiter=a.de_maxiter,
-        workers=a.workers, no_polish=False, channel=a.channel, no_plots=True,
-        cell_mask=False, intensity_threshold=a.intensity_threshold,
-        correct_pileup=a.correct_pileup, no_xlsx_irf=True, debug_xlsx=False,
-        print_config=False, xlsx=None, dist_type='discrete', dist_n_components=1,
-        fit_t0=a.fit_t0, tvb_ptu=None, tvb_channel=None,
-        tau_display_min=a.tau_display_min, tau_display_max=a.tau_display_max,
-        intensity_display_min=a.intensity_display_min, intensity_display_max=a.intensity_display_max,
-        tau_weighting=a.tau_weighting)
+        nexp=p.nexp, dist_type=p.dist_type, dist_n_components=p.dist_n_components,
+        fit_t0=p.fit_t0, tau_min=p.tau_min, tau_max=p.tau_max, optimizer=p.optimizer,
+        restarts=p.restarts, de_population=p.de_population, de_maxiter=p.de_maxiter,
+        workers=p.workers, binning=p.binning, min_photons=p.min_photons,
+        channel=p.channel, irf_fwhm=p.irf_fwhm, intensity_threshold=p.intensity_threshold,
+        correct_pileup=p.correct_pileup, machine_irf=p.machine_irf,
+        estimate_irf=p.estimate_irf, no_xlsx_irf=True, irf=None, irf_xlsx=None,
+        irf_bins=IRF_BINS, irf_fit_width=IRF_FIT_WIDTH, tvb_ptu=p.tvb_ptu,
+        tvb_channel=None, no_plots=True, cell_mask=False, debug_xlsx=False,
+        print_config=False)
+
+
+def fitRoi(xlif_path, ptu_dir, roi_out, p):
+    from .formats.PTU.stitch import fit_flim_tiles
+    from .FLIM.assemble import derive_global_tau, save_assembled_maps, assemble_tile_maps
+    from .utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
+    from .utils.export_png import xlif_field_area_um2
+    xlif_path = Path(xlif_path)
+    roi_out = Path(roi_out)
+    ptu_basename = xlif_path.stem
+    roi_clean = ptu_basename.replace(' ', '_')
+    tau_key = 'tau_mean_int' if p.tau_weighting == 'int' else 'tau_mean_amp'
+    fit_args = argparse.Namespace(
+        **_fit_args(p), register_tiles=p.register, reg_max_shift_px=p.reg_shift,
+        tau_display_min=p.tau_lo, tau_display_max=p.tau_hi, intensity_display_min=0.0,
+        intensity_display_max=None, irf_xlsx_dir=None, irf_xlsx_map=None,
+        ptu_basename=ptu_basename, xlif=str(xlif_path), ptu_dir=str(ptu_dir),
+        output_dir=str(roi_out))
+    (tile_results, canvas_h, canvas_w, _, _, _, _, _, _) = fit_flim_tiles(
+        xlif_path=xlif_path, ptu_dir=Path(ptu_dir), output_dir=roi_out, args=fit_args,
+        ptu_basename=ptu_basename, rotate_tiles=p.rotate_tiles, verbose=True)
+    if not tile_results:
+        return {'roi': ptu_basename, 'status': 'No tiles fitted'}
+    canvas = assemble_tile_maps(tile_results, canvas_h, canvas_w, p.nexp)
+    del tile_results
+    gc.collect()
+    summary = derive_global_tau(canvas, n_exp=p.nexp)
+    area_um2 = xlif_field_area_um2(xlif_path, ptu_basename, (canvas_h, canvas_w), fit_args.binning)
+    save_assembled_maps(
+        canvas=canvas, global_summary=summary, output_dir=roi_out, roi_name=roi_clean,
+        n_exp=p.nexp, tau_display_min=p.tau_lo, tau_display_max=p.tau_hi,
+        intensity_display_max=p.int_max, tau_weighting=p.tau_weighting,
+        field_area_um2=area_um2)
+    if p.save_lifetime == True:
+        make_lifetime_image(
+            canvas=canvas, output_dir=roi_out, roi_name=roi_clean, tau_min_ns=p.tau_lo,
+            tau_max_ns=p.tau_hi, smooth_sigma_px=0.0, gamma=p.gamma, verbose=False,
+            tau_key=tau_key, field_area_um2=area_um2)
+    if p.save_rgb == True:
+        make_component_rgb_tiff(
+            canvas=canvas, output_dir=roi_out, roi_name=roi_clean, n_exp=p.nexp,
+            verbose=False, field_area_um2=area_um2)
+    if p.save_npy == False:
+        for f_ in roi_out.glob('*.npy'):
+            if f_.name.endswith('_time_axis_ns.npy') == False:
+                f_.unlink(missing_ok=True)
+    del canvas
+    gc.collect()
+    return {'roi': ptu_basename, 'status': 'OK', **summary}
+
+
+def fitFov(ptu_path, fov_out, p):
+    from .interactive import _run_flim_fit
+    ptu_path = Path(ptu_path)
+    fov_out = Path(fov_out)
+    stem = ptu_path.stem
+    a = argparse.Namespace(
+        **_fit_args(p), ptu=str(ptu_path), xlsx=None, mode='both', no_polish=False,
+        out=str(fov_out / stem), irf_align=p.irf_align, irf_shift_bins=p.irf_shift_bins)
+    result = _run_flim_fit(a)
+    if p.save_npy == False:
+        for f_ in fov_out.glob('*.npy'):
+            if f_.name.endswith('_time_axis_ns.npy') == False:
+                f_.unlink(missing_ok=True)
+    gc.collect()
+    pu_pct = result.get('pileup_pct')
+    cr_mhz = result.get('count_rate_mhz')
+    return {'fov': stem, 'status': 'OK',
+            'pileup_pct': pu_pct if pu_pct is not None else '',
+            'count_rate_mhz': cr_mhz if cr_mhz is not None else '',
+            **result.get('global_summary', {})}
+
+
+def _batch_params(a):
+    return argparse.Namespace(
+        nexp=a.nexp, dist_type='discrete', dist_n_components=1, fit_t0=a.fit_t0,
+        tau_min=a.tau_min, tau_max=a.tau_max, optimizer=a.optimizer, restarts=a.restarts,
+        de_population=a.de_population, de_maxiter=a.de_maxiter, workers=a.workers,
+        binning=a.binning, min_photons=a.min_photons, channel=a.channel,
+        irf_fwhm=a.irf_fwhm, intensity_threshold=a.intensity_threshold,
+        correct_pileup=a.correct_pileup, machine_irf=a.machine_irf,
+        estimate_irf=a.estimate_irf, tvb_ptu=None, register=getattr(a, 'register_tiles', True),
+        reg_shift=getattr(a, 'reg_max_shift', 120), rotate_tiles=getattr(a, 'rotate_tiles', True),
+        tau_lo=a.tau_display_min if a.tau_display_min is not None else 0.0,
+        tau_hi=a.tau_display_max if a.tau_display_max is not None else 10.0,
+        int_max=a.intensity_display_max, tau_weighting=a.tau_weighting,
+        gamma=a.gamma, save_lifetime=True, save_rgb=True, save_npy=a.save_npy,
+        irf_align='steepest_rise', irf_shift_bins=2)
+
+
+def _run_batch(items, out_dir, runner, key, csv_name, label):
+    out_dir = Path(out_dir)
+    csv_path = out_dir / csv_name
+    rows = []
+    n_total = len(items)
+    for idx, item in enumerate(items):
+        name = item.stem
+        item_out = out_dir / name.replace(' ', '_')
+        item_out.mkdir(parents=True, exist_ok=True)
+        print(f"\n{'='*50}\n  [{idx + 1}/{n_total}] {name}\n{'='*50}")
+        try:
+            row = runner(item, item_out)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            row = error_row(key, name, exc)
+        gc.collect()
+        rows.append(row)
+        write_rows(csv_path, rows)
+    print(f'\n{label} complete. CSV: {csv_path}')
+    return csv_path
 
 
 def _run_tile_batch(a):
-    from .interactive import _run_tile_fit
     xlif_files = sorted(Path(a.xlif_dir).glob('*.xlif'))
     if len(xlif_files) == 0:
         raise ValueError(f'No .xlif files found in: {a.xlif_dir}')
-    out_dir = _resolve_out_dir(a.ptu_dir, a.output_dir)
-    csv_path = out_dir / 'batch_roi_fit_summary.csv'
-    n_total = len(xlif_files)
-    for idx, xlif_path in enumerate(xlif_files):
-        name = xlif_path.stem
-        roi_out = out_dir / name.replace(' ', '_')
-        roi_out.mkdir(parents=True, exist_ok=True)
-        print(f"\n{'='*50}\n  [{idx + 1}/{n_total}] {name}\n{'='*50}")
-        try:
-            args = argparse.Namespace(
-                **_common_args(a), xlif=str(xlif_path), output_dir=str(roi_out),
-                ptu_basename=name, rotate_tiles=a.rotate_tiles,
-                register_tiles=a.register_tiles, reg_max_shift_px=a.reg_max_shift, out=None)
-            result = _run_tile_fit(args)
-            summary = result['global_summary'] if result else {}
-            row = {'roi': name, 'status': 'OK', **summary}
-            del result
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            row = _error_row('roi', name, exc)
-        gc.collect()
-        _append_row(csv_path, row)
-    print(f'\nBatch complete. CSV: {csv_path}')
-    return csv_path
+    out_dir = resolve_out_dir(a.ptu_dir, a.output_dir)
+    p = _batch_params(a)
+    return _run_batch(xlif_files, out_dir, lambda x, o: fitRoi(x, a.ptu_dir, o, p),
+                      'roi', 'batch_roi_fit_summary.csv', 'Batch')
 
 
 def _run_fov_batch(a):
-    from .interactive import _run_flim_fit
     from .formats import supported_extensions
-    ptu_files = sorted(p for e in supported_extensions() for p in Path(a.fov_dir).glob('*' + e))
+    ptu_files = sorted(f for e in supported_extensions() for f in Path(a.fov_dir).glob('*' + e))
     if len(ptu_files) == 0:
         raise ValueError(f'No FLIM files found in: {a.fov_dir}')
-    out_dir = _resolve_out_dir(a.ptu_dir, a.output_dir)
-    csv_path = out_dir / 'batch_fov_fit_summary.csv'
-    n_total = len(ptu_files)
-    for idx, ptu_path in enumerate(ptu_files):
-        name = ptu_path.stem
-        fov_out = out_dir / name.replace(' ', '_')
-        fov_out.mkdir(parents=True, exist_ok=True)
-        print(f"\n{'='*50}\n  [{idx + 1}/{n_total}] {name}\n{'='*50}")
-        try:
-            args = argparse.Namespace(
-                **_common_args(a), ptu=str(ptu_path), out=str(fov_out / name),
-                irf_align='steepest_rise', irf_shift_bins=2)
-            result = _run_flim_fit(args)
-            summary = result.get('global_summary', {})
-            row = {'fov': name, 'status': 'OK',
-                   'pileup_pct': result.get('pileup_pct') if result.get('pileup_pct') is not None else '',
-                   'count_rate_mhz': result.get('count_rate_mhz') if result.get('count_rate_mhz') is not None else '',
-                   **summary}
-            del result
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            row = _error_row('fov', name, exc)
-        gc.collect()
-        _append_row(csv_path, row)
-    print(f'\nBatch FOV complete. CSV: {csv_path}')
-    return csv_path
+    out_dir = resolve_out_dir(a.ptu_dir, a.output_dir)
+    p = _batch_params(a)
+    return _run_batch(ptu_files, out_dir, lambda f, o: fitFov(f, o, p),
+                      'fov', 'batch_fov_fit_summary.csv', 'Batch FOV')
 
 
 def _inquire_common(a):
@@ -224,7 +290,7 @@ def tileBatchFit(interactive=False):
             de_population=de_population, de_maxiter=de_maxiter, workers=n_workers,
             channel=channels, irf_fwhm=IRF_FWHM, tau_display_min=TAU_DISPLAY_MIN,
             tau_display_max=TAU_DISPLAY_MAX, reg_max_shift=120, intensity_display_min=None,
-            intensity_display_max=None, tau_weighting='amp', fit_t0=False)
+            intensity_display_max=None, tau_weighting='amp', fit_t0=False, gamma=0.4, save_npy=True)
         print('\nBatch tiled ROI fit: one fit per .xlif in a folder')
         a.xlif_dir = input('Enter directory containing XLIF files: ').strip()
         if Path(a.xlif_dir).is_dir() == False:
@@ -243,6 +309,7 @@ def tileBatchFit(interactive=False):
         ap.add_argument('--no-register', action='store_true')
         ap.add_argument('--reg-max-shift', type=int, default=120)
         a = ap.parse_args()
+        a.save_npy = a.no_save_npy == False
         a.rotate_tiles = a.no_rotate == False
         a.register_tiles = a.no_register == False
     return _run_tile_batch(a)
@@ -256,7 +323,7 @@ def fovBatchFit(interactive=False):
             de_population=de_population, de_maxiter=de_maxiter, workers=n_workers,
             channel=channels, irf_fwhm=IRF_FWHM, tau_display_min=TAU_DISPLAY_MIN,
             tau_display_max=TAU_DISPLAY_MAX, intensity_display_min=None,
-            intensity_display_max=None, tau_weighting='amp', fit_t0=False)
+            intensity_display_max=None, tau_weighting='amp', fit_t0=False, gamma=0.4, save_npy=True)
         print('\nBatch single-FOV fit: one fit per FLIM file in a folder')
         _inquire_common(a)
         _inquire_expert(a)
@@ -265,5 +332,6 @@ def fovBatchFit(interactive=False):
         ap = _batch_parser('Batch single-FOV FLIM fit over every FLIM file in a folder', '--fov-dir',
                            'Folder of FLIM files', need_ptu_dir=False)
         a = ap.parse_args()
+        a.save_npy = a.no_save_npy == False
         a.ptu_dir = a.fov_dir
     return _run_fov_batch(a)

@@ -2866,8 +2866,27 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         correct_pileup = self.bv_batch_correct_pileup.get()
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
-        from flimkit.interactive import _run_flim_fit
+        from flimkit.batch_cli import fitFov
         import gc, csv as csv_mod
+        bp = argparse.Namespace(
+            nexp=n_exp, dist_type=_batch_model,
+            dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
+            fit_t0=expert_overrides.get('fit_t0', False),
+            tau_min=tau_min, tau_max=tau_max,
+            optimizer=expert_overrides.get('optimizer', cfg['Optimizer']),
+            restarts=expert_overrides.get('lm_restarts', cfg['lm_restarts']),
+            de_population=expert_overrides.get('de_population', cfg['de_population']),
+            de_maxiter=expert_overrides.get('de_maxiter', cfg['de_maxiter']),
+            workers=expert_overrides.get('n_workers', cfg['n_workers']),
+            binning=expert_overrides.get('binning_factor', cfg['binning_factor']),
+            min_photons=expert_overrides.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
+            channel=expert_overrides.get('channels', cfg['channels']),
+            irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
+            intensity_threshold=thr, correct_pileup=correct_pileup,
+            machine_irf=mirf, estimate_irf='machine_irf', tvb_ptu=tvb_ptu_batch,
+            save_npy=save_npy,
+            irf_align=expert_overrides.get('irf_align', 'steepest_rise'),
+            irf_shift_bins=expert_overrides.get('irf_shift_bins', 2))
         def task(progress_callback, cancel_event):
             csv_path = Path(out_dir) / 'batch_fov_fit_summary.csv'
             header_written = False
@@ -2882,58 +2901,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 fov_out.mkdir(parents=True, exist_ok=True)
                 print(f'\n{'='*50}\n  [{idx+1}/{n_total}] {stem}\n{'='*50}')
                 try:
-                    a = argparse.Namespace(
-                        ptu=str(ptu_path),
-                        xlsx=None,
-                        debug_xlsx=False,
-                        print_config=False,
-                        irf=None,
-                        irf_xlsx=None,
-                        estimate_irf='machine_irf',
-                        no_xlsx_irf=True,
-                        machine_irf=mirf,
-                        irf_bins=cfg['IRF_BINS'],
-                        irf_fit_width=cfg['IRF_FIT_WIDTH'],
-                        irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
-                        nexp=n_exp,
-                        dist_type=_batch_model,
-                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
-                        fit_t0=expert_overrides.get('fit_t0', False),
-                        tau_min=tau_min,
-                        tau_max=tau_max,
-                        mode='both',
-                        binning=expert_overrides.get('binning_factor', cfg['binning_factor']),
-                        min_photons=expert_overrides.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
-                        optimizer=expert_overrides.get('optimizer', cfg['Optimizer']),
-                        restarts=expert_overrides.get('lm_restarts', cfg['lm_restarts']),
-                        de_population=expert_overrides.get('de_population', cfg['de_population']),
-                        de_maxiter=expert_overrides.get('de_maxiter', cfg['de_maxiter']),
-                        workers=expert_overrides.get('n_workers', cfg['n_workers']),
-                        no_polish=False,
-                        channel=expert_overrides.get('channels', cfg['channels']),
-                        out=str(fov_out / stem),
-                        no_plots=True,
-                        cell_mask=False,
-                        correct_pileup=correct_pileup,
-                        intensity_threshold=thr,
-                        irf_align=expert_overrides.get('irf_align', 'steepest_rise'),
-                        irf_shift_bins=expert_overrides.get('irf_shift_bins', 2),
-                        tvb_ptu=tvb_ptu_batch,
-                        tvb_channel=None,
-                    )
-                    result = _run_flim_fit(a)
-                    summary = result.get('global_summary', {})
-                    pu_pct = result.get('pileup_pct')
-                    cr_mhz = result.get('count_rate_mhz')
-                    if not save_npy:
-                        for f_ in fov_out.glob('*.npy'):
-                            if not f_.name.endswith('_time_axis_ns.npy'):
-                                f_.unlink(missing_ok=True)
-                    gc.collect()
-                    row = {'fov': stem, 'status': 'OK',
-                           'pileup_pct': pu_pct if pu_pct is not None else '',
-                           'count_rate_mhz': cr_mhz if cr_mhz is not None else '',
-                           **summary}
+                    row = fitFov(ptu_path, fov_out, bp)
                     print(f'  OK: {stem}')
                 except Exception as exc:
                     import traceback; traceback.print_exc()
@@ -2992,11 +2960,28 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         correct_pileup = self.bv_batch_correct_pileup.get()
         tvb_ptu_batch = (self.sv_batch_tvb_ptu.get().strip() or None) if hasattr(self, 'sv_batch_tvb_ptu') else None
         expert_overrides = dict(self._expert_overrides)
-        from flimkit.formats.PTU.stitch import fit_flim_tiles
-        from flimkit.FLIM.assemble import (derive_global_tau, save_assembled_maps,
-                                           assemble_tile_maps)
-        from flimkit.utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
+        from flimkit.batch_cli import fitRoi
         import gc, csv as csv_mod
+        bp = argparse.Namespace(
+            nexp=n_exp, dist_type=_batch_model,
+            dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
+            fit_t0=expert_overrides.get('fit_t0', False),
+            tau_min=tau_min, tau_max=tau_max,
+            optimizer=expert_overrides.get('optimizer', 'de'),
+            restarts=expert_overrides.get('lm_restarts', 1),
+            de_population=expert_overrides.get('de_population', cfg['de_population']),
+            de_maxiter=expert_overrides.get('de_maxiter', cfg['de_maxiter']),
+            workers=expert_overrides.get('n_workers', cfg['n_workers']),
+            binning=expert_overrides.get('binning_factor', 1),
+            min_photons=expert_overrides.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
+            channel=expert_overrides.get('channels', cfg['channels']),
+            irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
+            intensity_threshold=thr, correct_pileup=correct_pileup,
+            machine_irf=mirf, estimate_irf='machine_irf', tvb_ptu=tvb_ptu_batch,
+            register=register, reg_shift=reg_shift, rotate_tiles=True,
+            tau_lo=tau_lo, tau_hi=tau_hi, int_max=int_max,
+            tau_weighting=('int' if tau_weighting == 'intensity' else 'amp'),
+            gamma=gamma, save_lifetime=save_lifetime, save_rgb=save_rgb, save_npy=save_npy)
         def task(progress_callback, cancel_event):
             csv_path = Path(out_dir) / 'batch_roi_fit_summary.csv'
             header_written = False
@@ -3012,83 +2997,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 roi_out.mkdir(parents=True, exist_ok=True)
                 print(f'\n{'='*50}\n  [{idx+1}/{n_total}] {ptu_basename}\n{'='*50}')
                 try:
-                    fit_args = argparse.Namespace(
-                        nexp=n_exp, dist_type=_batch_model,
-                        dist_n_components=(self.iv_ncomp_dist_batch.get() if _batch_model not in ('discrete', 'tail') else 1),
-                        fit_t0=expert_overrides.get('fit_t0', False),
-                        tau_min=tau_min, tau_max=tau_max,
-                        optimizer=expert_overrides.get('optimizer', 'de'),
-                        restarts=expert_overrides.get('lm_restarts', 1),
-                        de_population=expert_overrides.get('de_population', cfg['de_population']),
-                        de_maxiter=expert_overrides.get('de_maxiter', cfg['de_maxiter']),
-                        workers=expert_overrides.get('n_workers', cfg['n_workers']),
-                        binning=expert_overrides.get('binning_factor', 1),
-                        min_photons=expert_overrides.get('min_photons', cfg['MIN_PHOTONS_PERPIX']),
-                        channel=expert_overrides.get('channels', cfg['channels']),
-                        irf_fwhm=expert_overrides.get('irf_fwhm', cfg['IRF_FWHM']),
-                        intensity_threshold=thr,
-                        correct_pileup=correct_pileup,
-                        register_tiles=register,
-                        reg_max_shift_px=reg_shift,
-                        machine_irf=mirf,
-                        tau_display_min=tau_lo,
-                        tau_display_max=tau_hi,
-                        intensity_display_min=0.0,
-                        intensity_display_max=None,
-                        irf_xlsx_dir=None, irf_xlsx_map=None,
-                        ptu_basename=ptu_basename,
-                        xlif=str(xlif_path),
-                        ptu_dir=ptu_dir,
-                        output_dir=str(roi_out),
-                        no_plots=True, cell_mask=False,
-                        debug_xlsx=False, print_config=False,
-                        irf=None, irf_xlsx=None,
-                        estimate_irf='machine_irf',
-                        no_xlsx_irf=True,
-                        tvb_ptu=tvb_ptu_batch,
-                        tvb_channel=None,
-                    )
-                    (tile_results, canvas_h, canvas_w, _, _, _, _, _, _) = fit_flim_tiles(
-                        xlif_path=xlif_path, ptu_dir=Path(ptu_dir),
-                        output_dir=roi_out, args=fit_args,
-                        ptu_basename=ptu_basename, rotate_tiles=True, verbose=True,
-                    )
-                    if not tile_results:
-                        row = {'roi': ptu_basename, 'status': 'No tiles fitted'}
-                    else:
-                        canvas = assemble_tile_maps(tile_results, canvas_h, canvas_w, n_exp)
-                        del tile_results; gc.collect()
-                        summary = derive_global_tau(canvas, n_exp=n_exp)
-                        from flimkit.utils.export_png import xlif_field_area_um2
-                        area_um2 = xlif_field_area_um2(xlif_path, ptu_basename, (canvas_h, canvas_w), fit_args.binning)
-                        save_assembled_maps(
-                            canvas=canvas, global_summary=summary,
-                            output_dir=roi_out, roi_name=roi_clean, n_exp=n_exp,
-                            tau_display_min=tau_lo, tau_display_max=tau_hi,
-                            intensity_display_max=int_max,
-                            tau_weighting=('int' if tau_weighting == 'intensity' else 'amp'),
-                            field_area_um2=area_um2,
-                        )
-                        if save_lifetime:
-                            make_lifetime_image(
-                                canvas=canvas, output_dir=roi_out, roi_name=roi_clean,
-                                tau_min_ns=tau_lo, tau_max_ns=tau_hi,
-                                smooth_sigma_px=0.0, gamma=gamma, verbose=False,
-                                tau_key=tau_key, field_area_um2=area_um2,
-                            )
-                        if save_rgb:
-                            make_component_rgb_tiff(
-                                canvas=canvas, output_dir=roi_out,
-                                roi_name=roi_clean, n_exp=n_exp, verbose=False,
-                                field_area_um2=area_um2,
-                            )
-                        if not save_npy:
-                            for f_ in roi_out.glob('*.npy'):
-                                if not f_.name.endswith('_time_axis_ns.npy'):
-                                    f_.unlink(missing_ok=True)
-                        del canvas; gc.collect()
-                        row = {'roi': ptu_basename, 'status': 'OK', **summary}
-                        print(f'  OK: {ptu_basename}')
+                    row = fitRoi(xlif_path, ptu_dir, roi_out, bp)
+                    print(f'  {row["status"]}: {ptu_basename}')
                 except Exception as exc:
                     import traceback; traceback.print_exc()
                     row = {'roi': ptu_basename,
