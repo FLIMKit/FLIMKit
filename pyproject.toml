@@ -99,5 +99,4 @@ exclude = ['flimkit_tests*']
 namespaces = true
 
 [tool.setuptools.package-data]
-'flimkit.machine_irf' = ['*.csv', '*.npy', '*.json']
 'flimkit.UI' = ['*.png', '*.ico', '*.icns']

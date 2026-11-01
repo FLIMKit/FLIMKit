@@ -14,17 +14,9 @@ def _filtered_phasor(session):
     method = spec.get('method') or 'none'
     if method == 'none':
         return real, imag, mean
-    from flimkit.phasor.filters import phasor_filter
-    kwargs = {}
-    if method == 'gaussian':
-        kwargs['sigma'] = float(spec.get('sigma', 1.0))
-    elif method == 'median':
-        kwargs['size'] = int(spec.get('size', 3))
-    elif method != 'wavelet':
-        kwargs['sigma'] = float(spec.get('sigma', 1.0))
-        kwargs['size'] = int(spec.get('size', 3))
+    from flimkit.phasor.filters import filter_kwargs, phasor_filter
     try:
-        real, imag = phasor_filter(real.copy(), imag.copy(), method, mean=mean, **kwargs)
+        real, imag = phasor_filter(real.copy(), imag.copy(), method, mean=mean, **filter_kwargs(spec))
     except Exception as exc:
         print(f'[Phasor Export] Could not re-apply the saved {method} filter, plotting unfiltered: {exc}')
     return real, imag, mean

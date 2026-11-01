@@ -1504,6 +1504,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tau_display_max = getattr(args, 'tau_display_max',       None),
         intensity_display_min = getattr(args, 'intensity_display_min', None),
         intensity_display_max = getattr(args, 'intensity_display_max', None),
+        tau_weighting = getattr(args, 'tau_weighting', 'amp'),
         field_area_um2 = tile_area_um2,
     )
     if _cancelled(cancel_event):
@@ -1521,6 +1522,7 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
         tau_max_ns = tau_max_img,
         smooth_sigma_px = 2.0,
         verbose = True,
+        tau_key = 'tau_mean_int' if getattr(args, 'tau_weighting', 'amp') == 'int' else 'tau_mean_amp',
         field_area_um2 = tile_area_um2,
     )
     print(f"\n{'='*60}")
