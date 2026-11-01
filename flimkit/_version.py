@@ -1,4 +1,4 @@
-__version__ = '0.14.2'
+__version__ = '0.14.3'
 fitter_version = '25'
 app_name = 'FLIMKitDEV' if '+dev' in __version__ else 'FLIMKit'
 
@@ -51,5 +51,6 @@ Need to add Phasor once added to the codebase, and update version to 1.0. And ad
 0.14.0 -> free-tau per-pixel fits run in numba instead of scipy once per pixel, on the CPU and on NVIDIA GPUs through numba.cuda, and on a CUDA or ROCm card through torch as a batched Levenberg-Marquardt, so fitter_version goes to 24. The @fit_backend plugin hook lets an add-on run the per-pixel fits on its own C or CUDA code; flimkit-accelerator-plugin is the worked example and can speed free tau up considerably, though nothing needs it. Fixed two fitting bugs: stitched and batch ROI fits paired each tile's amplitudes with the wrong lifetimes, and CPU free-tau fits used the wrong IRF when the IRF had a fitted tail and the background was fitted. Summed fits report standard errors and, by default, bootstrap errors. Export all, phasor PNG export, an in-app update check and update.py. FLIMKitDEV is built from dev.
 0.14.1 -> the compiled desktop app starts on Linux again: PIL._tkinter_finder is bundled, so the matplotlib toolbar no longer dies on a missing module. The installation check accepts an add-on fit backend that solves every free-tau pixel itself instead of demanding that some reach the scipy solver. Releases now publish to PyPI on their own: a release created by the build workflow does not trigger the publish workflow, so the build dispatches it. No fitted number changes, so fitter_version stays at 24.
 0.14.2 -> fixed-tau per-pixel fits with two or more components estimate the amplitudes by Poisson maximum likelihood with a fitted constant offset, so fitter_version goes to 25. The earlier projection stays behind Earlier projection for fixed tau in Expert Settings and --estimator nnls. A fit backend can take the Poisson fit by listing poisson in its estimators attribute. The IRF selector is one dropdown.
+0.14.3 -> batch tiled ROI and single FOV fits in the terminal UI and as scripts, sharing their code with the GUI batch. The wavelet phasor filter has a wavelet, a level and a threshold setting.
 1.0.0 -> release version with all core features implemented and tested
 1.5.0 (or 2.0) -> validation of fitting results with known fluorophores.'''

@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-11-01
+
 ### Added
+- Batch tiled ROI fit and Batch single FOV fit in the guided terminal UI, and as `tileBatchFit` and `fovBatchFit` in `flimkit.batch_cli` with flags for scripts. Each one loops over a folder of `.xlif` files or FLIM files, writes one output folder per item and a summary CSV, and carries on past an item that fails. They ask for the tau weighting, the tau and intensity display ranges, registration and the expert fit settings. The single FOV batch has been run on one real PTU. The tile batch has only run with mocked fits.
 - The wavelet phasor filter has settings in the phasor panel: the wavelet (db4, db2, db8, haar, sym4 or coif1), the decomposition level from 1 to 6, and soft or hard thresholding. They're saved in `<file>_phasor.npz` and used again by the phasor export. A session saved by an earlier version loads with db4, level 1 and soft, which is what the filter always used, so no saved result changes.
+
+### Changed
+- The GUI batch ROI and FOV fits call the same code as the CLI, `batch_cli.fitRoi` and `fitFov`, where the GUI had its own loop. The two now give the same tau images, with the same lifetime smoothing, gamma and summary keys. The batch CSV is rewritten after each item with the union of the columns, so an error row no longer breaks the rows after it.
 
 ## [0.14.2] - 2026-10-21
 
