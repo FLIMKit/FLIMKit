@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- The wavelet phasor filter has settings in the phasor panel: the wavelet (db4, db2, db8, haar, sym4 or coif1), the decomposition level from 1 to 6, and soft or hard thresholding. They're saved in `<file>_phasor.npz` and used again by the phasor export. A session saved by an earlier version loads with db4, level 1 and soft, which is what the filter always used, so no saved result changes.
+
 ## [0.14.2] - 2026-10-21
 
 ### Changed

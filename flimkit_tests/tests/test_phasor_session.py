@@ -24,7 +24,7 @@ def test_roundtrip_keeps_polygon_cursors_and_filter(tmp_path):
     save_session(
         path, cursors=cursors,
         params=dict(radius=0.05, radius_minor=0.03, angle_mode='semicircle'),
-        phasor_filter=dict(method='wavelet', sigma=1.0, size=3),
+        phasor_filter=dict(method='wavelet', sigma=1.0, size=3, wavelet='haar', level=2, threshold_mode='hard'),
         **_arrays(),
     )
     sess = load_session(path)
@@ -32,6 +32,18 @@ def test_roundtrip_keeps_polygon_cursors_and_filter(tmp_path):
     assert sess['cursors'][0]['center_g'] == pytest.approx(0.6)
     assert sess['cursors'][1]['vertices'] == [(0.5, 0.2), (0.7, 0.2), (0.6, 0.4)]
     assert sess['phasor_filter']['method'] == 'wavelet'
+    assert sess['phasor_filter']['wavelet'] == 'haar'
+    assert sess['phasor_filter']['level'] == 2
+    assert sess['phasor_filter']['threshold_mode'] == 'hard'
+
+def test_wavelet_settings_reach_the_filter():
+    from flimkit.phasor.filters import filter_kwargs, phasor_filter
+    arrays = _arrays((32, 32))
+    spec = dict(method='wavelet', wavelet='haar', level=2, threshold_mode='hard')
+    assert filter_kwargs(spec) == dict(wavelet='haar', level=2, threshold_mode='hard')
+    default = phasor_filter(arrays['real_cal'], arrays['imag_cal'], 'wavelet')
+    chosen = phasor_filter(arrays['real_cal'], arrays['imag_cal'], 'wavelet', **filter_kwargs(spec))
+    assert not np.allclose(default[0], chosen[0])
 
 def test_session_without_filter_or_types_still_loads(tmp_path):
     path = tmp_path / 'old_phasor.npz'
@@ -48,6 +60,7 @@ def test_session_without_filter_or_types_still_loads(tmp_path):
     )
     sess = load_session(path)
     assert sess['cursors'][0]['type'] == 'ellipse'
+    assert sess['phasor_filter']['wavelet'] == 'db4'
     assert sess['phasor_filter']['method'] == 'none'
 
 def test_batch_window_kwargs_parse_expert_settings():
