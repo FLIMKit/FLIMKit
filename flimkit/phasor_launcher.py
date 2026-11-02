@@ -72,6 +72,9 @@ def save_session(path, *,
         filter_method=np.array(str(filt.get('method') or 'none')),
         filter_sigma=np.float64(filt.get('sigma', 1.0)),
         filter_size=np.int64(filt.get('size', 3)),
+        filter_wavelet=np.array(str(filt.get('wavelet', 'db4'))),
+        filter_level=np.int64(filt.get('level', 1)),
+        filter_threshold=np.array(str(filt.get('threshold_mode', 'soft'))),
         ptu_file=np.array(ptu_file or ''),
         irf_file=np.array(irf_file or ''),
     )
@@ -112,6 +115,9 @@ def load_session(path):
         method=str(d['filter_method']) if 'filter_method' in d else 'none',
         sigma=float(d['filter_sigma']) if 'filter_sigma' in d else 1.0,
         size=int(d['filter_size']) if 'filter_size' in d else 3,
+        wavelet=str(d['filter_wavelet']) if 'filter_wavelet' in d else 'db4',
+        level=int(d['filter_level']) if 'filter_level' in d else 1,
+        threshold_mode=str(d['filter_threshold']) if 'filter_threshold' in d else 'soft',
     )
     return dict(
         real_cal=d['real_cal'],

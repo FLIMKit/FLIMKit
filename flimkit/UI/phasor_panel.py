@@ -45,6 +45,9 @@ class PhasorViewPanel:
         self._filter_method = tk.StringVar(value='none')
         self._filter_sigma = tk.DoubleVar(value=1.0)
         self._filter_size = tk.IntVar(value=3)
+        self._filter_wavelet = tk.StringVar(value='db4')
+        self._filter_level = tk.IntVar(value=1)
+        self._filter_threshold = tk.StringVar(value='soft')
         self._applied_filter = None
         self._cursors = []
         self._cursor_artists = []
@@ -145,6 +148,17 @@ class PhasorViewPanel:
         ttk.Spinbox(self._filt_size_frame, textvariable=self._filter_size,
                     from_=3, to=15, increment=2, width=4).pack(side='left', padx=(2, 6))
         self._filt_size_frame.pack_forget()
+        from flimkit.phasor.filters import THRESHOLD_MODES, WAVELET_NAMES
+        self._filt_wavelet_frame = ttk.Frame(row_filt)
+        self._filt_wavelet_frame.pack(side='left')
+        ttk.Combobox(self._filt_wavelet_frame, textvariable=self._filter_wavelet,
+                     values=list(WAVELET_NAMES), width=6).pack(side='left', padx=(2, 4))
+        ttk.Label(self._filt_wavelet_frame, text='level:').pack(side='left')
+        ttk.Spinbox(self._filt_wavelet_frame, textvariable=self._filter_level,
+                    from_=1, to=6, increment=1, width=3).pack(side='left', padx=(2, 4))
+        ttk.Combobox(self._filt_wavelet_frame, textvariable=self._filter_threshold,
+                     values=list(THRESHOLD_MODES), state='readonly', width=5).pack(side='left', padx=(0, 6))
+        self._filt_wavelet_frame.pack_forget()
         self._filt_apply_btn = ttk.Button(row_filt, text='Apply', command=self._on_filter_apply)
         self._filt_apply_btn.pack(side='left', padx=(0, 4))
         ttk.Button(row_filt, text='Reset',
@@ -175,12 +189,17 @@ class PhasorViewPanel:
             shown = {'sigma'}
         elif method == 'median':
             shown = {'size'}
-        elif method in ('none', 'wavelet'):
+        elif method == 'wavelet':
+            shown = {'wavelet'}
+        elif method == 'none':
             shown = set()
         else:
             shown = self._plugin_filter_params(method)
         self._filt_sigma_frame.pack_forget()
         self._filt_size_frame.pack_forget()
+        self._filt_wavelet_frame.pack_forget()
+        if 'wavelet' in shown:
+            self._filt_wavelet_frame.pack(side='left', before=self._filt_apply_btn)
         if 'sigma' in shown:
             self._filt_sigma_frame.pack(side='left', before=self._filt_apply_btn)
         if 'size' in shown:
@@ -194,7 +213,10 @@ class PhasorViewPanel:
             return
         spec = dict(method=method,
                     sigma=float(self._filter_sigma.get()),
-                    size=int(self._filter_size.get()))
+                    size=int(self._filter_size.get()),
+                    wavelet=self._filter_wavelet.get(),
+                    level=int(self._filter_level.get()),
+                    threshold_mode=self._filter_threshold.get())
         try:
             self._apply_filter_spec(spec)
         except Exception as exc:
@@ -216,23 +238,16 @@ class PhasorViewPanel:
         if method == 'median':
             return f"median  (size={spec['size']})"
         if method == 'wavelet':
-            return 'wavelet  (db4)'
+            return (f"wavelet  ({spec.get('wavelet', 'db4')}, level {spec.get('level', 1)}, "
+                    f"{spec.get('threshold_mode', 'soft')})")
         return method
 
     def _apply_filter_spec(self, spec):
-        from flimkit.phasor.filters import phasor_filter
+        from flimkit.phasor.filters import filter_kwargs, phasor_filter
         method = spec['method']
-        kwargs = {}
-        if method == 'gaussian':
-            kwargs['sigma'] = float(spec['sigma'])
-        elif method == 'median':
-            kwargs['size'] = int(spec['size'])
-        elif method != 'wavelet':
-            kwargs['sigma'] = float(spec['sigma'])
-            kwargs['size'] = int(spec['size'])
         self._real, self._imag = phasor_filter(
             self._real_raw.copy(), self._imag_raw.copy(), method,
-            mean=self._mean, **kwargs)
+            mean=self._mean, **filter_kwargs(spec))
         self._applied_filter = dict(spec)
 
     def _on_filter_reset(self):
@@ -329,6 +344,9 @@ class PhasorViewPanel:
         if spec.get('method', 'none') not in ('none', '', None):
             self._filter_sigma.set(float(spec.get('sigma', 1.0)))
             self._filter_size.set(int(spec.get('size', 3)))
+            self._filter_wavelet.set(str(spec.get('wavelet', 'db4')))
+            self._filter_level.set(int(spec.get('level', 1)))
+            self._filter_threshold.set(str(spec.get('threshold_mode', 'soft')))
             self._filter_method.set(spec['method'])
             try:
                 self._apply_filter_spec(spec)

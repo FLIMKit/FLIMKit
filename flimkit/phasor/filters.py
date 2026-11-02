@@ -55,6 +55,23 @@ def phasor_filter(
     )
 
 
+WAVELET_NAMES = ('db4', 'db2', 'db8', 'haar', 'sym4', 'coif1')
+THRESHOLD_MODES = ('soft', 'hard')
+
+
+def filter_kwargs(spec):
+    method = spec.get('method')
+    if method == 'gaussian':
+        return dict(sigma=float(spec.get('sigma', 1.0)))
+    if method == 'median':
+        return dict(size=int(spec.get('size', 3)))
+    if method == 'wavelet':
+        return dict(wavelet=str(spec.get('wavelet', 'db4')),
+                    level=int(spec.get('level', 1)),
+                    threshold_mode=str(spec.get('threshold_mode', 'soft')))
+    return dict(sigma=float(spec.get('sigma', 1.0)), size=int(spec.get('size', 3)))
+
+
 def phasor_filter_methods():
     from flimkit.plugins import registry
     return ['gaussian', 'median', 'wavelet'] + [f.id for f in registry.phasor_filters()]

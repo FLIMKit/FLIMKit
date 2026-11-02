@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.14.2** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.14.3** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -624,7 +624,7 @@ The raw cloud is wide because each pixel carries few photons. Phasor filter smoo
 | none | | Raw phasor. |
 | gaussian | σ | Gaussian smoothing of G and S. |
 | median | size | Median filter of G and S. Removes outliers and keeps edges. |
-| wavelet | | Wavelet soft-thresholding (Daubechies db4). It takes no parameter. This is the filter closest to the LAS X phasor display. |
+| wavelet | wavelet, level, threshold | Wavelet thresholding. The defaults are Daubechies db4, level 1 and soft thresholding, which is the filter closest to the LAS X phasor display. The wavelet is db4, db2, db8, haar, sym4 or coif1, the level runs from 1 to 6, and the threshold is soft or hard. |
 
 Apply runs the filter and Reset goes back to the raw data. With the wavelet filter and the same cursor, the count went to 13,771 pixels and τ_φ to 2.20-2.70 ns (median 2.43 ns).
 
@@ -866,7 +866,7 @@ A filter row sits above the cursor controls. Select a method, set parameters, an
 |---|---|---|
 | `gaussian` | σ (0.5-10 px) | Gaussian smoothing via phasorpy's NaN-aware implementation |
 | `median` | size (3-15 px, odd) | Median filter; removes outlier pixels while preserving edges |
-| `wavelet` | none | Wavelet soft-thresholding (Daubechies db4, MAD noise estimator) |
+| `wavelet` | wavelet (`db4`, `db2`, `db8`, `haar`, `sym4`, `coif1`), level (1-6), threshold (`soft` or `hard`) | Wavelet thresholding with a MAD noise estimator. The defaults are db4, level 1 and soft |
 
 Filtering is applied in phasor space (G and S coordinates) after calibration. The phasor plot and cursor stats update immediately after applying.
 
