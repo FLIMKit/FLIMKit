@@ -90,7 +90,9 @@ Format support was developed with the instrument vendors. Becker & Hickl support
 
 # AI usage disclosure
 
-Anthropic's Claude assisted with parts of the graphical user interface, the add-on system, application packaging, Docker deployment scripting, and debugging, under the direction of the lead author (A.H.). Contributions by Z.Y.Y. were developed with assistance from OpenAI's GPT-5.6 Sol, run through Hermes Agent by Nous Research; Z.Y.Y. directed and reviewed that work and is responsible for it. All scientific design (fitting models, IRF handling, phasor methods, validation approach, architecture) is the authors' own. AI-assisted code was reviewed and tested by the authors before merging, through the test suite, the installation validation script and CPU/GPU parity tests. No AI tool generated or verified the scientific or statistical methods described here.
+FLIMKit is designed, developed and maintained by A.H. Anthropic's Claude was used as an assistant for parts of the implementation. All scientific design, fitting and phasor methods, validation and the overall architecture are A.H.'s own work. All AI-generated content was reviewed, edited and tested by A.H. on both real and synthetic FLIM data, and A.H. remains responsible for the implementation and its scientific validity.
+
+Contributions by Z.Y.Y. were developed with assistance from OpenAI's GPT-5.6 Sol, run through Hermes Agent by Nous Research. Z.Y.Y. directed and reviewed that work, and Z.Y.Y. and A.H. each independently reviewed and tested the AI-assisted contributions for scientific validity and correctness.
 
 # Acknowledgements
 
