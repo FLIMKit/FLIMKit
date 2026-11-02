@@ -320,9 +320,9 @@ Thank you to the users who have contributed features and reported problems! Many
 
 ## AI Disclosure
 
-FLIMKit is designed, developed, and maintained by Alex Hunt. Anthropic's Claude AI was used as an assistant for parts of the implementation. All scientific design, fitting/phasor methods, validation, and the overall architecture are the author's own work. All AI generated content was reviewed, edited and tested on both real and synthetic FLIM data by the author. The author remains responsible for the submitted implementations and their scientific validity.
+FLIMKit is designed, developed, and maintained by the authors. Anthropic's Claude AI was used as an assistant for parts of the implementation. All scientific design, fitting/phasor methods, validation, and the overall architecture are the authors' own work. All AI generated content was reviewed, edited and tested on both real and synthetic FLIM data by the authors. The authors remain responsible for the submitted implementations and their scientific validity.
 
-Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. Zhen Yuan directed and reviewed the work. Both he and Alex Hunt have independently reviewed and tested the AI-assisted contributions to ensure scientific validity and correctness.
+Contributions by Zhen Yuan were developed with assistance from OpenAI's GPT-5.6 Sol, operated through Hermes Agent by Nous Research. Zhen Yuan directed and reviewed the work. The authors have independently reviewed and tested the AI-assisted contributions to ensure scientific validity and correctness.
 
 
 ## Contact
