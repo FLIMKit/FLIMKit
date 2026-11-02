@@ -705,7 +705,7 @@ A comprehensive FLIM data analysis platform with:
 
 Built with Python, Tkinter, NumPy, and SciPy.
 
-Designed, developed, and maintained by the authors.
+Designed, developed, and maintained by Alex Hunt.
 Anthropic's Claude AI assisted with parts of the GUI implementation.
         '''
         messagebox.showinfo(f'About {app_name}', about_text)
