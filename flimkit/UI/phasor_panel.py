@@ -958,6 +958,7 @@ class PhasorViewPanel:
                 tau_max_ns = params['tau_max'],
                 cost_function = params['cost_function'],
                 bootstrap = params.get('bootstrap', 0),
+                n_starts = params.get('n_starts'),
             )
             if progress_callback:
                 progress_callback(4, 4)

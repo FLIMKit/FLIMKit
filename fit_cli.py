@@ -76,6 +76,9 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--restarts',    type=int, default=lm_restarts)
     ap.add_argument('--de-population', type=int, default=de_population)
     ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
+    ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                    help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+    ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
     ap.add_argument('--workers',       type=int, default=n_workers)
     ap.add_argument('--no-polish',  action='store_true')
     ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP,
@@ -306,6 +309,7 @@ def single_FOV_flim_fit_cli():
                 de_popsize=args.de_population,
                 de_maxiter=args.de_maxiter,
                 workers=args.workers,
+                n_starts=args.n_starts, seed=args.seed,
                 polish=not args.no_polish,
                 cost_function=args.cost_function,
                 bootstrap=args.bootstrap,
@@ -323,6 +327,7 @@ def single_FOV_flim_fit_cli():
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=args.n_starts, seed=args.seed,
             polish=not args.no_polish,
             cost_function=args.cost_function,
             bootstrap=args.bootstrap,

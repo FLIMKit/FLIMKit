@@ -7,7 +7,7 @@ import matplotlib
 tqdm.disable = True
 
 from .configs import (
-    n_exp, Tau_min, Tau_max, D_mode, binning_factor, MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population, de_maxiter, n_workers, OUT_NAME, Estimate_IRF, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM, channels, config_message, INTENSITY_THRESHOLD,
+    n_exp, Tau_min, Tau_max, D_mode, binning_factor, MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population, de_maxiter, de_n_starts, de_seed, n_workers, OUT_NAME, Estimate_IRF, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM, channels, config_message, INTENSITY_THRESHOLD,
     TAU_DISPLAY_MIN, TAU_DISPLAY_MAX, INTENSITY_DISPLAY_MIN, INTENSITY_DISPLAY_MAX,
     MACHINE_IRF_DEFAULT_PATH, MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
     MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF)
@@ -284,6 +284,8 @@ def stitch_and_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -548,6 +550,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -583,6 +586,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -772,6 +776,8 @@ def single_FOV_flim_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -1062,6 +1068,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 de_popsize=args.de_population,
                 de_maxiter=args.de_maxiter,
                 workers=args.workers,
+                n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
                 polish=not args.no_polish,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -1099,6 +1106,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -1224,6 +1232,9 @@ def single_FOV_flim_fit(interactive=False):
         ap.add_argument('--restarts',    type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
         ap.add_argument('--workers',       type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1298,6 +1309,9 @@ def stitch_and_fit(interactive=False):
         ap.add_argument('--restarts', type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
         ap.add_argument('--workers', type=int, default=n_workers)
         ap.add_argument('--no-polish', action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1398,6 +1412,8 @@ def tile_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -1623,6 +1639,8 @@ def timelapse_flim_fit(interactive=False):
         args.restarts = lm_restarts
         args.de_population = de_population
         args.de_maxiter = de_maxiter
+        args.n_starts = de_n_starts
+        args.seed = de_seed
         args.workers = n_workers
         args.no_polish = False
         args.cost_function = 'poisson'
@@ -1666,6 +1684,9 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--restarts',   type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
         ap.add_argument('--workers',    type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1774,6 +1795,8 @@ def zstack_flim_fit(interactive=False):
         args.restarts = lm_restarts
         args.de_population = de_population
         args.de_maxiter = de_maxiter
+        args.n_starts = de_n_starts
+        args.seed = de_seed
         args.workers = n_workers
         args.no_polish = False
         args.cost_function = 'poisson'
@@ -1819,6 +1842,9 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--restarts',   type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
         ap.add_argument('--workers',    type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--channel',    type=int, default=channels)
@@ -1878,6 +1904,9 @@ def tile_fit(interactive=False):
         ap.add_argument('--restarts',     type=int, default=lm_restarts)
         ap.add_argument('--de-population',type=int, default=de_population)
         ap.add_argument('--de-maxiter',   type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
         ap.add_argument('--workers',      type=int, default=n_workers)
         ap.add_argument('--no-polish',    action='store_true')
         ap.add_argument('--channel',      type=int, default=channels)
