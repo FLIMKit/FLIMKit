@@ -345,9 +345,12 @@ class _BackendMixin:
                         full_p, tcspc_res, n_bins, irf_array,
                         n_exp, bg_b, False, False, False,
                         n_sync=n_sync_model)
-                if win is None:
-                    return (model - decay_b) / wt
-                return (model[win] - decay_b[win]) / wt[win]
+                # Poisson deviance residuals (sum of squares = 2 * Poisson negative log-likelihood ratio)
+                m_ = model if win is None else model[win]
+                d_ = decay_b if win is None else decay_b[win]
+                m_ = np.maximum(m_, 1e-12)
+                dev = np.where(d_ > 0, d_ * np.log(np.maximum(d_, 1e-300) / m_), 0.0)
+                return np.sign(m_ - d_) * np.sqrt(np.maximum(2.0 * (m_ - d_ + dev), 0.0))
 
             try:
                 res = least_squares(_resid, p0, bounds=(lo_px, hi_px),

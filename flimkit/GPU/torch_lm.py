@@ -21,13 +21,18 @@ def _evaluate(torch, p, ne, data, w, bg, irf_f, irf_sum, idx, dt, n_bins, want_j
     y, z, drdt = _conv_pair(torch, irf_f, taus, dt, n_bins)
     y_fit = y[..., idx]
     model = bg[:, None] * irf_sum + (amps[..., None] * y_fit).sum(dim=1)
-    res = (model - data) / w
-    cost = (res * res).sum(dim=1)
+    # Poisson maximum likelihood by Fisher scoring: weights come from the current model, cost is the deviance
+    mm = torch.clamp(model, min=1e-12)
+    pos = data > 0.0
+    dev = torch.where(pos, data * torch.log(torch.clamp(data, min=1e-300) / mm), torch.zeros_like(mm))
+    cost = (2.0 * (mm - data + dev)).sum(dim=1)
     if want_jac == False:
         return cost, None, None
+    wm = torch.sqrt(torch.clamp(mm, min=1.0))
+    res = (model - data) / wm
     z_fit = z[..., idx]
     jac = torch.cat([(amps * drdt)[..., None] * z_fit, y_fit], dim=1)
-    jac = (jac / w[:, None, :]).transpose(1, 2)
+    jac = (jac / wm[:, None, :]).transpose(1, 2)
     gram = jac.transpose(1, 2) @ jac
     grad = -(jac.transpose(1, 2) @ res[:, :, None])[:, :, 0]
     return cost, gram, grad
