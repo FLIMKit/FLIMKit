@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-11-05
+
+### Fixed
+- Free-tau per-pixel fits minimised a chi-squared weighted by the observed counts in each bin (Neyman), which pulls the lifetimes off at low counts. They now fit the Poisson likelihood, with weights from the current model and steps accepted on the Poisson deviance, in numba on the CPU and through numba.cuda, in the torch backend, and in the SciPy fallback that MLX, a time-varying background and pile-up in the model use. `fitter_version` goes to 26. On a synthetic bi-exponential at 400 photons per pixel with a truth of 0.5 and 3.0 ns, the SciPy path gave median lifetimes of 0.78 and 3.53 ns and now gives 0.49 and 3.06 ns. On an RTX A5000 the numba.cuda fit matches the CPU fit to 6e-13 ns on the same pixels. Fixed-tau fits and summed fits are unchanged.
+- flimkit-accelerator-plugin had copied the old weighting into its C and CUDA free-tau kernels. Version 0.2.1 fits the Poisson likelihood too and moves to ABI 5, so a build from before it is refused and the fit runs in FLIMKit instead. Rerun its `build.py --install` after updating.
+
 ## [0.14.3] - 2026-11-01
 
 ### Added
