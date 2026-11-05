@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- Tri-exponential summed fits, reconvolution and tail, run differential evolution from 12 seeds, polish each run and keep the one with the lowest polished Poisson cost. Start k uses seed 42 + k, so the first start is the old single run. On 10 synthetic tri-exponential decays at 10^6 photons the median lifetime error goes from 6.4 % for one run to 2.6 % for the best of 12, at about 12 times the run time. One- and two-exponential fits keep one start, and low photon counts have not been validated yet. `--n-starts` and `--seed` on the command line, `n_starts=` and `seed=` on `fit_summed` and `fit_summed_tail`, and Multi-start DE (tri-exponential fits) in Expert Fit Settings, where 1 turns it off. The summary gains `n_starts`, `start_costs`, `n_near_best` and `seed`. Bootstrap refits use one start. See Why tri-exponential fits use several DE starts in the documentation.
+- DE updates its population the same way whatever the number of workers, so the same seed gives the same fit on one core or many. Single-core results change slightly, because a single-core fit used to update immediately and a multi-core fit deferred. `fitter_version` goes to 27.
+
 ## [0.14.4] - 2026-11-05
 
 ### Fixed

@@ -1299,6 +1299,57 @@ All defaults live in `flimkit/configs.py` and can be overridden via CLI args or 
 | `de_population` | 30 | DE population size |
 | `de_maxiter` | 5000 | DE maximum iterations |
 | `n_workers` | -1 (source) / 1 (compiled) | CPU cores for DE; capped at 1 in the compiled app to avoid multiprocessing issues |
+| `de_n_starts` | `None` | Independent DE runs per summed fit. `None` is automatic: 12 for a tri-exponential fit, 1 otherwise. 1 turns multi-start off |
+| `de_seed` | 42 | Seed of the first DE start. Start k uses `de_seed + k` |
+
+### Why tri-exponential fits use several DE starts
+
+A tri-exponential summed fit runs differential evolution 12 times by default, each from a different seed, polishes each run with Levenberg-Marquardt, and keeps the run with the lowest polished Poisson cost. Start k uses seed `42 + k`, so the first start is the single run FLIMKit made before. The winner is chosen by the cost alone. The truth, or agreement with a reference fit, is never used. One- and two-exponential fits use one start. FLIMKit fits at most three exponentials, so tri-exponential is the only case this applies to.
+
+The likelihood surface of a tri-exponential decay is flat along the short components, so DE stops in a different place for each seed. We fitted 10 synthetic tri-exponential decays at 10^6 photons with 128 DE seeds each, everything else fixed, and took the error of a run as the median over its three lifetimes of |τ_fit / τ_true - 1|. A single run is a lottery: run errors spanned 0.02 % to 83 %, and the median run for a decay was between 2 % and 15 %.
+
+Keeping the lowest polished cost of N seeds drawn at random gives the errors below, as the median over the 10 decays from 3000 resamples, with the 10th to 90th percentile where it was recorded.
+
+| Starts (N) | Median error | 10th-90th percentile |
+|---|---|---|
+| 1 | 6.4 % | 3.6-10.2 % |
+| 2 | 4.4 % | |
+| 3 | 3.7 % | |
+| 4 | 3.4 % | |
+| 6 | 3.0 % | |
+| 8 | 2.8 % | 1.9-4.2 % |
+| 12 | 2.6 % | 1.8-3.8 % |
+| 16 | 2.5 % | 1.8-3.6 % |
+| 24 | 2.4 % | |
+| 32 | 2.4 % | |
+| 48 | 2.4 % | |
+| 64 | 2.4 % | 1.9-2.8 % |
+
+The gain flattens out between 8 and 16 starts, which is why the default is 12.
+
+The polished cost is a usable referee but not a perfect one. Within a decay, the Spearman correlation between a run's cost above the best and its lifetime error ranged from 0.05 to 0.92. Choosing the best of 16 by the truth, which isn't possible on real data, would give about 0.9 %, so there is accuracy the cost can't reach.
+
+What has and hasn't been validated:
+
+- Measured: tri-exponential decays at 10^6 photons, as above.
+- Not yet measured: one- and two-exponential decays, and photon counts of 10^3 and 10^4. Earlier partial runs suggest one and two exponentials don't depend on the seed, which is why they keep a single start, but that hasn't been confirmed. A 930-decay sweep covering these cases is being analysed, and the low-count results will be added here when it's done.
+
+Run time grows in proportion to the number of starts, so 12 starts take about 12 times as long as one. Bootstrap refits always use one start, otherwise the bootstrap would take 12 times as long too. Per-pixel fits take their starting lifetimes from the summed fit, so they inherit the multi-start result without running DE again. Batch tile fits and stitched fits run one summed fit per tile or ROI, and each of those uses the same setting.
+
+To turn it off, enter 1 in Multi-start DE (tri-exponential fits) in Expert Fit Settings, or pass `--n-starts 1` to `fit_cli.py` or the batch commands. From Python, pass `n_starts=1` to `fit_summed` or `fit_summed_tail`. A script that calls `fit_summed` once per pixel or per small region with a tri-exponential model should pass `n_starts=1` unless it needs the extra starts, or it will run 12 times slower than it used to.
+
+The summary records what happened:
+
+| Field | Meaning |
+|---|---|
+| `n_starts` | Number of DE starts run |
+| `start_costs` | Polished cost of each start, in seed order. `None` where the polish failed. If the polish failed for every start, these are the DE costs, and `start_cost_kind` is `'de'` |
+| `n_near_best` | Number of starts whose cost is within 10^-3 (relative) of the best, the winner included |
+| `seed` | Seed of the winning start |
+
+`n_near_best` is a rough check on how well the fit is pinned down. If most starts land within 10^-3 of the best cost, they found the same minimum. If only one or two do, the minimum is shallow or there are several of them, and the lifetimes deserve less trust than their error bars suggest.
+
+DE now updates its population the same way whatever the number of workers, so a fit with the same seed gives the same result on one core or many. Before this, a single-core fit used a different update rule from a multi-core fit, so single-core results move slightly.
 
 ### Display Range Settings
 
@@ -1384,6 +1435,9 @@ guided terminal UI run it by default for single FOV, stitched and ROI fits.
 From Python it is off unless you pass `bootstrap=25` to `fit_summed`,
 `fit_summed_tail` or `fit_summed_dist`. Batch, timelapse and z-stack fits don't
 run it.
+
+Each bootstrap refit runs DE once, even when the fit itself used several starts
+(see [Why tri-exponential fits use several DE starts](#why-tri-exponential-fits-use-several-de-starts)).
 
 For a synthetic 3-exponential decay (4.06, 1.36 and 0.71 ns, one million
 photons) fitted 16 times with fresh noise, τ2 scattered by 51% and τ3 by 24%.
