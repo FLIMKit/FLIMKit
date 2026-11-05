@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-05
+
 ### Added
 - An incomplete-decay term: `--rep-period-ns` (a period in ns, or `auto` to read it from the file), Incomplete decay, pulse period (ns) in Expert Fit Settings, or `rep_period_ns=` on the summed, tail, distribution and per-pixel fits. It adds the decay left over from earlier pulses. When the histogram is shorter than the pulse period it fixes the lifetimes: a synthetic 4 ns decay with a 10 ns histogram of a 12.5 ns period gave 3.90 ns at a reduced chi-squared of 10.4 without it and 3.96 ns at 0.76 with it. When the histogram covers the period, the FFT convolution already wraps the leftover round, so the lifetimes don't change and the amplitudes become per pulse; on rhodamine 6G measured at 19.5 MHz and folded to 78 MHz the lifetime moved by no more than 0.013 ns. Fixed-tau and one-exponential per-pixel fits use a periodic basis on every backend. Free-tau per-pixel fits with a period run in flimkit-accelerator-plugin 0.3.0 (ABI 6), which models the period in C and CUDA, or else in SciPy on the CPU. With a period set, per-pixel fits take the background from the summed fit rather than from the bins before the peak, which hold the end of the previous decay: on a synthetic 4 and 0.8 ns train the old estimate gave 2.9 and 0.54 ns and the summed background gives 3.98 and 0.80 ns. Off by default.
 - `rise_chi2_per_bin_pearson`, the Pearson chi-squared per bin over the rising edge and peak, in the summary, the terminal and the Fit Summary. A mismatched IRF shows here before it shows in the tail.
