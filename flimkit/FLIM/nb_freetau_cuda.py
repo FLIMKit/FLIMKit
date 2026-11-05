@@ -54,13 +54,18 @@ def _evaluate(irf, mask, n, ne, irf_sum, dt, p, data, w_data, b, bg, A, g):
                 z[j] = yp + r[j] * z[j] - n * rn1[j] * ii
         if mask[i] == 0:
             continue
-        wd = w_data[b, i]
-        wi = math.sqrt(wd if wd > 1.0 else 1.0)
         m = base
         for j in range(ne):
             m += p[ne + j] * y[j]
-        ri = (m - data[b, i]) / wi
-        cost += ri * ri
+        # Poisson maximum likelihood by Fisher scoring: weights from the current model, cost is the deviance
+        mm = m if m > 1e-12 else 1e-12
+        di = data[b, i]
+        if di > 0.0:
+            cost += 2.0 * (mm - di + di * math.log(di / mm))
+        else:
+            cost += 2.0 * mm
+        wi = math.sqrt(mm if mm > 1.0 else 1.0)
+        ri = (m - di) / wi
         for j in range(ne):
             jq[j] = p[ne + j] * z[j] * drdt[j] / wi
             jq[ne + j] = y[j] / wi
