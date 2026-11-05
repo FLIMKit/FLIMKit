@@ -2532,6 +2532,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.restarts = ex['lm_restarts']
         if 'n_starts' in ex:
             a.n_starts = ex['n_starts']
+        if 'rep_period_ns' in ex:
+            a.rep_period_ns = ex['rep_period_ns']
         if 'binning_factor' in ex:
             a.binning = ex['binning_factor']
         if 'n_workers' in ex:
@@ -3231,6 +3233,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 params['cost_function'] = expert['cost_function']
             if 'n_starts' in expert:
                 params['n_starts'] = expert['n_starts']
+            if 'rep_period_ns' in expert:
+                params['rep_period_ns'] = expert['rep_period_ns']
             if 'channels' in expert:
                 params['channel'] = expert['channels']
         return params
@@ -4507,6 +4511,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         chi2_p_tail = global_summary.get('reduced_chi2_tail_pearson')
         if chi2_p_tail is not None:
             rows.append(('χ²_r(tail) Pearson', f'{chi2_p_tail:.4f}', ''))
+        chi2_rise = global_summary.get('rise_chi2_per_bin_pearson')
+        if chi2_rise is not None and np.isfinite(chi2_rise):
+            rows.append(('χ² per bin (rise) Pearson', f'{chi2_rise:.4f}', ''))
+        rep_period = global_summary.get('rep_period_ns')
+        if rep_period:
+            rows.append(('Pulse period (incomplete decay)', f'{rep_period:.3f}', 'ns'))
         n_boot = global_summary.get('n_bootstrap')
         if n_boot:
             rows.append(('Bootstrap resamples', f'{int(n_boot)}', ''))

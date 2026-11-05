@@ -14,6 +14,7 @@ _EXPERT_DEFAULTS = {
     'de_population': 30,
     'de_maxiter': 5000,
     'n_starts': None,
+    'rep_period_ns': None,
     'n_workers': -1,
     'cost_function': 'poisson',
     'channels': '',
@@ -86,6 +87,13 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_n_starts = tk.StringVar(value='' if _ns_val is None else str(_ns_val))
         ttk.Entry(f, textvariable=self._sv_n_starts, width=8).grid(row=row, column=1, sticky='w', **PAD)
         ttk.Label(f, text='(blank = auto, 12 for tri-exp; 1 = off)', foreground='grey').grid(
+            row=row, column=2, columnspan=2, sticky='w', **PAD)
+        row += 1
+        ttk.Label(f, text='Incomplete decay, pulse period (ns):').grid(row=row, column=0, sticky='w', **PAD)
+        _rp_val = vals.get('rep_period_ns')
+        self._sv_rep_period = tk.StringVar(value='' if _rp_val is None else str(_rp_val))
+        ttk.Entry(f, textvariable=self._sv_rep_period, width=8).grid(row=row, column=1, sticky='w', **PAD)
+        ttk.Label(f, text='(blank = off, auto = from the file, 12.5 for 80 MHz)', foreground='grey').grid(
             row=row, column=2, columnspan=2, sticky='w', **PAD)
         row += 1
         ttk.Label(f, text='LM random restarts:').grid(row=row, column=0, sticky='w', **PAD)
@@ -222,6 +230,9 @@ class ExpertSettingsDialog(tk.Toplevel):
         _excl_s = self._sv_exclude.get().strip()
         parse_exclude_ns(_excl_s or None)
         _ns_s = self._sv_n_starts.get().strip()
+        _rp_s = self._sv_rep_period.get().strip()
+        if _rp_s and _rp_s.lower() != 'auto' and float(_rp_s) <= 0:
+            raise ValueError('The pulse period must be a positive number of ns, auto, or blank to leave the incomplete-decay term off.')
         if _ns_s and int(_ns_s) < 1:
             raise ValueError('Multi-start DE needs at least 1 start (1 turns it off, blank is automatic).')
         return {
@@ -229,6 +240,7 @@ class ExpertSettingsDialog(tk.Toplevel):
             'de_population': int(self._sv_de_pop.get() or 30),
             'de_maxiter': int(self._sv_de_maxiter.get() or 5000),
             'n_starts': int(_ns_s) if _ns_s else None,
+            'rep_period_ns': ('auto' if _rp_s.lower() == 'auto' else float(_rp_s)) if _rp_s else None,
             'lm_restarts': int(self._sv_lm_restarts.get() or 8),
             'binning_factor': int(self._sv_binning.get() or 1),
             'n_workers': int(self._sv_workers.get() or -1),
@@ -265,6 +277,7 @@ class ExpertSettingsDialog(tk.Toplevel):
         self._sv_de_pop.set(str(d['de_population']))
         self._sv_de_maxiter.set(str(d['de_maxiter']))
         self._sv_n_starts.set('')
+        self._sv_rep_period.set('')
         self._sv_lm_restarts.set(str(d['lm_restarts']))
         self._sv_binning.set(str(d['binning_factor']))
         self._sv_workers.set(str(d['n_workers']))

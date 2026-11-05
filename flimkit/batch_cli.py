@@ -31,6 +31,8 @@ def _batch_parser(description, input_flag, input_help, need_ptu_dir=True):
     ap.add_argument('--n-starts', type=int, default=de_n_starts,
                     help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
     ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+    ap.add_argument('--rep-period-ns', default=None,
+                    help='Laser pulse period in ns, or auto to read it from each file. Default: off')
     ap.add_argument('--workers', type=int, default=n_workers)
     ap.add_argument('--channel', type=int, default=channels)
     ap.add_argument('--irf-fwhm', type=float, default=IRF_FWHM)
@@ -74,7 +76,7 @@ def _fit_args(p):
         nexp=p.nexp, dist_type=p.dist_type, dist_n_components=p.dist_n_components,
         fit_t0=p.fit_t0, tau_min=p.tau_min, tau_max=p.tau_max, optimizer=p.optimizer,
         restarts=p.restarts, de_population=p.de_population, de_maxiter=p.de_maxiter,
-        n_starts=p.n_starts, seed=p.seed,
+        n_starts=p.n_starts, seed=p.seed, rep_period_ns=getattr(p, 'rep_period_ns', None),
         workers=p.workers, binning=p.binning, min_photons=p.min_photons,
         channel=p.channel, irf_fwhm=p.irf_fwhm, intensity_threshold=p.intensity_threshold,
         correct_pileup=p.correct_pileup, machine_irf=p.machine_irf,
@@ -160,7 +162,7 @@ def _batch_params(a):
         nexp=a.nexp, dist_type='discrete', dist_n_components=1, fit_t0=a.fit_t0,
         tau_min=a.tau_min, tau_max=a.tau_max, optimizer=a.optimizer, restarts=a.restarts,
         de_population=a.de_population, de_maxiter=a.de_maxiter, workers=a.workers,
-        n_starts=a.n_starts, seed=a.seed, binning=a.binning, min_photons=a.min_photons, channel=a.channel,
+        n_starts=a.n_starts, seed=a.seed, rep_period_ns=getattr(a, 'rep_period_ns', None), binning=a.binning, min_photons=a.min_photons, channel=a.channel,
         irf_fwhm=a.irf_fwhm, intensity_threshold=a.intensity_threshold,
         correct_pileup=a.correct_pileup, machine_irf=a.machine_irf,
         estimate_irf=a.estimate_irf, tvb_ptu=None, register=getattr(a, 'register_tiles', True),

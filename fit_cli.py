@@ -6,6 +6,7 @@ import argparse
 from flimkit.formats import FLIMFile
 from flimkit.FLIM.irf_tools import gaussian_irf_from_fwhm, irf_from_scatter_ptu, irf_from_pck, irf_from_measured_file, irf_from_xlsx, irf_from_xlsx_analytical, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, reconstruct_irf_from_decay, compare_irfs, machine_irf_prompt
 from flimkit.FLIM.fitters import fit_summed, fit_per_pixel, fit_summed_tail, MIN_PHOTONS_PERPIX, DEFAULT_BOOTSTRAP
+from flimkit.FLIM.fit_tools import resolve_rep_period_ns
 from flimkit.utils.plotting import plot_summed, plot_pixel_maps, plot_lifetime_histogram
 from flimkit.utils.misc import print_summary
 from flimkit.utils.xlsx_tools import load_irf_export
@@ -79,6 +80,8 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--n-starts', type=int, default=de_n_starts,
                     help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
     ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+    ap.add_argument('--rep-period-ns', default=None,
+                    help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
     ap.add_argument('--workers',       type=int, default=n_workers)
     ap.add_argument('--no-polish',  action='store_true')
     ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP,
@@ -151,6 +154,7 @@ def single_FOV_flim_fit_cli():
     print(f"{'='*60}")
     print(f'\n[1] PTU: {args.ptu}')
     ptu = FLIMFile(args.ptu, verbose=True)
+    args.rep_period_ns = resolve_rep_period_ns(args.rep_period_ns, ptu)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
@@ -317,6 +321,7 @@ def single_FOV_flim_fit_cli():
                 fit_start_ns=args.fit_start_ns,
                 fit_end_ns=args.fit_end_ns,
                 exclude_ns=parse_exclude_ns(args.exclude_ns),
+                rep_period_ns=args.rep_period_ns,
             )
         return fit_summed(
             decay, ptu.tcspc_res, ptu.n_bins,
@@ -336,6 +341,7 @@ def single_FOV_flim_fit_cli():
             fit_start_ns=args.fit_start_ns,
             fit_end_ns=args.fit_end_ns,
             exclude_ns=parse_exclude_ns(args.exclude_ns),
+            rep_period_ns=args.rep_period_ns,
         )
     if args.mode in ('summed', 'both'):
         print(f'\n[5] Summed decay fit  ({args.nexp}-exp'
@@ -385,6 +391,7 @@ def single_FOV_flim_fit_cli():
             fit_model=args.fit_model,
             fit_t0=args.fit_t0 if _tail_fit else False,
             t0_fixed=(global_summary['t0_ns'] * 1e-9) if _tail_fit else 0.0,
+            rep_period_ns=args.rep_period_ns,
         )
         roi_name = Path(args.ptu).stem
         save_weighted_tau_images(

@@ -646,6 +646,7 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
                       verbose=True, cancel_event=None):
     from .reader import PTUFile
     from ...FLIM.fitters import fit_summed
+    from ...FLIM.fit_tools import resolve_rep_period_ns
     from ...FLIM.bg_tools import tvb_from_decay
     from ...configs import (
         MACHINE_IRF_DEFAULT_PATH,
@@ -731,6 +732,7 @@ def pool_series_decay(ptu_dir, index, args, stride=10, rotate_tiles=True,
         tvb_profile = _tvb_pooled,
         fit_tvb = _fit_tvb,
         bootstrap = getattr(args, 'bootstrap', 0),
+        rep_period_ns=resolve_rep_period_ns(getattr(args, 'rep_period_ns', None), ptu),
     )
     if verbose:
         taus = global_summary['taus_ns']
@@ -945,6 +947,7 @@ def fit_flim_tiles(
 ):
     from .reader import PTUFile
     from ...FLIM.fitters import fit_summed, fit_per_pixel
+    from ...FLIM.fit_tools import resolve_rep_period_ns
     from ...FLIM.bg_tools import tvb_from_decay
     from ...configs import (
         MACHINE_IRF_DEFAULT_PATH,
@@ -1119,6 +1122,7 @@ def fit_flim_tiles(
             tvb_profile = _tvb_pooled,
             fit_tvb = _fit_tvb,
             bootstrap = getattr(args, 'bootstrap', 0),
+            rep_period_ns=resolve_rep_period_ns(getattr(args, 'rep_period_ns', None), ptu),
         )
     consensus_taus_ns = global_summary['taus_ns']
     if verbose:
@@ -1179,6 +1183,7 @@ def fit_flim_tiles(
                 free_tau = getattr(args, 'free_tau_perpixel', False),
                 tvb_profile = _tvb_tile,
                 fit_tvb = _fit_tvb,
+                rep_period_ns=global_summary.get('rep_period_ns'),
             )
             del stack
             pixel_maps = _adapt_pixel_maps(pixel_maps_raw, n_exp_, consensus_taus_ns)

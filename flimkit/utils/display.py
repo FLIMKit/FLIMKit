@@ -258,7 +258,8 @@ def rebuild_summed_model(global_summary, irf_prompt, tcspc_res, n_bins):
     from flimkit.FLIM.models import reconvolution_model
     return reconvolution_model(np.asarray(params), tcspc_res, int(n_bins),
                                np.asarray(irf_prompt, dtype=float), len(taus), 0.0,
-                               has_tail, True, True)
+                               has_tail, True, True,
+                               rep_period_s=float(gs['rep_period_ns']) * 1e-9 if gs.get('rep_period_ns') else None)
 
 def summary_model(global_summary, fit_result):
     gs = global_summary or {}

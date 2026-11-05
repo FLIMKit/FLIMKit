@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from flimkit.formats import FLIMFile
 from ..FLIM.fitters import fit_summed, fit_per_pixel
-from ..FLIM.fit_tools import find_irf_peak_bin
+from ..FLIM.fit_tools import find_irf_peak_bin, resolve_rep_period_ns
 from ..utils.lifetime_image import make_lifetime_image, make_component_rgb_tiff
 from ..utils.export_png import flim_field_area_um2, tiff_resolution
 from ..utils.plotting import plot_summed
@@ -102,6 +102,9 @@ def fit_timelapse(ptu_dir, output_dir, args,
         n_ts = sum(len(pos) for pos in frame_positions.values())
         print(f'\n[1] Pooling photons across {n_ts} PTU files…')
         pooled_decay, tcspc_res, n_bins = pool_decays(frame_positions, channel=channel)
+        _rep_period = resolve_rep_period_ns(
+            getattr(args, 'rep_period_ns', None),
+            lambda: FLIMFile(str(next(iter(next(iter(frame_positions.values())).values()))), verbose=False))
         print(f'    Total photons: {pooled_decay.sum():,.0f}')
         irf_prompt, has_tail, fit_bg, fit_sigma, sigma_max = build_irf(
             pooled_decay, tcspc_res, n_bins, args)
@@ -137,6 +140,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
                 **_window_kwargs(args),
+                rep_period_ns=_rep_period,
             )
             print(f'    Reference fit: {time.time() - t0:.1f} s')
             taus_ns = global_summary.get('taus_ns', global_popt[:args.nexp] * 1e9)
@@ -200,6 +204,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                     fit_idx=global_summary.get('fit_idx'),
                     progress_callback=None,
                     free_tau=False,
+                    rep_period_ns=_rep_period,
                 )
                 redox = compute_redox_metrics(pixel_maps, args.nexp,
                                               compute_bound_fraction=compute_bound_fraction)
@@ -249,6 +254,7 @@ def fit_timelapse(ptu_dir, output_dir, args,
                             cost_function=getattr(args, 'cost_function', 'poisson'),
                             sigma_max=sigma_max,
                             **_window_kwargs(args),
+                            rep_period_ns=_rep_period,
                         )
                         plot_summed(
                             tile_decay, tile_summary, ptu, None,
@@ -424,6 +430,9 @@ def fit_zstack(ptu_dir, output_dir, args,
         print(f'\n[1] Pooling photons across {n_z} z-slices  (one FOV)…')
         pool_input = {z: {0: p} for z, p in zslices.items()}
         pooled_decay, tcspc_res, n_bins = pool_decays(pool_input, channel=channel)
+        _rep_period = resolve_rep_period_ns(
+            getattr(args, 'rep_period_ns', None),
+            lambda: FLIMFile(str(next(iter(next(iter(pool_input.values())).values()))), verbose=False))
         print(f'    Total photons: {pooled_decay.sum():,.0f}')
         irf_prompt, has_tail, fit_bg, fit_sigma, sigma_max = build_irf(
             pooled_decay, tcspc_res, n_bins, args)
@@ -455,6 +464,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
                 sigma_max=sigma_max,
                 **_window_kwargs(args),
+                rep_period_ns=_rep_period,
             )
             print(f'    Reference fit: {time.time() - t0:.1f} s')
             taus_ns = global_summary.get('taus_ns', global_popt[:args.nexp] * 1e9)
@@ -536,6 +546,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=None,
                 free_tau=False,
+                rep_period_ns=_rep_period,
             )
             redox = compute_redox_metrics(pixel_maps, args.nexp,
                                           compute_bound_fraction=compute_bound_fraction)
@@ -585,6 +596,7 @@ def fit_zstack(ptu_dir, output_dir, args,
                         cost_function=getattr(args, 'cost_function', 'poisson'),
                         sigma_max=sigma_max,
                         **_window_kwargs(args),
+                        rep_period_ns=_rep_period,
                     )
                     plot_summed(
                         tile_decay, tile_summary, ptu, None,

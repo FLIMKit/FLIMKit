@@ -90,9 +90,10 @@ FIT_HELP = {
          'Run time grows with the number of starts, so 12 starts take about 12 times '
          'as long as one. Bootstrap refits always use one start. Enter 1 to turn it '
          'off.'),
-    ], 'Only tri-exponential decays at 1e6 photons have been tested so far. The fit '
+    ], 'Tri-exponential decays have only been tested at 1e6 photons so far. The fit '
        'summary reports n_near_best, the number of starts within 0.1 % of the best '
-       'cost. If only one or two starts agree, the fit is not well pinned down.'),
+       'cost. If only one or two agree, the fit is not well pinned down. At low counts '
+       'many can agree while the lifetimes still differ, so check the bootstrap errors too.'),
 
     'irf': ('Instrument Response Function (IRF)', [
         ('Analytical model (LAS X export)',

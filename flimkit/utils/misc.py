@@ -96,6 +96,9 @@ def print_summary(summary: dict, strategy: str, n_exp: int):
               f"(tail only, t>{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Neyman]")
         print(f"  χ²_r = {s['reduced_chi2_tail_pearson']:.4f}  "
               f"(tail only, t>{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Pearson]")
+        if s.get('rise_chi2_per_bin_pearson') is not None:
+            print(f"  χ²/bin = {s['rise_chi2_per_bin_pearson']:.4f}  "
+                  f"(rise and peak, t<{s['tail_start_bin']*tcspc_res*1e9:.2f} ns)  [Pearson]")
     if p_val is not None:
         flag = '' if 0.001 < p_val < 0.999 else ''
         print(f"  {flag} Optimizer: {s['optimizer_msg']}")
