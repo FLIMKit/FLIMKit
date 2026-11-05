@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .configs import (
     n_exp, Tau_min, Tau_max, binning_factor, MIN_PHOTONS_PERPIX, lm_restarts,
-    de_population, de_maxiter, n_workers, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM,
+    de_population, de_maxiter, de_n_starts, de_seed, n_workers, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM,
     channels, INTENSITY_THRESHOLD, TAU_DISPLAY_MIN, TAU_DISPLAY_MAX,
     MACHINE_IRF_DEFAULT_PATH)
 
@@ -28,6 +28,11 @@ def _batch_parser(description, input_flag, input_help, need_ptu_dir=True):
     ap.add_argument('--restarts', type=int, default=lm_restarts)
     ap.add_argument('--de-population', type=int, default=de_population)
     ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+    ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                    help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+    ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+    ap.add_argument('--rep-period-ns', default=None,
+                    help='Laser pulse period in ns, or auto to read it from each file. Default: off')
     ap.add_argument('--workers', type=int, default=n_workers)
     ap.add_argument('--channel', type=int, default=channels)
     ap.add_argument('--irf-fwhm', type=float, default=IRF_FWHM)
@@ -71,6 +76,7 @@ def _fit_args(p):
         nexp=p.nexp, dist_type=p.dist_type, dist_n_components=p.dist_n_components,
         fit_t0=p.fit_t0, tau_min=p.tau_min, tau_max=p.tau_max, optimizer=p.optimizer,
         restarts=p.restarts, de_population=p.de_population, de_maxiter=p.de_maxiter,
+        n_starts=p.n_starts, seed=p.seed, rep_period_ns=getattr(p, 'rep_period_ns', None),
         workers=p.workers, binning=p.binning, min_photons=p.min_photons,
         channel=p.channel, irf_fwhm=p.irf_fwhm, intensity_threshold=p.intensity_threshold,
         correct_pileup=p.correct_pileup, machine_irf=p.machine_irf,
@@ -156,7 +162,7 @@ def _batch_params(a):
         nexp=a.nexp, dist_type='discrete', dist_n_components=1, fit_t0=a.fit_t0,
         tau_min=a.tau_min, tau_max=a.tau_max, optimizer=a.optimizer, restarts=a.restarts,
         de_population=a.de_population, de_maxiter=a.de_maxiter, workers=a.workers,
-        binning=a.binning, min_photons=a.min_photons, channel=a.channel,
+        n_starts=a.n_starts, seed=a.seed, rep_period_ns=getattr(a, 'rep_period_ns', None), binning=a.binning, min_photons=a.min_photons, channel=a.channel,
         irf_fwhm=a.irf_fwhm, intensity_threshold=a.intensity_threshold,
         correct_pileup=a.correct_pileup, machine_irf=a.machine_irf,
         estimate_irf=a.estimate_irf, tvb_ptu=None, register=getattr(a, 'register_tiles', True),
@@ -275,6 +281,7 @@ def _inquire_expert(a):
     a.restarts = _ask_int('LM restarts', a.restarts)
     a.de_population = _ask_int('DE population', a.de_population)
     a.de_maxiter = _ask_int('DE max iterations', a.de_maxiter)
+    a.n_starts = _ask_int('DE starts per summed fit, 1 turns multi-start off (Enter keeps auto: 12 for tri-exponential)', a.n_starts)
     a.workers = _ask_int('Workers', a.workers)
     a.channel = _ask_int('Channel', a.channel)
     a.irf_fwhm = _ask_float('IRF FWHM (ns)', a.irf_fwhm)
@@ -288,6 +295,7 @@ def tileBatchFit(interactive=False):
             tau_min=Tau_min, tau_max=Tau_max, binning=binning_factor,
             min_photons=MIN_PHOTONS_PERPIX, optimizer='de', restarts=lm_restarts,
             de_population=de_population, de_maxiter=de_maxiter, workers=n_workers,
+            n_starts=de_n_starts, seed=de_seed,
             channel=channels, irf_fwhm=IRF_FWHM, tau_display_min=TAU_DISPLAY_MIN,
             tau_display_max=TAU_DISPLAY_MAX, reg_max_shift=120, intensity_display_min=None,
             intensity_display_max=None, tau_weighting='amp', fit_t0=False, gamma=0.4, save_npy=True)
@@ -321,6 +329,7 @@ def fovBatchFit(interactive=False):
             tau_min=Tau_min, tau_max=Tau_max, binning=binning_factor,
             min_photons=MIN_PHOTONS_PERPIX, optimizer='de', restarts=lm_restarts,
             de_population=de_population, de_maxiter=de_maxiter, workers=n_workers,
+            n_starts=de_n_starts, seed=de_seed,
             channel=channels, irf_fwhm=IRF_FWHM, tau_display_min=TAU_DISPLAY_MIN,
             tau_display_max=TAU_DISPLAY_MAX, intensity_display_min=None,
             intensity_display_max=None, tau_weighting='amp', fit_t0=False, gamma=0.4, save_npy=True)

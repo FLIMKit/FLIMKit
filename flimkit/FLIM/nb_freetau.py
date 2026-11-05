@@ -64,19 +64,26 @@ def _evaluate(p, ne, d, w, bg, irf, isum, idx, dt, Y, Z, res, J, want_J):
         r = math.exp(-dt / tau)
         drdt[j] = r * dt / (tau * tau)
         _exp_conv(irf, r, Y[j], Z[j])
+    # Poisson maximum likelihood by Fisher scoring: weights come from the current model (not the data),
+    # step acceptance uses the Poisson deviance. w (data-based weights) is kept in the signature only.
     cost = 0.0
     for q in range(idx.size):
         i = idx[q]
         m = bg * isum
         for j in range(ne):
             m += p[ne + j] * Y[j, i]
-        ri = (m - d[i]) / w[i]
-        cost += ri * ri
+        mm = max(m, 1e-12)
+        di = d[i]
+        if di > 0.0:
+            cost += 2.0 * (mm - di + di * math.log(di / mm))
+        else:
+            cost += 2.0 * mm
         if want_J == True:
-            res[q] = ri
+            wi = math.sqrt(max(mm, 1.0))
+            res[q] = (m - di) / wi
             for j in range(ne):
-                J[q, j] = p[ne + j] * Z[j, i] * drdt[j] / w[i]
-                J[q, ne + j] = Y[j, i] / w[i]
+                J[q, j] = p[ne + j] * Z[j, i] * drdt[j] / wi
+                J[q, ne + j] = Y[j, i] / wi
     return cost
 
 @nb.njit(cache=True, parallel=True)

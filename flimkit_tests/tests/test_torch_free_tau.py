@@ -78,3 +78,27 @@ def test_tvb_and_pileup_in_model_fall_back_to_scipy(pieces):
     be.batch_free_tau_fit(stack, irf, TCSPC, taus_init, 0.06e-9, 25e-9, 2, 50, False, 0,
                           n_sync_model=1000)
     assert calls == ['scipy']
+
+
+def test_low_count_free_tau_is_unbiased_on_torch_and_scipy(pieces):
+    # ~400 photons per pixel: fits weighted by observed counts overshoot both lifetimes; Poisson ML does not.
+    irf, _, taus_init = pieces
+    popt = np.array([TAUS_NS[1] * 1e-9, TAUS_NS[0] * 1e-9, 1.0, 1.0, 0.0])
+    clean = np.maximum(reconvolution_model(popt, TCSPC, N_BINS, irf, 2, 0.0, False, False, False), 0)
+    clean = clean / clean.sum() * 400.0
+    rng = np.random.default_rng(5)
+    stack = rng.poisson(clean[None, None, :] * np.ones((16, 16, 1))).astype(np.float32)
+    be = TorchBackend('cpu')
+    for runner in (be.batch_free_tau_fit,
+                   lambda *a, **k: be.batch_free_tau_fit(*a, n_sync_model=None, **k)):
+        maps = runner(stack, irf, TCSPC, taus_init, 0.06e-9, 25e-9, 2, 50, False, 0)
+        t = np.sort(np.stack([maps['tau_1'].ravel(), maps['tau_2'].ravel()], axis=1), axis=1)
+        med = np.nanmedian(t, axis=0)
+        assert med[0] == pytest.approx(TAUS_NS[0], rel=0.15)
+        assert med[1] == pytest.approx(TAUS_NS[1], rel=0.15)
+    flat = stack.reshape(-1, N_BINS).astype(np.float64)
+    sc = be._scipy_parallel_free_tau_fit(flat, np.zeros(len(flat)), irf, TCSPC, taus_init, 0.06e-9, 25e-9, 2, N_BINS)
+    ts = np.sort(sc[0] * 1e9 if sc[0].max() < 1e-6 else sc[0], axis=1)
+    med = np.median(ts, axis=0)
+    assert med[0] == pytest.approx(TAUS_NS[0], rel=0.15)
+    assert med[1] == pytest.approx(TAUS_NS[1], rel=0.15)

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-05
+
+### Added
+- An incomplete-decay term: `--rep-period-ns` (a period in ns, or `auto` to read it from the file), Incomplete decay, pulse period (ns) in Expert Fit Settings, or `rep_period_ns=` on the summed, tail, distribution and per-pixel fits. It adds the decay left over from earlier pulses. When the histogram is shorter than the pulse period it fixes the lifetimes: a synthetic 4 ns decay with a 10 ns histogram of a 12.5 ns period gave 3.90 ns at a reduced chi-squared of 10.4 without it and 3.96 ns at 0.76 with it. When the histogram covers the period, the FFT convolution already wraps the leftover round, so the lifetimes don't change and the amplitudes become per pulse; on rhodamine 6G measured at 19.5 MHz and folded to 78 MHz the lifetime moved by no more than 0.013 ns. Fixed-tau and one-exponential per-pixel fits use a periodic basis on every backend. Free-tau per-pixel fits with a period run in flimkit-accelerator-plugin 0.3.0 (ABI 6), which models the period in C and CUDA, or else in SciPy on the CPU. With a period set, per-pixel fits take the background from the summed fit rather than from the bins before the peak, which hold the end of the previous decay: on a synthetic 4 and 0.8 ns train the old estimate gave 2.9 and 0.54 ns and the summed background gives 3.98 and 0.80 ns. Off by default.
+- `rise_chi2_per_bin_pearson`, the Pearson chi-squared per bin over the rising edge and peak, in the summary, the terminal and the Fit Summary. A mismatched IRF shows here before it shows in the tail.
+- A warning when a fit with two or more lifetimes finds a component shorter than three times the IRF FWHM with less than 5% of the photons, which is what an IRF mismatch often looks like. It's kept through the bootstrap.
+- Documentation on why chi-squared grows with photon count, and on checking an instrument calibration with a single-component standard.
+
+### Changed
+- Tri-exponential summed fits, reconvolution and tail, run differential evolution from 12 seeds, polish each run and keep the one with the lowest polished Poisson cost. Start k uses seed 42 + k, so the first start is the old single run. On 10 synthetic tri-exponential decays at 10^6 photons the median lifetime error goes from 6.4 % for one run to 2.6 % for the best of 12, at about 12 times the run time. One- and two-exponential fits keep one start: on 10 known-truth decays of each the seed barely mattered at 10^6 photons, and at 10^4 and 10^3 photons every seed landed within 10^-3 of the best cost, so more starts couldn't help. Three exponentials below 10^6 photons have not been validated yet. `--n-starts` and `--seed` on the command line, `n_starts=` and `seed=` on `fit_summed` and `fit_summed_tail`, and Multi-start DE (tri-exponential fits) in Expert Fit Settings, where 1 turns it off. The summary gains `n_starts`, `start_costs`, `n_near_best` and `seed`. Bootstrap refits use one start. See Why tri-exponential fits use several DE starts in the documentation.
+- DE updates its population the same way whatever the number of workers, so the same seed gives the same fit on one core or many. Single-core results change slightly, because a single-core fit used to update immediately and a multi-core fit deferred. `fitter_version` goes to 27.
+
+## [0.14.4] - 2026-11-05
+
+### Fixed
+- Free-tau per-pixel fits minimised a chi-squared weighted by the observed counts in each bin (Neyman), which pulls the lifetimes off at low counts. They now fit the Poisson likelihood, with weights from the current model and steps accepted on the Poisson deviance, in numba on the CPU and through numba.cuda, in the torch backend, and in the SciPy fallback that MLX, a time-varying background and pile-up in the model use. `fitter_version` goes to 26. On a synthetic bi-exponential at 400 photons per pixel with a truth of 0.5 and 3.0 ns, the SciPy path gave median lifetimes of 0.78 and 3.53 ns and now gives 0.49 and 3.06 ns. On an RTX A5000 the numba.cuda fit matches the CPU fit to 6e-13 ns on the same pixels. Fixed-tau fits and summed fits are unchanged.
+- flimkit-accelerator-plugin had copied the old weighting into its C and CUDA free-tau kernels. Version 0.2.1 fits the Poisson likelihood too and moves to ABI 5, so a build from before it is refused and the fit runs in FLIMKit instead. Rerun its `build.py --install` after updating.
+
 ## [0.14.3] - 2026-11-01
 
 ### Added
