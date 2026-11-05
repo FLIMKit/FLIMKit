@@ -2530,6 +2530,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.de_maxiter = ex['de_maxiter']
         if 'lm_restarts' in ex:
             a.restarts = ex['lm_restarts']
+        if 'n_starts' in ex:
+            a.n_starts = ex['n_starts']
         if 'binning_factor' in ex:
             a.binning = ex['binning_factor']
         if 'n_workers' in ex:
@@ -2998,7 +3000,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 print(f'\n{'='*50}\n  [{idx+1}/{n_total}] {ptu_basename}\n{'='*50}')
                 try:
                     row = fitRoi(xlif_path, ptu_dir, roi_out, bp)
-                    print(f'  {row["status"]}: {ptu_basename}')
+                    print(f'  {row['status']}: {ptu_basename}')
                 except Exception as exc:
                     import traceback; traceback.print_exc()
                     row = {'roi': ptu_basename,
@@ -3227,6 +3229,8 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 params['bootstrap'] = int(expert.get('bootstrap_resamples', DEFAULT_BOOTSTRAP)) if expert['bootstrap'] else 0
             if 'cost_function' in expert:
                 params['cost_function'] = expert['cost_function']
+            if 'n_starts' in expert:
+                params['n_starts'] = expert['n_starts']
             if 'channels' in expert:
                 params['channel'] = expert['channels']
         return params

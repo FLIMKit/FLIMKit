@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import font as tkfont
 
-TOPIC_ORDER = ('fit_model', 'components', 'fitting_mode', 'optimizer',
+TOPIC_ORDER = ('fit_model', 'components', 'fitting_mode', 'optimizer', 'multistart',
                'irf', 'masking')
 
 FIT_HELP = {
@@ -73,6 +73,26 @@ FIT_HELP = {
     ], 'Both are seeded, so repeating a fit on the same data gives the same answer. '
        'DE population, DE iterations and LM restart count are all set in Expert Fit '
        'Settings.'),
+
+    'multistart': ('Multi-start DE (tri-exponential fits)', [
+        ('What it does',
+         'Runs differential evolution several times from different seeds, polishes '
+         'each run, and keeps the one with the lowest Poisson cost. The truth is '
+         'never used to choose. Start k uses seed 42 + k, so the first start is the '
+         'single run FLIMKit always did.'),
+        ('Why the default is 12',
+         'A tri-exponential likelihood is flat along the short components, so one '
+         'DE run stops in a different place for each seed. On ten synthetic '
+         'tri-exponential decays at 1e6 photons the median lifetime error was 6.4 % '
+         'for one run and 2.6 % for the best of 12. Going past about 16 starts '
+         'gained nothing. Fits with one or two exponentials use one start.'),
+        ('What it costs',
+         'Run time grows with the number of starts, so 12 starts take about 12 times '
+         'as long as one. Bootstrap refits always use one start. Enter 1 to turn it '
+         'off.'),
+    ], 'Only tri-exponential decays at 1e6 photons have been tested so far. The fit '
+       'summary reports n_near_best, the number of starts within 0.1 % of the best '
+       'cost. If only one or two starts agree, the fit is not well pinned down.'),
 
     'irf': ('Instrument Response Function (IRF)', [
         ('Analytical model (LAS X export)',
