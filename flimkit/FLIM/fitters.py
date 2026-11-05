@@ -31,6 +31,69 @@ _NUMBA_FREE_TAU_BLOCK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 _TAU_GRID_POINTS = 1600
 DEFAULT_BOOTSTRAP = 25
+DE_AUTO_STARTS_TRI_EXP = 12
+DE_NEAR_BEST_RTOL = 1e-3
+
+def resolve_n_starts(n_starts, n_exp):
+    if n_starts is None:
+        return DE_AUTO_STARTS_TRI_EXP if n_exp == 3 else 1
+    if int(n_starts) < 1:
+        raise ValueError(f'n_starts must be at least 1, got {n_starts!r}')
+    return int(n_starts)
+
+def _de_multistart(cost_fn, bounds, n_exp, lo, hi, residuals,
+                   de_popsize, de_maxiter, workers, polish, n_starts, seed):
+    n = resolve_n_starts(n_starts, n_exp)
+    bounds_log = list(bounds)
+    for i in range(n_exp):
+        lo_tau, hi_tau = bounds[i]
+        bounds_log[i] = (np.log10(lo_tau), np.log10(hi_tau))
+    print(f'  Differential evolution: popsize={de_popsize}, '
+          f'maxiter={de_maxiter}, workers={workers}'
+          + (f', {n} starts from seed {seed}' if n > 1 else ''))
+    runs = []
+    for k in range(n):
+        de_res = differential_evolution(
+            cost_fn, bounds=bounds_log,
+            maxiter=de_maxiter, popsize=de_popsize,
+            workers=workers, seed=seed + k,
+            updating='deferred',
+            init='sobol',
+            disp=False)
+        popt = de_res.x.copy()
+        popt[:n_exp] = 10.0 ** popt[:n_exp]
+        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
+        cost = None
+        if polish:
+            if n == 1:
+                print('  Running final LM polish...')
+            eps = 1e-10
+            popt = np.clip(popt, np.asarray(lo) + eps, np.asarray(hi) - eps)
+            try:
+                pol = least_squares(residuals, popt, bounds=(lo, hi),
+                                    method='trf', max_nfev=5000,
+                                    ftol=1e-13, xtol=1e-13, gtol=1e-13)
+                popt = pol.x
+                cost = float(pol.cost)
+                message += f'; polished cost={pol.cost:.4e}'
+            except ValueError as e:
+                print(f'  Warning: LM polish failed ({e}) - using DE result')
+        if n > 1:
+            print(f'    Start {k + 1:2d}/{n} (seed {seed + k}): '
+                  + (f'polished cost={cost:.6e}' if cost is not None else f'DE cost={de_res.fun:.6e}'))
+        runs.append(dict(popt=popt, message=message, cost=cost, de_cost=float(de_res.fun), seed=seed + k))
+    key = 'cost' if any(r['cost'] is not None for r in runs) else 'de_cost'
+    costs = np.array([np.nan if r[key] is None else r[key] for r in runs], dtype=float)
+    best = int(np.nanargmin(costs))
+    best_cost = costs[best]
+    n_near = int(np.sum(costs - best_cost <= DE_NEAR_BEST_RTOL * abs(best_cost)))
+    if n > 1:
+        print(f'  Best start: seed {runs[best]['seed']}, {n_near} of {n} starts within '
+              f'{DE_NEAR_BEST_RTOL:g} relative cost of it')
+    info = dict(n_starts=n, start_costs=[None if np.isnan(c) else float(c) for c in costs],
+                start_cost_kind='polished' if key == 'cost' else 'de',
+                n_near_best=n_near, seed=runs[best]['seed'])
+    return runs[best]['popt'], runs[best]['message'], info
 
 def tau_grid_points():
     override = os.environ.get('FLIMKIT_TAU_GRID_POINTS')
@@ -97,7 +160,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                irf_shift_bins=2,
                tvb_profile=None, fit_tvb=False,
                fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-               n_sync=None, bootstrap=0):
+               n_sync=None, bootstrap=0, n_starts=None, seed=42):
     warmup_gpu_backend()
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
@@ -173,6 +236,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
             r = np.sqrt(2.0 * dev)
             r[m < n] *= -1                   
             return r
+    multistart = {}
     if optimizer == 'lm_multistart':
         n_log = n_exp
         lo_scaled = np.asarray(lo, dtype=float).copy()
@@ -219,12 +283,6 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
         popt_work = from_scaled(best_res.x)
         message = best_res.message
     elif optimizer == 'de':
-        print(f'  Differential evolution: popsize={de_popsize}, '
-              f'maxiter={de_maxiter}, workers={workers}')
-        bounds_log = list(bounds)
-        for i in range(n_exp):
-            lo_tau, hi_tau = bounds[i]
-            bounds_log[i] = (np.log10(lo_tau), np.log10(hi_tau))
         if cost_function == 'poisson':
             cost_fn = _DECostPoissonLogTau(
                 tcspc_res, n_bins, irf_prompt, n_exp, bg_fixed,
@@ -237,28 +295,9 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                 has_tail, fit_bg, fit_sigma,
                 fit_idx, decay_work, weights,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
-        de_res = differential_evolution(
-            cost_fn, bounds=bounds_log,
-            maxiter=de_maxiter, popsize=de_popsize,
-            workers=workers, seed=42,
-            updating='deferred' if workers != 1 else 'immediate',
-            init='sobol',
-            disp=False)
-        popt_work = de_res.x.copy()
-        popt_work[:n_exp] = 10.0 ** popt_work[:n_exp]
-        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
-        if polish:
-            print('  Running final LM polish...')
-            eps = 1e-10
-            popt_work = np.clip(popt_work, np.asarray(lo) + eps, np.asarray(hi) - eps)
-            try:
-                pol = least_squares(residuals, popt_work, bounds=(lo, hi),
-                                    method='trf', max_nfev=5000,
-                                    ftol=1e-13, xtol=1e-13, gtol=1e-13)
-                popt_work = pol.x
-                message += f'; polished cost={pol.cost:.4e}'
-            except ValueError as e:
-                print(f'  Warning: LM polish failed ({e}) - using DE result')
+        popt_work, message, multistart = _de_multistart(
+            cost_fn, bounds, n_exp, lo, hi, residuals,
+            de_popsize, de_maxiter, workers, polish, n_starts, seed)
     else:
         raise ValueError(f'Unknown optimizer: {optimizer!r}')
     popt_original = popt_work.copy()
@@ -266,6 +305,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                             n_exp, bg_fixed, has_tail, fit_bg, fit_sigma,
                             fit_idx, message, tvb_profile=tvb_profile,
                             fit_tvb=fit_tvb, n_sync=n_sync, lo=lo, hi=hi)
+    summary.update(multistart)
     if bootstrap and bootstrap > 1:
         samples, failed = _bootstrap_samples(
             lambda d: fit_summed(d, tcspc_res, n_bins, irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -274,7 +314,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                                  workers=workers, polish=polish, cost_function=cost_function,
                                  sigma_max=sigma_max, irf_shift_bins=irf_shift_bins,
                                  tvb_profile=tvb_profile, fit_tvb=fit_tvb, exclude_ns=exclude_ns,
-                                 n_sync=n_sync, **_window_ns(summary)),
+                                 n_sync=n_sync, n_starts=1, seed=seed, **_window_ns(summary)),
             decay, bootstrap)
         summary.update(_bootstrap_fields(summary, samples, failed))
     return popt_original, summary
@@ -479,7 +519,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                     cost_function='poisson',
                     tvb_profile=None, fit_tvb=False,
                     fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-                    n_sync=None, bootstrap=0):
+                    n_sync=None, bootstrap=0, n_starts=None, seed=42):
     tau_min = tau_min_ns * 1e-9
     tau_max = tau_max_ns * 1e-9
     if cost_function not in ('chi2', 'poisson'):
@@ -553,6 +593,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
             r = np.sqrt(2.0 * dev)
             r[m < n] *= -1
             return r
+    multistart = {}
     if optimizer == 'lm_multistart':
         rng = np.random.default_rng(42)
         best_res = None
@@ -584,12 +625,6 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
         popt_work = best_res.x
         message = best_res.message
     elif optimizer == 'de':
-        print(f'  Differential evolution: popsize={de_popsize}, '
-              f'maxiter={de_maxiter}, workers={workers}')
-        bounds_log = list(bounds)
-        for i in range(n_exp):
-            lo_tau, hi_tau = bounds[i]
-            bounds_log[i] = (np.log10(lo_tau), np.log10(hi_tau))
         if cost_function == 'poisson':
             cost_fn = _DECostTailPoissonLogTau(
                 tcspc_res, n_bins, n_exp, bg_fixed, fit_bg,
@@ -602,28 +637,9 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                 fit_idx, decay_work, weights,
                 fit_t0=fit_t0, t0_fixed=t0_fixed,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync)
-        de_res = differential_evolution(
-            cost_fn, bounds=bounds_log,
-            maxiter=de_maxiter, popsize=de_popsize,
-            workers=workers, seed=42,
-            updating='deferred' if workers != 1 else 'immediate',
-            init='sobol',
-            disp=False)
-        popt_work = de_res.x.copy()
-        popt_work[:n_exp] = 10.0 ** popt_work[:n_exp]
-        message = f'DE success={de_res.success}, fun={de_res.fun:.4e}'
-        if polish:
-            print('  Running final LM polish...')
-            eps = 1e-10
-            popt_work = np.clip(popt_work, np.asarray(lo) + eps, np.asarray(hi) - eps)
-            try:
-                pol = least_squares(residuals, popt_work, bounds=(lo, hi),
-                                    method='trf', max_nfev=5000,
-                                    ftol=1e-13, xtol=1e-13, gtol=1e-13)
-                popt_work = pol.x
-                message += f'; polished cost={pol.cost:.4e}'
-            except ValueError as e:
-                print(f'  Warning: LM polish failed ({e}) - using DE result')
+        popt_work, message, multistart = _de_multistart(
+            cost_fn, bounds, n_exp, lo, hi, residuals,
+            de_popsize, de_maxiter, workers, polish, n_starts, seed)
     else:
         raise ValueError(f'Unknown optimizer: {optimizer!r}')
     summary = _make_summary_tail(popt_work, decay, tcspc_res, n_bins,
@@ -631,6 +647,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                  fit_t0=fit_t0, t0_fixed=t0_fixed,
                                  tvb_profile=tvb_profile, fit_tvb=fit_tvb, n_sync=n_sync,
                                  lo=lo, hi=hi)
+    summary.update(multistart)
     if bootstrap and bootstrap > 1:
         samples, failed = _bootstrap_samples(
             lambda d: fit_summed_tail(d, tcspc_res, n_bins, fit_bg, n_exp, tau_min_ns, tau_max_ns,
@@ -639,7 +656,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                       de_maxiter=de_maxiter, workers=workers, polish=polish,
                                       cost_function=cost_function, tvb_profile=tvb_profile,
                                       fit_tvb=fit_tvb, exclude_ns=exclude_ns, n_sync=n_sync,
-                                      **_window_ns(summary)),
+                                      n_starts=1, seed=seed, **_window_ns(summary)),
             decay, bootstrap)
         summary.update(_bootstrap_fields(summary, samples, failed))
     return popt_work, summary
