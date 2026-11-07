@@ -7,14 +7,14 @@ import matplotlib
 tqdm.disable = True
 
 from .configs import (
-    n_exp, Tau_min, Tau_max, D_mode, binning_factor, MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population, de_maxiter, n_workers, OUT_NAME, Estimate_IRF, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM, channels, config_message, INTENSITY_THRESHOLD,
+    n_exp, Tau_min, Tau_max, D_mode, binning_factor, MIN_PHOTONS_PERPIX, Optimizer, lm_restarts, de_population, de_maxiter, de_n_starts, de_seed, n_workers, OUT_NAME, Estimate_IRF, IRF_BINS, IRF_FIT_WIDTH, IRF_FWHM, channels, config_message, INTENSITY_THRESHOLD,
     TAU_DISPLAY_MIN, TAU_DISPLAY_MAX, INTENSITY_DISPLAY_MIN, INTENSITY_DISPLAY_MAX,
     MACHINE_IRF_DEFAULT_PATH, MACHINE_IRF_FIT_BG, MACHINE_IRF_FIT_SIGMA, MACHINE_IRF_FIT_TAIL,
     MACHINE_IRF_SIGMA_MAX_FULL, MACHINE_IRF_SIGMA_MAX_HALF)
 from flimkit.formats import FLIMFile
 from .formats.PTU.stitch import stitch_flim_tiles, load_flim_for_fitting
 from .utils.xml_utils import parse_xlif_tile_positions
-from .FLIM.fit_tools import find_irf_peak_bin
+from .FLIM.fit_tools import find_irf_peak_bin, resolve_rep_period_ns
 from .FLIM.irf_tools import irf_from_scatter_ptu, irf_from_measured_file, align_irf_to_bin, gaussian_irf_from_fwhm, compare_irfs, estimate_irf_from_decay_parametric, estimate_irf_from_decay_raw, irf_from_xlsx, irf_from_xlsx_analytical, machine_irf_prompt
 from .FLIM.fitters import (fit_summed, fit_per_pixel, fit_summed_dist,
                            fit_per_pixel_dist, fit_summed_tail, DEFAULT_BOOTSTRAP)
@@ -284,6 +284,8 @@ def stitch_and_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -411,6 +413,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                                 binned[i, j, :] /= w
                 return binned
     ptu = StitchedData(stack, tcspc_res, n_bins, weight_map=weight_map)
+    args.rep_period_ns = resolve_rep_period_ns(getattr(args, 'rep_period_ns', None), ptu)
     CHUNK_ROWS = 64
     ny, nx = stack.shape[:2]
     print(f'\n  Building tissue mask from stitched intensity (chunked)...')
@@ -548,9 +551,11 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
+            rep_period_ns=getattr(args, 'rep_period_ns', None),
         )
     elif _dist_type != 'discrete':
         print(f'\nFitting summed decay ({_dist_type} dist., {_dist_nc}-component, optimizer={args.optimizer})...')
@@ -571,6 +576,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             fit_start_ns=getattr(args, 'fit_start_ns', None),
             fit_end_ns=getattr(args, 'fit_end_ns', None),
             exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
+            rep_period_ns=getattr(args, 'rep_period_ns', None),
         )
     else:
         print(f'\nFitting summed decay ({args.nexp}-exp, optimizer={args.optimizer})...')
@@ -583,6 +589,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -591,6 +598,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
             fit_start_ns=getattr(args, 'fit_start_ns', None),
             fit_end_ns=getattr(args, 'fit_end_ns', None),
             exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
+            rep_period_ns=getattr(args, 'rep_period_ns', None),
         )
     print_summary(global_summary, strategy, args.nexp)
     metadata = {
@@ -633,6 +641,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 tau_max_ns=args.tau_max,
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         else:
             _is_tail = _dist_type == 'tail'
@@ -654,6 +663,7 @@ def _run_stitch_and_fit(args, progress_callback=None, cancel_event=None, progres
                 fit_model='tail' if _is_tail else 'reconv',
                 fit_t0=getattr(args, 'fit_t0', False) if _is_tail else False,
                 t0_fixed=(global_summary['t0_ns'] * 1e-9) if _is_tail else 0.0,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         if getattr(args, 'save_weighted', True):
             save_weighted_tau_images(
@@ -772,6 +782,8 @@ def single_FOV_flim_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -873,6 +885,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
     print(f"{'='*60}")
     print(f'\n[1] PTU: {args.ptu}')
     ptu = FLIMFile(args.ptu, verbose=True)
+    args.rep_period_ns = resolve_rep_period_ns(getattr(args, 'rep_period_ns', None), ptu)
     fwhm_ns = args.irf_fwhm if args.irf_fwhm is not None else ptu.tcspc_res * 1e9
     print(f'  IRF FWHM: {fwhm_ns*1000:.2f} ps '
           f"({'from --irf-fwhm' if args.irf_fwhm is not None else 'default: 1 bin'})")
@@ -1062,6 +1075,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 de_popsize=args.de_population,
                 de_maxiter=args.de_maxiter,
                 workers=args.workers,
+                n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
                 polish=not args.no_polish,
                 cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -1069,6 +1083,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 fit_end_ns=getattr(args, 'fit_end_ns', None),
                 exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         if _dist_type != 'discrete':
             return fit_summed_dist(
@@ -1089,6 +1104,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 fit_end_ns=getattr(args, 'fit_end_ns', None),
                 exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         return fit_summed(
             decay, ptu.tcspc_res, ptu.n_bins,
@@ -1099,6 +1115,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             de_popsize=args.de_population,
             de_maxiter=args.de_maxiter,
             workers=args.workers,
+            n_starts=getattr(args, 'n_starts', None), seed=getattr(args, 'seed', 42),
             polish=not args.no_polish,
             cost_function=getattr(args, 'cost_function', 'poisson'),
             bootstrap=getattr(args, 'bootstrap', 0),
@@ -1107,6 +1124,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
             fit_start_ns=getattr(args, 'fit_start_ns', None),
             fit_end_ns=getattr(args, 'fit_end_ns', None),
             exclude_ns=parse_exclude_ns(getattr(args, 'exclude_ns', None)),
+            rep_period_ns=getattr(args, 'rep_period_ns', None),
             tvb_profile=tvb_profile, fit_tvb=fit_tvb,
         )
     if args.mode in ('summed', 'both'):
@@ -1152,6 +1170,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 fit_idx=global_summary.get('fit_idx'),
                 progress_callback=perpixel_progress_cb,
                 tvb_profile=tvb_profile, fit_tvb=fit_tvb,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         else:
             _is_tail = _dist_type == 'tail'
@@ -1174,6 +1193,7 @@ def _run_flim_fit(args, progress_callback=None, cancel_event=None, progress_wind
                 fit_model='tail' if _is_tail else 'reconv',
                 fit_t0=getattr(args, 'fit_t0', False) if _is_tail else False,
                 t0_fixed=(global_summary['t0_ns'] * 1e-9) if _is_tail else 0.0,
+                rep_period_ns=getattr(args, 'rep_period_ns', None),
             )
         if not args.no_plots:
             matplotlib.use('Agg')
@@ -1224,6 +1244,11 @@ def single_FOV_flim_fit(interactive=False):
         ap.add_argument('--restarts',    type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+        ap.add_argument('--rep-period-ns', default=None,
+                        help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
         ap.add_argument('--workers',       type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1298,6 +1323,11 @@ def stitch_and_fit(interactive=False):
         ap.add_argument('--restarts', type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+        ap.add_argument('--rep-period-ns', default=None,
+                        help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
         ap.add_argument('--workers', type=int, default=n_workers)
         ap.add_argument('--no-polish', action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1398,6 +1428,8 @@ def tile_fit_inquire():
     args.restarts = lm_restarts
     args.de_population = de_population
     args.de_maxiter = de_maxiter
+    args.n_starts = de_n_starts
+    args.seed = de_seed
     args.workers = n_workers
     args.no_polish = False
     args.channel = channels
@@ -1470,7 +1502,8 @@ def _run_tile_fit(args, progress_callback=None, cancel_event=None, progress_wind
     global_summary = derive_global_tau(canvas, n_exp=args.nexp)
     for _key in ('model', 'reduced_chi2', 'reduced_chi2_tail',
                  'reduced_chi2_tail_pearson', 'reduced_chi2_pearson',
-                 'calibrated_chi2_pearson', 'calibrated_chi2_tail_pearson'):
+                 'calibrated_chi2_pearson', 'calibrated_chi2_tail_pearson',
+                 'rise_chi2_per_bin_pearson', 'fit_warnings', 'rep_period_ns'):
         if _key in _consensus_summary:
             global_summary[_key] = _consensus_summary[_key]
     n_px = global_summary.get('n_pixels_fitted', 0)
@@ -1623,6 +1656,8 @@ def timelapse_flim_fit(interactive=False):
         args.restarts = lm_restarts
         args.de_population = de_population
         args.de_maxiter = de_maxiter
+        args.n_starts = de_n_starts
+        args.seed = de_seed
         args.workers = n_workers
         args.no_polish = False
         args.cost_function = 'poisson'
@@ -1666,6 +1701,11 @@ def timelapse_flim_fit(interactive=False):
         ap.add_argument('--restarts',   type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+        ap.add_argument('--rep-period-ns', default=None,
+                        help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
         ap.add_argument('--workers',    type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--bootstrap', type=int, default=DEFAULT_BOOTSTRAP)
@@ -1774,6 +1814,8 @@ def zstack_flim_fit(interactive=False):
         args.restarts = lm_restarts
         args.de_population = de_population
         args.de_maxiter = de_maxiter
+        args.n_starts = de_n_starts
+        args.seed = de_seed
         args.workers = n_workers
         args.no_polish = False
         args.cost_function = 'poisson'
@@ -1819,6 +1861,11 @@ def zstack_flim_fit(interactive=False):
         ap.add_argument('--restarts',   type=int, default=lm_restarts)
         ap.add_argument('--de-population', type=int, default=de_population)
         ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+        ap.add_argument('--rep-period-ns', default=None,
+                        help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
         ap.add_argument('--workers',    type=int, default=n_workers)
         ap.add_argument('--no-polish',  action='store_true')
         ap.add_argument('--channel',    type=int, default=channels)
@@ -1878,6 +1925,11 @@ def tile_fit(interactive=False):
         ap.add_argument('--restarts',     type=int, default=lm_restarts)
         ap.add_argument('--de-population',type=int, default=de_population)
         ap.add_argument('--de-maxiter',   type=int, default=de_maxiter)
+        ap.add_argument('--n-starts', type=int, default=de_n_starts,
+                        help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
+        ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
+        ap.add_argument('--rep-period-ns', default=None,
+                        help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')
         ap.add_argument('--workers',      type=int, default=n_workers)
         ap.add_argument('--no-polish',    action='store_true')
         ap.add_argument('--channel',      type=int, default=channels)

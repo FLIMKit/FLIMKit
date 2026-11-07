@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import font as tkfont
 
-TOPIC_ORDER = ('fit_model', 'components', 'fitting_mode', 'optimizer',
+TOPIC_ORDER = ('fit_model', 'components', 'fitting_mode', 'optimizer', 'multistart',
                'irf', 'masking')
 
 FIT_HELP = {
@@ -73,6 +73,23 @@ FIT_HELP = {
     ], 'Both are seeded, so repeating a fit on the same data gives the same answer. '
        'DE population, DE iterations and LM restart count are all set in Expert Fit '
        'Settings.'),
+
+    'multistart': ('DE starts', [
+        ('What it does',
+         'Runs differential evolution several times from different seeds, polishes '
+         'each run, and keeps the one with the lowest Poisson cost. The truth is '
+         'never used to choose. Start k uses seed 42 + k.'),
+        ('Why the default is 1',
+         'Up to 0.14 the final polish stopped early, so one run landed in a '
+         'different place for each seed and the best of several was worth having. '
+         'From 0.15.0 the polish converges, every seed reaches the same fit, and '
+         'one start is as accurate as twelve at a twelfth of the time.'),
+        ('When to raise it',
+         'Only to check a fit. If extra starts reach a lower cost than the first, '
+         'report it, because that should no longer happen.'),
+    ], 'The fit summary reports n_near_best, the number of starts within 0.1 % of '
+       'the best cost. At low photon counts many starts can agree while the '
+       'lifetimes still differ, so read it together with the error bars.'),
 
     'irf': ('Instrument Response Function (IRF)', [
         ('Analytical model (LAS X export)',

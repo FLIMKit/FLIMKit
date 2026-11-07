@@ -299,6 +299,41 @@ def propagate_uncertainty(fn, popt, unc, rel_step=1e-4):
     var = float(grad @ unc['cov'][np.ix_(idx, idx)] @ grad)
     return float(np.sqrt(var)) if np.isfinite(var) and var >= 0 else np.nan
 
+def resolve_rep_period_ns(value, reader=None):
+    if value is None or str(value).strip() in ('', '0', 'off', 'none', 'None'):
+        return None
+    if str(value).strip().lower() == 'auto':
+        if callable(reader):
+            reader = reader()
+        period = float(getattr(reader, 'period_ns', 0) or 0)
+        if period <= 0:
+            raise ValueError('The pulse period is set to auto, but this file does not record the laser '
+                             'repetition rate. Enter the period in ns instead (12.5 for 80 MHz).')
+        print(f'  Pulse period from the file: {period:.3f} ns')
+        return period
+    period = float(value)
+    if period <= 0:
+        raise ValueError(f'The pulse period must be a positive number of ns or auto, got {value!r}.')
+    return period
+
+FAST_COMPONENT_MAX_FRACTION = 0.05
+FAST_COMPONENT_IRF_MULTIPLE = 3.0
+
+def fast_component_warnings(taus_ns, fractions, irf_fwhm_ns):
+    taus_ns = np.atleast_1d(np.asarray(taus_ns, dtype=float))
+    fractions = np.atleast_1d(np.asarray(fractions, dtype=float))
+    if len(taus_ns) < 2 or not irf_fwhm_ns or not np.isfinite(irf_fwhm_ns):
+        return []
+    light = fractions * taus_ns
+    light = light / light.sum() if light.sum() > 0 else light
+    notes = []
+    for i, (tau, frac) in enumerate(zip(taus_ns, light), start=1):
+        if tau < FAST_COMPONENT_IRF_MULTIPLE * irf_fwhm_ns and frac < FAST_COMPONENT_MAX_FRACTION:
+            notes.append(f'τ{i} is short and small ({tau:.3g} ns, {100 * frac:.1f}% of the photons, '
+                         f'IRF FWHM {irf_fwhm_ns:.3g} ns): an IRF that does not match the data often '
+                         f'produces a component like this, so check the IRF before reading it as sample')
+    return notes
+
 def uncertainty_warnings(taus_ns, taus_err_ns, tau_corr, rel_limit=0.1, corr_limit=0.95):
     notes = []
     taus_ns = np.atleast_1d(np.asarray(taus_ns, dtype=float))

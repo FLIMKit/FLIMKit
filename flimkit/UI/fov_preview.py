@@ -138,6 +138,7 @@ class FOVPreviewPanel:
         self._int_display = {'vmin': None, 'vmax': None, 'cmap': 'inferno'}
         self._n_exp = 1
         self._irf_prompt = None
+        self._fit_taus_ns = None
         self._roi_manager = RoiManager()
         self._roi_patches = {}
         self._drawing_mode = tk.StringVar(value='select')
@@ -226,6 +227,9 @@ class FOVPreviewPanel:
             import numpy as np
             global_summary = fit_result.get('global_summary', {})
             global_popt = fit_result.get('global_popt')
+            _taus = global_summary.get('taus_ns')
+            self._fit_taus_ns = ([float(x) for x in np.atleast_1d(_taus)]
+                                 if _taus is not None and global_summary.get('fit_model') in (None, 'reconvolution') else None)
             irf_prompt = fit_result.get('irf_prompt')
             if irf_prompt is not None:
                 self._irf_prompt = irf_prompt

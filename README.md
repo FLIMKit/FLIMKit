@@ -248,7 +248,7 @@ Per-pixel fitting uses a batched matrix solver that runs on GPU when a supported
 
 `python install.py` detects your hardware and installs the right backend automatically. No extra flags needed at runtime.
 
-**Limitations:** `--free-tau-perpixel` with two or more components prepares the batch on the GPU but fits each pixel with SciPy on the CPU, so a GPU gains little there. `fit_summed` (single global fit) is always CPU, and fast enough not to matter.
+**Limitations:** `--free-tau-perpixel` with two or more components prepares the batch on the GPU but fits each pixel with SciPy on the CPU, so a GPU gains little there. `fit_summed` (single global fit) is always CPU. On 10 known-truth tri-exponential decays at 10^6 photons, fitted with the paired measured IRF, the median errors on the long, mid and short lifetimes are 0.4, 2.1 and 3.3 %, against 0.4, 2.8 and 3.3 % from LAS X. Below about 10^5 photons the components of a tri-exponential decay can't be resolved by any fit; FLIMKit then leads with the mean lifetimes and can fix the lifetimes from the image fit. See [Tri-exponential accuracy and DE starts](https://github.com/FLIMKit/FLIMKit/wiki/Configuration-Reference#tri-exponential-accuracy-and-de-starts) and [Low photon counts](https://github.com/FLIMKit/FLIMKit/wiki/Configuration-Reference#low-photon-counts).
 
 **Compiled app and GPU:** The compiled app bundles whatever GPU libraries are installed on the *build* machine. A binary built on Apple Silicon will have MLX/MPS; one built on a CUDA machine will have CUDA. If you need GPU in the compiled app, build it yourself on the target hardware. See [Compiled App](#compiled-app-macos--windows--linux).
 

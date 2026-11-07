@@ -1,6 +1,6 @@
 # FLIMKit Documentation
 
-> **v0.14.4** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
+> **v0.15.0** - Python toolkit for Fluorescence Lifetime Imaging Microscopy
 
 > **Warning:** Active development. Cross-validate results with other software before drawing conclusions.
 
@@ -1299,6 +1299,67 @@ All defaults live in `flimkit/configs.py` and can be overridden via CLI args or 
 | `de_population` | 30 | DE population size |
 | `de_maxiter` | 5000 | DE maximum iterations |
 | `n_workers` | -1 (source) / 1 (compiled) | CPU cores for DE; capped at 1 in the compiled app to avoid multiprocessing issues |
+| `de_n_starts` | `None` | Independent DE runs per summed fit. `None` means 1 |
+| `de_seed` | 42 | Seed of the first DE start. Start k uses `de_seed + k` |
+
+### Tri-exponential accuracy and DE starts
+
+Up to 0.14 a tri-exponential summed fit landed somewhere different for each differential-evolution seed. On 10 synthetic tri-exponential decays at 10^6 photons, fitted 128 times each with only the seed changed, single runs were off by anything from 0.02 % to 83 %. The error of a run is the median over its three lifetimes of |τ_fit / τ_true - 1|.
+
+![Lifetime error of each of 128 DE runs on each of 10 tri-exponential decays, with the median per decay](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/seed_lottery.png)
+
+Keeping the lowest polished cost of several seeds helped, and the gain flattened out after about 12. The table gives the median over the 10 decays from 3000 random draws of N seeds.
+
+| Seeds kept by lowest cost (N) | Median error | 10th-90th percentile |
+|---|---|---|
+| 1 | 6.4 % | 3.6-10.2 % |
+| 12 | 2.6 % | 1.8-3.8 % |
+| 64 | 2.4 % | 1.9-2.8 % |
+
+![Median lifetime error against the number of seeds kept by lowest cost, with the 10th to 90th percentile band](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/error_vs_starts.png)
+
+![Each run's polished cost above the best run for the same decay against its lifetime error](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/cost_vs_error.png)
+
+The scatter turned out to come from the Levenberg-Marquardt polish after DE, not from several separate minima. It worked on the raw parameters, lifetimes of about 10^-9 s beside amplitudes of about 10^5, and stopped before it reached the bottom. Starting the same polish from the true lifetimes reached a lower deviance than DE on all 10 decays. From 0.15.0 the polish works on log10 of the lifetimes with ten times the evaluation budget, and DE then reaches the same deviance as the start from the truth on all 10. Every seed now lands on the same fit, so one start is the default again.
+
+| 3-exp, 10^6 photons, paired IRF | Long τ | Mid τ | Short τ | Time per fit |
+|---|---|---|---|---|
+| FLIMKit 0.15.0, 1 start | 0.4 % | 2.1 % | 3.3 % | 5 s |
+| FLIMKit 0.15.0, 12 starts | 0.4 % | 2.1 % | 3.3 % | 41 s |
+| FLIMKit 0.14.1 | 0.3 % | 6.7 % | 7.4 % | |
+| LAS X | 0.4 % | 2.8 % | 3.3 % | |
+| FLIMJ (MLE) | 0.7 % | 5.1 % | 7.3 % | |
+| SymPhoTime 64 | 0.6 % | 7.8 % | 8.6 % | |
+| SPCImage | 14.9 % | 127 % | 55 % | |
+
+The values are medians over the same 10 decays, all fitted with the same measured IRF. Times are for one core. For one- and two-exponential decays 0.14.1 was already as close to the truth as LAS X or closer, for example 0.7 % against 1.4 % on the short lifetime of a two-exponential decay. The remaining error at 10^6 photons is two to five times the Cramér-Rao bound for these decays (0.1, 0.7 and 1.4 % for the long, mid and short lifetimes at 1σ) and doesn't come from the optimiser, because the start from the truth lands in the same place. I have not found where it comes from.
+
+More starts can still be asked for, with `--n-starts` on the command line, DE starts in Expert Fit Settings, or `n_starts=` on `fit_summed` and `fit_summed_tail`. Start k uses seed `--seed` + k, and the run with the lowest polished Poisson cost is kept. Bootstrap refits always use one start. The summary records `n_starts`, `start_costs` (the polished cost of each start, `None` where the polish failed), `n_near_best` (starts within 10^-3 relative of the best cost) and the winning `seed`. If a second start ever reaches a lower cost than the first, that is worth reporting.
+
+DE updates its population the same way whatever the number of workers, so a fit with the same seed gives the same result on one core or many. Before 0.15.0 a single-core fit used a different update rule, so single-core results moved slightly.
+
+### Low photon counts
+
+Below about 10^5 photons a three-exponential decay doesn't hold enough information to pin down three lifetimes, whatever the fitting tool. The Cramér-Rao bound gives the smallest scatter any unbiased fit can reach. For the same 10 decays, at 1σ:
+
+| Photons | Long τ | Mid τ | Short τ |
+|---|---|---|---|
+| 10^6 | 0.1 % | 0.7 % | 1.4 % |
+| 10^4 | 1.1 % | 6.5 % | 13.9 % |
+| 10^3 | 3.7 % | 21 % | 44 % |
+
+Holding every lifetime of every one of these decays within 10 % takes about 45,000 photons. Low counts are still FLIMKit's weak spot for three exponentials, as they are for every tool: 0.15.0 changes what is reported, not what the photons can resolve. Below that the fit surface is a flat valley. A fit lands near wherever it started, so a fit that starts near the expected lifetimes, for example from values typed in by hand, can look better than DE without fitting the data any better.
+
+FLIMKit reports what the data can support. When any lifetime of a two- or three-exponential fit is uncertain by more than 10 % (from the bootstrap if it ran, otherwise from the curvature), the summary sets `components_resolved` to false, and the terminal, the Fit Summary and the ROI result lead with the mean lifetimes and mark the components as not resolved. The mean lifetimes are well determined even when the components are not. On the same 10 decays:
+
+| What is reported | 10^4 photons | 10^3 photons |
+|---|---|---|
+| Three free lifetimes, short τ | 33 % off | 76 % off |
+| Free fit, intensity-weighted mean lifetime | 0.5 % off | 1.9 % off |
+| Free fit, amplitude-weighted mean lifetime | 3.0 % off | 5.8 % off |
+| Lifetimes fixed from a fit with more photons, worst fraction | 4.2 points off | 4.1 points off |
+
+The not-resolved check flagged all 10 decays at both counts. To get the fractions of a small region, fix the lifetimes from a fit with more photons, usually the whole image: tick Fix lifetimes from the image fit in the ROI and phasor-cursor fit options, or pass `fixed_taus_ns=` to `fit_summed`. Only the amplitudes, the background and the IRF shift are then fitted, and the summary sets `fixed_taus`. Per-pixel fits already work this way.
 
 ### Display Range Settings
 
@@ -1351,6 +1412,29 @@ The fixed-model expectation is one. Parameter fitting and data-selected windows
 can introduce a smaller additional shift, so this diagnostic is not a classical
 chi-square p-value.
 
+`rise_chi2_per_bin_pearson` is the Pearson chi-squared per bin over the fitted
+bins before the tail window, which covers the rising edge and the peak. The
+terminal and the Fit Summary show it next to the tail value. When the IRF is the
+wrong width or in the wrong place, the misfit sits on the rising edge, so this
+number climbs well above the tail value while the tail stays close to one. On a
+synthetic decay fitted with an IRF 2.7 times too wide, it was more than five
+times the tail value.
+
+#### Chi-squared and photon count
+
+A reduced chi-squared that grows with the photon count doesn't on its own mean
+the data are faulty. A small error in the IRF or the model leaves the same
+fractional misfit in every bin. The misfit grows in proportion to the counts,
+and the Poisson noise only grows with their square root, so the misfit shows at
+high counts and hides at low ones. On a Leica STELLARIS rhodamine 6G measurement,
+pulse-picked to 19.5 MHz so that no decay is left over from the previous pulse,
+the reduced deviance was 2.1, 5.5 and 19.7 at 0.4, 1.7 and 6.6 million photons.
+
+Two things help find where the misfit comes from. If `rise_chi2_per_bin_pearson`
+is much larger than the tail value, look at the IRF first. If the residuals
+before the rising edge follow the end of the decay, look at
+[incomplete decay](#incomplete-decay).
+
 #### Parameter uncertainties
 
 Every summed fit (reconvolution, tail and distribution) reports a 1σ standard
@@ -1385,6 +1469,9 @@ From Python it is off unless you pass `bootstrap=25` to `fit_summed`,
 `fit_summed_tail` or `fit_summed_dist`. Batch, timelapse and z-stack fits don't
 run it.
 
+Each bootstrap refit runs DE once, even when the fit itself used several starts
+(see [Tri-exponential accuracy and DE starts](#tri-exponential-accuracy-and-de-starts)).
+
 For a synthetic 3-exponential decay (4.06, 1.36 and 0.71 ns, one million
 photons) fitted 16 times with fresh noise, τ2 scattered by 51% and τ3 by 24%.
 On one of those decays the curvature errors were 5.8% and 26%, and the bootstrap
@@ -1395,6 +1482,122 @@ bootstrap gives ±0.0038 ns against SymPhoTime 64's ±0.0029 ns.
 A lifetime with more than 10% relative error, or two lifetimes correlated beyond
 |r| = 0.95, adds a ⚠ row to the Fit Summary and a warning to the terminal
 output. When the bootstrap has run, these use its errors and correlations.
+
+A fit with two or more lifetimes also warns when one of them is shorter than
+three times the IRF FWHM and carries less than 5% of the photons (its amplitude
+times its lifetime, as a share of the total). An IRF that doesn't match the data
+often produces a component like this, for example about 1% of the photons at
+about 200 ps beside a single-exponential dye. The test uses the photon share
+because a fast component can hold a large share of the amplitude and still very
+few photons: 16% of the amplitude at 0.25 ns beside 3.85 ns is 1.2% of the
+photons. The warning sits in `fit_warnings`
+as well as `uncertainty_warnings`, and is kept when the bootstrap replaces the
+others. It doesn't mean the component is false, only that the IRF should be
+checked before it is read as part of the sample.
+
+### Incomplete decay
+
+At a high repetition rate a long lifetime hasn't finished decaying when the
+next pulse arrives. The leftover shows as a raised baseline before the rising
+edge that follows the end of the previous decay. A lifetime of 4 ns at 80 MHz
+(12.5 ns between pulses) leaves about 4% of its amplitude behind.
+
+Pass the pulse period in ns with `--rep-period-ns` (12.5 for 80 MHz), or `auto`
+to read it from the file, set Incomplete decay, pulse period (ns) in Expert Fit
+Settings, or pass `rep_period_ns=` to `fit_summed`, `fit_summed_tail`,
+`fit_summed_dist`, `fit_per_pixel` or `fit_per_pixel_dist`. The fit then adds
+the decay from every earlier pulse, and the summary records `rep_period_ns`. In
+the CLI, the GUI and the batch fits, the per-pixel fit uses the same period as
+the summed fit. `auto` reads the period PTU and B&H files record; a file that
+doesn't record one is refused with a message. The period must be at least as
+long as the histogram, give or take one bin, because Leica histograms are
+rounded to whole bins (133 bins of 97 ps is 12.90 ns, for a 12.82 ns period). A
+period shorter than that is refused, because more than one pulse would land in
+the window.
+
+What it changes depends on the histogram. The model convolves over the
+histogram with an FFT, which wraps the end of the window round to the start.
+When the histogram covers exactly one pulse period, as it usually does on a
+Leica FALCON, the wrap already carries the leftover from earlier pulses, so the
+lifetimes come out the same with or without the term. What changes is the
+amplitudes. With the term on they're per pulse, where without it each one is
+inflated by 1 / (1 - exp(-T/τ)), so the long components are overweighted. On a
+synthetic 4 and 0.8 ns decay at 50/50, folded from a train of pulses 12.5 ns
+apart, the fractions were 0.507 and 0.493 without the term and 0.496 and 0.504
+with it. When the histogram is shorter than the period, the wrap is wrong and
+the term matters for the lifetimes too: with a 10 ns histogram of the same
+train and a 4 ns lifetime, the fit gave 3.90 ns at a reduced chi-squared of
+10.4 without the term, and 3.96 ns at 0.76 with it.
+
+Each kind of fit handles it its own way:
+
+- Fixed-tau and one-exponential per-pixel fits use a periodic basis, so every
+  backend, flimkit-accelerator-plugin included, fits it unchanged.
+- Free-tau per-pixel fits with a period run in flimkit-accelerator-plugin 0.3.0
+  or later, in C or CUDA, which models the period. Without it they run in SciPy
+  on the CPU, because the numba, CUDA and torch kernels build their own model
+  without it. That is much slower, and the terminal says so.
+- The per-pixel fits take each pixel's background from the summed fit, spread
+  evenly over the image, instead of estimating it from the bins before the peak,
+  which with incomplete decay hold the end of the previous decay. On a synthetic
+  4 and 0.8 ns train with a 10 ns histogram of a 12.5 ns period, the estimate
+  from those bins was about 5,800 counts per bin against a true 1, and the
+  free-tau fit gave 2.9 and 0.54 ns. With the background from the summed fit it
+  gave 3.98 and 0.80 ns. The summed fit has to fit the background for this
+  (it does with the machine IRF); with a fixed background the terminal says the
+  estimate is biased. The GPU one-exponential and projection kernels estimate
+  the background themselves, so with a period set those fits run on the CPU.
+- The tail fit starts after the peak, where the leftover from earlier pulses
+  has the same shape as the decay, so the term rescales the amplitudes and
+  leaves the lifetimes alone.
+- The distribution fits weight each lifetime in the distribution by the same
+  factor, on the full pulse period.
+
+The earlier projection for fixed tau (`--estimator nnls`) subtracts a background
+taken from the bins before the peak. With incomplete decay those bins hold the
+end of the previous decay, not background, so that estimator stays biased with
+the term on. The default Poisson fit, which fits the offset, doesn't have this
+problem.
+
+Real data agree. Three Leica STELLARIS rhodamine 6G measurements at 19.5 MHz
+(0.4, 1.7 and 6.6 million photons) were folded into a 12.8 ns period to emulate
+78 MHz. Unfolded, they fit at 3.92 ns. Folded, the one-exponential fit gave 3.78
+to 3.81 ns with the term off and moved by no more than 0.013 ns with it on, so
+the remaining 3% doesn't come from the leftover decay. On those fits
+`rise_chi2_per_bin_pearson` was about eight times the full-window value, which
+points at the IRF.
+
+Folding the same files into 1/2, 1/3, 1/4 and 1/5 of the 51.3 ns period (39 to
+97 MHz) shortens the lifetime steadily, to 3.71 ns at 97 MHz on all three photon
+levels, with or without the term, which moves it by 0.013 ns at most. Cutting
+the fit window of the unfolded data to the same lengths shortens it by only
+1%, to 3.88 ns at 10 ns. I cannot account for the rest. A mismatched IRF
+combining with the fold is the likely cause, but that has not been tested.
+
+A fit whose model cuts the decay off at the end of the window
+instead of wrapping it gets about 3.33 ns on the same data. That 15% shortfall
+comes from the model, not the data.
+
+### Checking an instrument calibration
+
+A single-component standard with a known lifetime shows most calibration
+problems. Use a photon rate low enough to rule out pile-up, and acquire it on
+every detector you use, one after another.
+
+- A one-exponential fit should give the published lifetime, with a reduced
+  chi-squared close to one and no structure in the residuals.
+- `rise_chi2_per_bin_pearson` should be close to the tail value. If it's much
+  larger, the IRF doesn't match.
+- The IRF shift reported by the fit, and the position of the rising edge, should
+  agree across detectors.
+- A two-exponential fit shouldn't need a small fast component. If it finds one,
+  the warning above fires.
+
+A short standard tests the IRF more directly than a long one. With a lifetime
+of 1 ns or less, almost nothing is left from the previous pulse even at 80 MHz,
+so a high chi-squared or a fast component can't come from incomplete decay and
+points at the IRF or the timing calibration. Erythrosin B in water, at about
+90 ps, is one such standard.
 
 ---
 

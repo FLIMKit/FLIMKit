@@ -104,16 +104,15 @@ def test_numba_block_is_capped_by_bytes(irf, monkeypatch):
     assert max(calls) <= 4
 
 
-def test_free_tau_is_not_biased_at_low_counts(irf):
-    # Poisson noise at ~400 photons per pixel: a fit weighted by the observed counts (Neyman chi-squared)
-    # is biased towards long lifetimes; the Poisson maximum-likelihood fit should recover the lifetimes.
+@pytest.mark.parametrize('numba', [True, False])
+def test_free_tau_is_not_biased_at_low_counts(irf, numba):
     rng = np.random.default_rng(7)
     p = _global_popt(amps=(1.0, 1.0))
     base = reconvolution_model(p, TCSPC, N_BINS, irf, 2, 0.0, False, False, False)
     base = base / base.sum() * 400.0
     stack = rng.poisson(np.tile(base, (256, 1))).astype(float).reshape(16, 16, N_BINS)
     gp = _global_popt(amps=(1.0, 1.0)); gp[2:4] = base.sum() / 2.0
-    maps = _fit(irf, stack, gp, False, False, True)
+    maps = _fit(irf, stack, gp, False, False, numba)
     t = np.stack([maps['tau_1'].ravel(), maps['tau_2'].ravel()], axis=1)
     t = np.sort(t, axis=1)
     med = np.nanmedian(t, axis=0)

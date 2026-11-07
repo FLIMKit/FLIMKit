@@ -2530,6 +2530,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             a.de_maxiter = ex['de_maxiter']
         if 'lm_restarts' in ex:
             a.restarts = ex['lm_restarts']
+        if 'n_starts' in ex:
+            a.n_starts = ex['n_starts']
+        if 'rep_period_ns' in ex:
+            a.rep_period_ns = ex['rep_period_ns']
         if 'binning_factor' in ex:
             a.binning = ex['binning_factor']
         if 'n_workers' in ex:
@@ -2998,7 +3002,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 print(f'\n{'='*50}\n  [{idx+1}/{n_total}] {ptu_basename}\n{'='*50}')
                 try:
                     row = fitRoi(xlif_path, ptu_dir, roi_out, bp)
-                    print(f'  {row["status"]}: {ptu_basename}')
+                    print(f'  {row['status']}: {ptu_basename}')
                 except Exception as exc:
                     import traceback; traceback.print_exc()
                     row = {'roi': ptu_basename,
@@ -3220,6 +3224,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'irf_align': 'steepest_rise',
             'irf_shift_bins': 2,
             'bootstrap': DEFAULT_BOOTSTRAP,
+            'image_taus_ns': getattr(getattr(self, '_fov_preview', None), '_fit_taus_ns', None),
         }
         expert = self._expert_overrides
         if expert:
@@ -3227,6 +3232,10 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
                 params['bootstrap'] = int(expert.get('bootstrap_resamples', DEFAULT_BOOTSTRAP)) if expert['bootstrap'] else 0
             if 'cost_function' in expert:
                 params['cost_function'] = expert['cost_function']
+            if 'n_starts' in expert:
+                params['n_starts'] = expert['n_starts']
+            if 'rep_period_ns' in expert:
+                params['rep_period_ns'] = expert['rep_period_ns']
             if 'channels' in expert:
                 params['channel'] = expert['channels']
         return params
@@ -4418,6 +4427,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         taus = global_summary.get('taus_ns', []) if tau_centers is None else None
         amps = global_summary.get('amps', []) if tau_centers is None else None
         fracs = global_summary.get('fractions', []) if tau_centers is None else None
+        unresolved = global_summary.get('components_resolved') == False
+        if unresolved and tau_centers is None:
+            rows.append(('⚠ Components not resolved at this photon count', '', ''))
+            for key, label in [('tau_mean_int_ns', 'τ_mean (int-weighted)'), ('tau_mean_amp_ns', 'τ_mean (amp-weighted)')]:
+                v = global_summary.get(key)
+                if v is not None:
+                    e = global_summary.get(key + '_boot_err', global_summary.get(key + '_err'))
+                    rows.append((label, f'{v:.4f}' + (f' ± {e:.4f}' if e is not None and e == e else ''), 'ns'))
+        if global_summary.get('fixed_taus') == True:
+            rows.append(('Lifetimes fixed', 'amplitudes fitted', ''))
         if taus is not None and len(taus) > 0:
             import numpy as np
             taus = list(np.atleast_1d(taus))
@@ -4428,7 +4447,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             taus_err = list(np.atleast_1d(global_summary.get('taus_ns_err', [])))
             taus_boot = list(np.atleast_1d(global_summary.get('taus_ns_boot_err', [])))
             for i in range(len(taus)):
-                rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))
+                rows.append((f'τ{i+1}' + (' (not resolved)' if unresolved else ''), f'{taus[i]:.4f}', 'ns'))
                 if i < len(taus_err) and np.isfinite(taus_err[i]):
                     rows.append((f'τ{i+1} ± (1σ)', f'{taus_err[i]:.4f}', 'ns'))
                 if i < len(taus_boot) and np.isfinite(taus_boot[i]):
@@ -4445,7 +4464,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ('tau_mean_amp_ns', 'τ_mean (amp-weighted)'),
             ('tau_mean_int_ns', 'τ_mean (int-weighted)'),
         ]:
-            v = global_summary.get(key)
+            v = None if (unresolved and tau_centers is None) else global_summary.get(key)
             if v is not None:
                 rows.append((label, f'{v:.4f}', 'ns'))
                 v_err = global_summary.get(key + '_err')
@@ -4503,6 +4522,12 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         chi2_p_tail = global_summary.get('reduced_chi2_tail_pearson')
         if chi2_p_tail is not None:
             rows.append(('χ²_r(tail) Pearson', f'{chi2_p_tail:.4f}', ''))
+        chi2_rise = global_summary.get('rise_chi2_per_bin_pearson')
+        if chi2_rise is not None and np.isfinite(chi2_rise):
+            rows.append(('χ² per bin (rise) Pearson', f'{chi2_rise:.4f}', ''))
+        rep_period = global_summary.get('rep_period_ns')
+        if rep_period:
+            rows.append(('Pulse period (incomplete decay)', f'{rep_period:.3f}', 'ns'))
         n_boot = global_summary.get('n_bootstrap')
         if n_boot:
             rows.append(('Bootstrap resamples', f'{int(n_boot)}', ''))

@@ -914,6 +914,7 @@ class PhasorViewPanel:
             import numpy as _np
             from flimkit.formats import FLIMFile
             from flimkit.FLIM.fitters import fit_summed
+            from flimkit.FLIM.fit_tools import resolve_rep_period_ns
             ptu = FLIMFile(ptu_path, verbose=False)
             n_bins = ptu.n_bins
             tcspc_res = ptu.tcspc_res
@@ -958,6 +959,9 @@ class PhasorViewPanel:
                 tau_max_ns = params['tau_max'],
                 cost_function = params['cost_function'],
                 bootstrap = params.get('bootstrap', 0),
+                n_starts = params.get('n_starts'),
+                rep_period_ns = resolve_rep_period_ns(params.get('rep_period_ns'), ptu),
+                fixed_taus_ns = params.get('fixed_taus_ns'),
             )
             if progress_callback:
                 progress_callback(4, 4)
