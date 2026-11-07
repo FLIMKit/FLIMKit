@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.15.0] - 2026-11-05
+## [0.15.0] - 2026-11-07
 
 ### Fixed
 - The SciPy free-tau loop inside `fit_per_pixel` still weighted the residuals by the observed counts, which 0.14.4 had removed from the numba, CUDA, torch and `_base.py` paths. It runs the tail fit, a time-varying background on the CPU, `FLIMKIT_NUMBA_FREETAU=0`, and from this release a pulse period without flimkit-accelerator-plugin. It now fits the Poisson likelihood. On the same 64 pixels of a synthetic 4 and 0.8 ns train at 20,000 photons each, its medians were 3.89 and 0.76 ns before and 4.01 and 0.79 ns after, against 4.01 and 0.79 ns from the add-on's C kernel, which now agrees with it to 4e-5 ns on every pixel.
@@ -16,7 +16,7 @@
 - Documentation on tri-exponential accuracy against other tools, low photon counts, why chi-squared grows with photon count, and checking an instrument calibration with a single-component standard.
 
 ### Changed
-- The Levenberg-Marquardt polish after differential evolution works on log10 of the lifetimes with ten times the evaluation budget. On the raw parameters it stopped before the bottom of the minimum, which is why a tri-exponential fit landed somewhere different for each seed. On 10 known-truth tri-exponential decays at 10^6 photons fitted with the paired measured IRF, the median errors on the long, mid and short lifetimes go from 0.3, 6.7 and 7.4 % in 0.14.1 to 0.4, 2.1 and 3.3 %, against 0.4, 2.8 and 3.3 % from LAS X. DE now reaches the same deviance as a polish started from the true lifetimes on all 10 decays. `fitter_version` goes to 27.
+- The Levenberg-Marquardt polish after differential evolution works on log10 of the lifetimes with ten times the evaluation budget. On the raw parameters it stopped before the bottom of the minimum, which is why a tri-exponential fit landed somewhere different for each seed. On 10 known-truth tri-exponential decays at 10^6 photons fitted with the paired measured IRF, the median errors on the long, mid and short lifetimes go from 0.3, 6.7 and 7.4 % in 0.14.1 to 0.4, 2.1 and 3.3 %, against 0.4, 2.8 and 3.3 % from LAS X. DE now reaches the same deviance as a polish started from the true lifetimes on all 10 decays. At 10^3 photons, where a tri-exponential decay can't be resolved, the components land slightly further from truth than in 0.14.4 (29.1 against 22.4 % median on the synthetic benchmark), and the mean lifetime is unchanged. `fitter_version` goes to 27.
 - Summed fits can run differential evolution from several seeds and keep the lowest polished Poisson cost: `--n-starts` and `--seed`, `n_starts=` and `seed=` on `fit_summed` and `fit_summed_tail`, and DE starts in Expert Fit Settings. With the polish fixed every seed reaches the same fit, so the default is one start; twelve gave the same errors at about eight times the run time. The summary gains `n_starts`, `start_costs`, `n_near_best` and `seed`. Bootstrap refits use one start.
 - DE updates its population the same way whatever the number of workers, so the same seed gives the same fit on one core or many. Single-core results change slightly, because a single-core fit used to update immediately and a multi-core fit deferred. `fitter_version` goes to 27.
 
