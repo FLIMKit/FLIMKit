@@ -1299,75 +1299,67 @@ All defaults live in `flimkit/configs.py` and can be overridden via CLI args or 
 | `de_population` | 30 | DE population size |
 | `de_maxiter` | 5000 | DE maximum iterations |
 | `n_workers` | -1 (source) / 1 (compiled) | CPU cores for DE; capped at 1 in the compiled app to avoid multiprocessing issues |
-| `de_n_starts` | `None` | Independent DE runs per summed fit. `None` is automatic: 12 for a tri-exponential fit, 1 otherwise. 1 turns multi-start off |
+| `de_n_starts` | `None` | Independent DE runs per summed fit. `None` means 1 |
 | `de_seed` | 42 | Seed of the first DE start. Start k uses `de_seed + k` |
 
-### Why tri-exponential fits use several DE starts
+### Tri-exponential accuracy and DE starts
 
-A tri-exponential summed fit runs differential evolution 12 times by default, each from a different seed, polishes each run with Levenberg-Marquardt, and keeps the run with the lowest polished Poisson cost. Start k uses seed `42 + k`, so the first start is the single run FLIMKit made before. The winner is chosen by the cost alone. The truth, or agreement with a reference fit, is never used. One- and two-exponential fits use one start. FLIMKit fits at most three exponentials, so tri-exponential is the only case this applies to.
-
-The likelihood surface of a tri-exponential decay is flat along the short components, so DE stops in a different place for each seed. We fitted 10 synthetic tri-exponential decays at 10^6 photons with 128 DE seeds each, everything else fixed, and took the error of a run as the median over its three lifetimes of |τ_fit / τ_true - 1|. A single run is a lottery: run errors spanned 0.02 % to 83 %, and the median run for a decay was between 2 % and 15 %.
+Up to 0.14 a tri-exponential summed fit landed somewhere different for each differential-evolution seed. On 10 synthetic tri-exponential decays at 10^6 photons, fitted 128 times each with only the seed changed, single runs were off by anything from 0.02 % to 83 %. The error of a run is the median over its three lifetimes of |τ_fit / τ_true - 1|.
 
 ![Lifetime error of each of 128 DE runs on each of 10 tri-exponential decays, with the median per decay](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/seed_lottery.png)
 
-Keeping the lowest polished cost of N seeds drawn at random gives the errors below, as the median over the 10 decays from 3000 resamples, with the 10th to 90th percentile where it was recorded.
+Keeping the lowest polished cost of several seeds helped, and the gain flattened out after about 12. The table gives the median over the 10 decays from 3000 random draws of N seeds.
 
-| Starts (N) | Median error | 10th-90th percentile |
+| Seeds kept by lowest cost (N) | Median error | 10th-90th percentile |
 |---|---|---|
 | 1 | 6.4 % | 3.6-10.2 % |
-| 2 | 4.4 % | |
-| 3 | 3.7 % | |
-| 4 | 3.4 % | |
-| 6 | 3.0 % | |
-| 8 | 2.8 % | 1.9-4.2 % |
 | 12 | 2.6 % | 1.8-3.8 % |
-| 16 | 2.5 % | 1.8-3.6 % |
-| 24 | 2.4 % | |
-| 32 | 2.4 % | |
-| 48 | 2.4 % | |
 | 64 | 2.4 % | 1.9-2.8 % |
-
-The gain flattens out between 8 and 16 starts, which is why the default is 12.
 
 ![Median lifetime error against the number of seeds kept by lowest cost, with the 10th to 90th percentile band](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/error_vs_starts.png)
 
-The polished cost is a usable referee but not a perfect one. Within a decay, the Spearman correlation between a run's cost above the best and its lifetime error ranged from 0.05 to 0.92. Choosing the best of 16 by the truth, which isn't possible on real data, would give about 0.9 %, so there is accuracy the cost can't reach.
-
 ![Each run's polished cost above the best run for the same decay against its lifetime error](https://raw.githubusercontent.com/FLIMKit/FLIMKit/main/Docs/images/multistart/cost_vs_error.png)
 
-What has and hasn't been validated:
+The scatter turned out to come from the Levenberg-Marquardt polish after DE, not from several separate minima. It worked on the raw parameters, lifetimes of about 10^-9 s beside amplitudes of about 10^5, and stopped before it reached the bottom. Starting the same polish from the true lifetimes reached a lower deviance than DE on all 10 decays. From 0.15.0 the polish works on log10 of the lifetimes with ten times the evaluation budget, and DE then reaches the same deviance as the start from the truth on all 10. Every seed now lands on the same fit, so one start is the default again.
 
-- Measured: tri-exponential decays at 10^6 photons, as above.
-- Measured on a smaller set: 10 one-exponential and 10 two-exponential known-truth decays from the same benchmark, at 10^6 photons and thinned to 10^4 and 10^3, each fitted with 12 seeds. The error is the same median over the lifetimes.
-- Not yet measured: three exponentials below 10^6 photons. A 930-decay sweep covering these cases is being analysed, and the low-count results will be added here when it's done.
+| 3-exp, 10^6 photons, paired IRF | Long τ | Mid τ | Short τ | Time per fit |
+|---|---|---|---|---|
+| FLIMKit 0.15.0, 1 start | 0.4 % | 2.1 % | 3.3 % | 5 s |
+| FLIMKit 0.15.0, 12 starts | 0.4 % | 2.1 % | 3.3 % | 41 s |
+| FLIMKit 0.14.1 | 0.3 % | 6.7 % | 7.4 % | |
+| LAS X | 0.4 % | 2.8 % | 3.3 % | |
+| FLIMJ (MLE) | 0.7 % | 5.1 % | 7.3 % | |
+| SymPhoTime 64 | 0.6 % | 7.8 % | 8.6 % | |
+| SPCImage | 14.9 % | 127 % | 55 % | |
 
-| Decay | Photons | Seed 42 | Lowest cost of 12 | Widest spread between seeds | Starts within 10^-3 of the best cost |
-|---|---|---|---|---|---|
-| 1-exp | 10^6 | 0.07 % | 0.04 % | 0.14 points | 11.5 of 12 |
-| 1-exp | 10^4 | 0.78 % | 0.78 % | 0.38 points | 12 of 12 |
-| 1-exp | 10^3 | 1.48 % | 1.47 % | 0.57 points | 12 of 12 |
-| 2-exp | 10^6 | 0.74 % | 0.53 % | 1.9 points | 11 of 12 |
-| 2-exp | 10^4 | 4.46 % | 4.53 % | 10.6 points | 12 of 12 |
-| 2-exp | 10^3 | 7.74 % | 7.74 % | 47.6 points | 12 of 12 |
+The values are medians over the same 10 decays, all fitted with the same measured IRF. Times are for one core. For one- and two-exponential decays 0.14.1 was already as close to the truth as LAS X or closer, for example 0.7 % against 1.4 % on the short lifetime of a two-exponential decay. The remaining error at 10^6 photons is two to five times the Cramér-Rao bound for these decays (0.1, 0.7 and 1.4 % for the long, mid and short lifetimes at 1σ) and doesn't come from the optimiser, because the start from the truth lands in the same place. I have not found where it comes from.
 
-The errors are medians over the 10 decays, the spread is the widest on any one decay. One exponential doesn't depend on the seed. Two exponentials at 10^6 photons gain a little from more starts, but less than three do, so they keep one start. At 10^4 and 10^3 photons the two-exponential lifetimes move a long way from seed to seed, yet every start finishes within 10^-3 of the best cost, so the cost can't choose between them and more starts don't help. There the data don't pin the lifetimes down, and that shows in the bootstrap errors rather than in the choice of seed.
+More starts can still be asked for, with `--n-starts` on the command line, DE starts in Expert Fit Settings, or `n_starts=` on `fit_summed` and `fit_summed_tail`. Start k uses seed `--seed` + k, and the run with the lowest polished Poisson cost is kept. Bootstrap refits always use one start. The summary records `n_starts`, `start_costs` (the polished cost of each start, `None` where the polish failed), `n_near_best` (starts within 10^-3 relative of the best cost) and the winning `seed`. If a second start ever reaches a lower cost than the first, that is worth reporting.
 
-Run time grows in proportion to the number of starts, so 12 starts take about 12 times as long as one. Bootstrap refits always use one start, otherwise the bootstrap would take 12 times as long too. Per-pixel fits take their starting lifetimes from the summed fit, so they inherit the multi-start result without running DE again. Batch tile fits and stitched fits run one summed fit per tile or ROI, and each of those uses the same setting.
+DE updates its population the same way whatever the number of workers, so a fit with the same seed gives the same result on one core or many. Before 0.15.0 a single-core fit used a different update rule, so single-core results moved slightly.
 
-To turn it off, enter 1 in Multi-start DE (tri-exponential fits) in Expert Fit Settings, or pass `--n-starts 1` to `fit_cli.py` or the batch commands. From Python, pass `n_starts=1` to `fit_summed` or `fit_summed_tail`. A script that calls `fit_summed` once per pixel or per small region with a tri-exponential model should pass `n_starts=1` unless it needs the extra starts, or it will run 12 times slower than it used to.
+### Low photon counts
 
-The summary records what happened:
+Below about 10^5 photons a three-exponential decay doesn't hold enough information to pin down three lifetimes, whatever the fitting tool. The Cramér-Rao bound gives the smallest scatter any unbiased fit can reach. For the same 10 decays, at 1σ:
 
-| Field | Meaning |
-|---|---|
-| `n_starts` | Number of DE starts run |
-| `start_costs` | Polished cost of each start, in seed order. `None` where the polish failed. If the polish failed for every start, these are the DE costs, and `start_cost_kind` is `'de'` |
-| `n_near_best` | Number of starts whose cost is within 10^-3 (relative) of the best, the winner included |
-| `seed` | Seed of the winning start |
+| Photons | Long τ | Mid τ | Short τ |
+|---|---|---|---|
+| 10^6 | 0.1 % | 0.7 % | 1.4 % |
+| 10^4 | 1.1 % | 6.5 % | 13.9 % |
+| 10^3 | 3.7 % | 21 % | 44 % |
 
-`n_near_best` is a rough check on how well the fit is pinned down. If only one or two starts land within 10^-3 of the best cost, the minimum is shallow or there are several of them, and the lifetimes deserve less trust than their error bars suggest. The reverse doesn't hold at low counts. The margin is relative, so on a decay of about 1,800 bins it is about 1.8 units of deviance, which is wider than a difference that matters. In the two-exponential runs above at 10^3 photons, all 12 starts were within it while their lifetimes differed by up to 48 points. Many agreeing starts mean the cost can't separate them, not that the lifetimes agree, so read `n_near_best` together with the bootstrap errors.
+Holding every lifetime of every one of these decays within 10 % takes about 45,000 photons. Low counts are still FLIMKit's weak spot for three exponentials, as they are for every tool: 0.15.0 changes what is reported, not what the photons can resolve. Below that the fit surface is a flat valley. A fit lands near wherever it started, so a fit that starts near the expected lifetimes, for example from values typed in by hand, can look better than DE without fitting the data any better.
 
-DE now updates its population the same way whatever the number of workers, so a fit with the same seed gives the same result on one core or many. Before this, a single-core fit used a different update rule from a multi-core fit, so single-core results move slightly.
+FLIMKit reports what the data can support. When any lifetime of a two- or three-exponential fit is uncertain by more than 10 % (from the bootstrap if it ran, otherwise from the curvature), the summary sets `components_resolved` to false, and the terminal, the Fit Summary and the ROI result lead with the mean lifetimes and mark the components as not resolved. The mean lifetimes are well determined even when the components are not. On the same 10 decays:
+
+| What is reported | 10^4 photons | 10^3 photons |
+|---|---|---|
+| Three free lifetimes, short τ | 33 % off | 76 % off |
+| Free fit, intensity-weighted mean lifetime | 0.5 % off | 1.9 % off |
+| Free fit, amplitude-weighted mean lifetime | 3.0 % off | 5.8 % off |
+| Lifetimes fixed from a fit with more photons, worst fraction | 4.2 points off | 4.1 points off |
+
+The not-resolved check flagged all 10 decays at both counts. To get the fractions of a small region, fix the lifetimes from a fit with more photons, usually the whole image: tick Fix lifetimes from the image fit in the ROI and phasor-cursor fit options, or pass `fixed_taus_ns=` to `fit_summed`. Only the amplitudes, the background and the IRF shift are then fitted, and the summary sets `fixed_taus`. Per-pixel fits already work this way.
 
 ### Display Range Settings
 
@@ -1478,7 +1470,7 @@ From Python it is off unless you pass `bootstrap=25` to `fit_summed`,
 run it.
 
 Each bootstrap refit runs DE once, even when the fit itself used several starts
-(see [Why tri-exponential fits use several DE starts](#why-tri-exponential-fits-use-several-de-starts)).
+(see [Tri-exponential accuracy and DE starts](#tri-exponential-accuracy-and-de-starts)).
 
 For a synthetic 3-exponential decay (4.06, 1.36 and 0.71 ns, one million
 photons) fitted 16 times with fresh noise, τ2 scattered by 51% and τ3 by 24%.

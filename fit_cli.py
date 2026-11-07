@@ -78,7 +78,7 @@ def single_FOV_flim_fit_cli():
     ap.add_argument('--de-population', type=int, default=de_population)
     ap.add_argument('--de-maxiter',    type=int, default=de_maxiter)
     ap.add_argument('--n-starts', type=int, default=de_n_starts,
-                    help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+                    help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
     ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
     ap.add_argument('--rep-period-ns', default=None,
                     help='Laser pulse period in ns, or auto to read it from the file. Adds the decay left over from earlier pulses to the fit (12.5 for 80 MHz). Default: off')

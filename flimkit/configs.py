@@ -107,7 +107,7 @@ Optimizer: {Optimizer}
 Levenberg-Marquardt restarts: {lm_restarts}
 Differential Evolution population size: {de_population}
 Differential Evolution max iterations: {de_maxiter}
-Differential Evolution starts: {'auto (12 for tri-exponential, 1 otherwise)' if de_n_starts is None else de_n_starts}, first seed {de_seed}
+Differential Evolution starts: {1 if de_n_starts is None else de_n_starts}, first seed {de_seed}
 Number of workers for DE optimization: {n_workers}
 IRF FWHM: {IRF_FWHM} ns
 IRF fit width: {IRF_FIT_WIDTH} ns

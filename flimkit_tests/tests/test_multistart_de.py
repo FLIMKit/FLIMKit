@@ -3,7 +3,7 @@ import pytest
 from scipy.optimize import OptimizeResult
 from flimkit.FLIM import fitters
 from flimkit.FLIM.fitters import (fit_summed, fit_summed_tail, resolve_n_starts, _de_multistart,
-                                  DE_AUTO_STARTS_TRI_EXP, DE_NEAR_BEST_RTOL)
+                                  DE_NEAR_BEST_RTOL)
 from flimkit.FLIM.models import reconvolution_model
 
 RES = 97e-12
@@ -30,10 +30,9 @@ def _midpoint_de(calls):
         return OptimizeResult(x=x, fun=float(cost_fn(x)), success=True)
     return fake
 
-@pytest.mark.parametrize('n_exp, expected', [(1, 1), (2, 1), (3, DE_AUTO_STARTS_TRI_EXP)])
-def test_automatic_default(n_exp, expected):
-    assert DE_AUTO_STARTS_TRI_EXP == 12
-    assert resolve_n_starts(None, n_exp) == expected
+@pytest.mark.parametrize('n_exp', [1, 2, 3])
+def test_default_is_one_start(n_exp):
+    assert resolve_n_starts(None, n_exp) == 1
 
 def test_explicit_n_starts_and_bad_value():
     assert resolve_n_starts(1, 3) == 1
@@ -92,7 +91,7 @@ def test_de_cost_when_every_polish_fails(monkeypatch):
 def test_bootstrap_refits_use_one_start(monkeypatch):
     calls = []
     monkeypatch.setattr(fitters, 'differential_evolution', _midpoint_de(calls))
-    _, s = _fit(_tri_decay(), workers=1, bootstrap=3)
+    _, s = _fit(_tri_decay(), workers=1, bootstrap=3, n_starts=12)
     assert s['n_starts'] == 12
     assert len(calls) == 12 + 3
     assert calls[:12] == list(range(42, 54))
@@ -101,15 +100,16 @@ def test_bootstrap_refits_use_one_start(monkeypatch):
 def test_tail_bootstrap_refits_use_one_start(monkeypatch):
     calls = []
     monkeypatch.setattr(fitters, 'differential_evolution', _midpoint_de(calls))
-    _, s = fit_summed_tail(_tri_decay(), RES, N, True, 3, 0.1, 10.0, workers=1, bootstrap=3, **FAST)
+    _, s = fit_summed_tail(_tri_decay(), RES, N, True, 3, 0.1, 10.0, workers=1, bootstrap=3, n_starts=12, **FAST)
     assert s['n_starts'] == 12
     assert len(calls) == 12 + 3
     assert calls[12:] == [42, 42, 42]
 
-def test_one_or_two_exponentials_run_once(monkeypatch):
+@pytest.mark.parametrize('n_exp', [1, 2, 3])
+def test_default_runs_once(monkeypatch, n_exp):
     calls = []
     monkeypatch.setattr(fitters, 'differential_evolution', _midpoint_de(calls))
-    _fit(_tri_decay(), n_exp=2, workers=1)
+    _fit(_tri_decay(), n_exp=n_exp, workers=1)
     assert calls == [42]
 
 def test_n_starts_one_is_the_first_start_of_many():

@@ -84,13 +84,23 @@ def _show_fit_result_window(result: dict):
               + (1 if chi2 is not None else 0)
               + (1 if len(taus) > 0 and len(amps) > 0 else 0))
     tv = ttk.Treeview(tbl, columns=cols, show='headings',
-                      height=min(8, max(1, n_rows)))
+                      height=min(12, max(1, n_rows + 4)))
     for col, w in zip(cols, (200, 110, 60)):
         tv.heading(col, text=col, anchor='w')
         tv.column(col, width=w, anchor='w')
     rows = []
+    unresolved = summary.get('components_resolved') == False
+    if unresolved:
+        rows.append(('⚠ Components not resolved at this photon count', '', ''))
+        for key, label in [('tau_mean_int_ns', 'τ_mean (intensity-weighted)'), ('tau_mean_amp_ns', 'τ_mean (amplitude-weighted)')]:
+            v = summary.get(key)
+            if v is not None:
+                e = summary.get(key + '_boot_err', summary.get(key + '_err'))
+                rows.append((label, f'{v:.4f}' + (f' ± {e:.4f}' if e is not None and e == e else ''), 'ns'))
+    if summary.get('fixed_taus') == True:
+        rows.append(('Lifetimes fixed from the image fit', 'amplitudes fitted', ''))
     for i, tau in enumerate(taus):
-        rows.append((f'τ{i+1}', f'{tau:.4f}', 'ns'))
+        rows.append((f'τ{i+1}' + (' (not resolved)' if unresolved else ''), f'{tau:.4f}', 'ns'))
     for i, amp in enumerate(amps):
         rows.append((f'A{i+1} (amplitude)', f'{amp:.4f}', ''))
     if len(taus) > 0 and len(amps) > 0 and np.sum(amps) > 0:
@@ -145,10 +155,19 @@ def _ask_roi_fit_options(params: dict):
                     variable=sv_cost, value='poisson').pack(side='left', padx=(0, 6))
     ttk.Radiobutton(cost_frame, text='Pearson χ²',
                     variable=sv_cost, value='chi2').pack(side='left')
+    image_taus = params.get('image_taus_ns')
+    bv_fix = tk.BooleanVar(value=False)
+    fix_text = ('Fix lifetimes from the image fit (' + ', '.join(f'{t:.3g}' for t in image_taus) + ' ns), fit the amplitudes'
+                if image_taus else 'Fix lifetimes from the image fit (run a reconvolution fit first)')
+    ttk.Checkbutton(dlg, text=fix_text, variable=bv_fix,
+                    state='normal' if image_taus else 'disabled').grid(
+        row=5, column=0, columnspan=2, sticky='w', **pad)
+    ttk.Label(dlg, text='Use it when the region has too few photons to resolve the components on its own.',
+              foreground='grey').grid(row=6, column=0, columnspan=2, sticky='w', padx=8)
     ttk.Separator(dlg, orient='horizontal').grid(
-        row=5, column=0, columnspan=2, sticky='ew', padx=8, pady=6)
+        row=7, column=0, columnspan=2, sticky='ew', padx=8, pady=6)
     btn_frame = ttk.Frame(dlg)
-    btn_frame.grid(row=6, column=0, columnspan=2, sticky='e', padx=8, pady=(0, 8))
+    btn_frame.grid(row=8, column=0, columnspan=2, sticky='e', padx=8, pady=(0, 8))
     def _ok():
         try:
             tau_min = float(sv_tau_min.get())
@@ -166,6 +185,7 @@ def _ask_roi_fit_options(params: dict):
         result['tau_min'] = tau_min
         result['tau_max'] = tau_max
         result['cost_function'] = sv_cost.get()
+        result['fixed_taus_ns'] = list(image_taus) if (bv_fix.get() and image_taus) else None
         dlg.destroy()
     def _cancel():
         dlg.destroy()
@@ -184,6 +204,11 @@ def _ask_roi_fit_options(params: dict):
     merged['tau_min'] = result['tau_min']
     merged['tau_max'] = result['tau_max']
     merged['cost_function'] = result['cost_function']
+    merged['fixed_taus_ns'] = result['fixed_taus_ns']
+    if result['fixed_taus_ns'] is not None:
+        merged['n_exp'] = len(result['fixed_taus_ns'])
+        merged['tau_min'] = min(merged['tau_min'], 0.5 * min(result['fixed_taus_ns']))
+        merged['tau_max'] = max(merged['tau_max'], 2.0 * max(result['fixed_taus_ns']))
     return merged
 
 class RoiAnalysisPanel:
@@ -719,6 +744,7 @@ class RoiAnalysisPanel:
                 bootstrap=params.get('bootstrap', 0),
                 n_starts=params.get('n_starts'),
                 rep_period_ns=resolve_rep_period_ns(params.get('rep_period_ns'), ptu),
+                fixed_taus_ns=params.get('fixed_taus_ns'),
             )
             if progress_callback:
                 progress_callback(4, 4)

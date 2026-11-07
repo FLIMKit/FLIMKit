@@ -44,10 +44,15 @@ def test_window_shorter_than_period_needs_the_periodic_term():
     assert off['rep_period_ns'] is None
 
 def test_window_equal_to_period_corrects_the_fractions():
-    decay = _folded([4.0, 0.8], [0.5, 0.5], N_PERIOD)
+    t = np.arange(10 * N_PERIOD) * RES
+    irf = np.pad(_irf(), (0, 9 * N_PERIOD))
+    single = sum(0.5 * np.convolve(irf, np.exp(-t / (tau * 1e-9)))[:10 * N_PERIOD] for tau in (4.0, 0.8))
+    decay = single.reshape(10, N_PERIOD).sum(axis=0)
+    decay = decay / decay.sum() * 1e6 + 2.0
     off = _fit(decay, N_PERIOD, 2, None)
     on = _fit(decay, N_PERIOD, 2, N_PERIOD * RES * 1e9)
-    assert abs(on['fractions'][0] - 0.5) < abs(off['fractions'][0] - 0.5)
+    assert on['fractions'] == pytest.approx([0.5, 0.5], abs=2e-3)
+    assert off['fractions'][0] > 0.5 + 3e-3
 
 def test_period_shorter_than_window_is_refused():
     with pytest.raises(ValueError, match='shorter than the histogram'):
