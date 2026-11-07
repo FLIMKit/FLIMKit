@@ -3224,6 +3224,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             'irf_align': 'steepest_rise',
             'irf_shift_bins': 2,
             'bootstrap': DEFAULT_BOOTSTRAP,
+            'image_taus_ns': getattr(getattr(self, '_fov_preview', None), '_fit_taus_ns', None),
         }
         expert = self._expert_overrides
         if expert:
@@ -4426,6 +4427,16 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
         taus = global_summary.get('taus_ns', []) if tau_centers is None else None
         amps = global_summary.get('amps', []) if tau_centers is None else None
         fracs = global_summary.get('fractions', []) if tau_centers is None else None
+        unresolved = global_summary.get('components_resolved') == False
+        if unresolved and tau_centers is None:
+            rows.append(('⚠ Components not resolved at this photon count', '', ''))
+            for key, label in [('tau_mean_int_ns', 'τ_mean (int-weighted)'), ('tau_mean_amp_ns', 'τ_mean (amp-weighted)')]:
+                v = global_summary.get(key)
+                if v is not None:
+                    e = global_summary.get(key + '_boot_err', global_summary.get(key + '_err'))
+                    rows.append((label, f'{v:.4f}' + (f' ± {e:.4f}' if e is not None and e == e else ''), 'ns'))
+        if global_summary.get('fixed_taus') == True:
+            rows.append(('Lifetimes fixed', 'amplitudes fitted', ''))
         if taus is not None and len(taus) > 0:
             import numpy as np
             taus = list(np.atleast_1d(taus))
@@ -4436,7 +4447,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             taus_err = list(np.atleast_1d(global_summary.get('taus_ns_err', [])))
             taus_boot = list(np.atleast_1d(global_summary.get('taus_ns_boot_err', [])))
             for i in range(len(taus)):
-                rows.append((f'τ{i+1}', f'{taus[i]:.4f}', 'ns'))
+                rows.append((f'τ{i+1}' + (' (not resolved)' if unresolved else ''), f'{taus[i]:.4f}', 'ns'))
                 if i < len(taus_err) and np.isfinite(taus_err[i]):
                     rows.append((f'τ{i+1} ± (1σ)', f'{taus_err[i]:.4f}', 'ns'))
                 if i < len(taus_boot) and np.isfinite(taus_boot[i]):
@@ -4453,7 +4464,7 @@ Anthropic's Claude AI assisted with parts of the GUI implementation.
             ('tau_mean_amp_ns', 'τ_mean (amp-weighted)'),
             ('tau_mean_int_ns', 'τ_mean (int-weighted)'),
         ]:
-            v = global_summary.get(key)
+            v = None if (unresolved and tau_centers is None) else global_summary.get(key)
             if v is not None:
                 rows.append((label, f'{v:.4f}', 'ns'))
                 v_err = global_summary.get(key + '_err')

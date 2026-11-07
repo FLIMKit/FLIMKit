@@ -74,26 +74,22 @@ FIT_HELP = {
        'DE population, DE iterations and LM restart count are all set in Expert Fit '
        'Settings.'),
 
-    'multistart': ('Multi-start DE (tri-exponential fits)', [
+    'multistart': ('DE starts', [
         ('What it does',
          'Runs differential evolution several times from different seeds, polishes '
          'each run, and keeps the one with the lowest Poisson cost. The truth is '
-         'never used to choose. Start k uses seed 42 + k, so the first start is the '
-         'single run FLIMKit always did.'),
-        ('Why the default is 12',
-         'A tri-exponential likelihood is flat along the short components, so one '
-         'DE run stops in a different place for each seed. On ten synthetic '
-         'tri-exponential decays at 1e6 photons the median lifetime error was 6.4 % '
-         'for one run and 2.6 % for the best of 12. Going past about 16 starts '
-         'gained nothing. Fits with one or two exponentials use one start.'),
-        ('What it costs',
-         'Run time grows with the number of starts, so 12 starts take about 12 times '
-         'as long as one. Bootstrap refits always use one start. Enter 1 to turn it '
-         'off.'),
-    ], 'Tri-exponential decays have only been tested at 1e6 photons so far. The fit '
-       'summary reports n_near_best, the number of starts within 0.1 % of the best '
-       'cost. If only one or two agree, the fit is not well pinned down. At low counts '
-       'many can agree while the lifetimes still differ, so check the bootstrap errors too.'),
+         'never used to choose. Start k uses seed 42 + k.'),
+        ('Why the default is 1',
+         'Up to 0.14 the final polish stopped early, so one run landed in a '
+         'different place for each seed and the best of several was worth having. '
+         'From 0.15.0 the polish converges, every seed reaches the same fit, and '
+         'one start is as accurate as twelve at a twelfth of the time.'),
+        ('When to raise it',
+         'Only to check a fit. If extra starts reach a lower cost than the first, '
+         'report it, because that should no longer happen.'),
+    ], 'The fit summary reports n_near_best, the number of starts within 0.1 % of '
+       'the best cost. At low photon counts many starts can agree while the '
+       'lifetimes still differ, so read it together with the error bars.'),
 
     'irf': ('Instrument Response Function (IRF)', [
         ('Analytical model (LAS X export)',

@@ -961,6 +961,7 @@ class PhasorViewPanel:
                 bootstrap = params.get('bootstrap', 0),
                 n_starts = params.get('n_starts'),
                 rep_period_ns = resolve_rep_period_ns(params.get('rep_period_ns'), ptu),
+                fixed_taus_ns = params.get('fixed_taus_ns'),
             )
             if progress_callback:
                 progress_callback(4, 4)

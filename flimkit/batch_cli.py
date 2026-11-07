@@ -29,7 +29,7 @@ def _batch_parser(description, input_flag, input_help, need_ptu_dir=True):
     ap.add_argument('--de-population', type=int, default=de_population)
     ap.add_argument('--de-maxiter', type=int, default=de_maxiter)
     ap.add_argument('--n-starts', type=int, default=de_n_starts,
-                    help='Independent DE runs per summed fit, best polished cost kept. Default: 12 for tri-exponential, 1 otherwise. 1 turns it off')
+                    help='Independent DE runs per summed fit, lowest polished cost kept. Default: 1')
     ap.add_argument('--seed', type=int, default=de_seed, help='Seed of the first DE start; start k uses seed + k')
     ap.add_argument('--rep-period-ns', default=None,
                     help='Laser pulse period in ns, or auto to read it from each file. Default: off')
@@ -281,7 +281,7 @@ def _inquire_expert(a):
     a.restarts = _ask_int('LM restarts', a.restarts)
     a.de_population = _ask_int('DE population', a.de_population)
     a.de_maxiter = _ask_int('DE max iterations', a.de_maxiter)
-    a.n_starts = _ask_int('DE starts per summed fit, 1 turns multi-start off (Enter keeps auto: 12 for tri-exponential)', a.n_starts)
+    a.n_starts = _ask_int('DE starts per summed fit (Enter keeps 1)', a.n_starts)
     a.workers = _ask_int('Workers', a.workers)
     a.channel = _ask_int('Channel', a.channel)
     a.irf_fwhm = _ask_float('IRF FWHM (ns)', a.irf_fwhm)

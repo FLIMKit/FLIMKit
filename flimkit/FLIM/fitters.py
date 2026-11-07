@@ -32,12 +32,13 @@ _NUMBA_FREE_TAU_BLOCK_BYTES = 1_000_000_000
 _FREE_TAU_WARN_PIXELS = 50_000
 _TAU_GRID_POINTS = 1600
 DEFAULT_BOOTSTRAP = 25
-DE_AUTO_STARTS_TRI_EXP = 12
 DE_NEAR_BEST_RTOL = 1e-3
+FIXED_TAU_HALF_WIDTH = 1e-6
+COMPONENT_REL_LIMIT = 0.10
 
 def resolve_n_starts(n_starts, n_exp):
     if n_starts is None:
-        return DE_AUTO_STARTS_TRI_EXP if n_exp == 3 else 1
+        return 1
     if int(n_starts) < 1:
         raise ValueError(f'n_starts must be at least 1, got {n_starts!r}')
     return int(n_starts)
@@ -68,13 +69,24 @@ def _de_multistart(cost_fn, bounds, n_exp, lo, hi, residuals,
         if polish:
             if n == 1:
                 print('  Running final LM polish...')
+            lo_s = np.asarray(lo, dtype=float).copy()
+            hi_s = np.asarray(hi, dtype=float).copy()
+            lo_s[:n_exp] = np.log10(lo_s[:n_exp])
+            hi_s[:n_exp] = np.log10(hi_s[:n_exp])
+            def residuals_log(q):
+                p = np.array(q, dtype=float)
+                p[:n_exp] = 10.0 ** p[:n_exp]
+                return residuals(p)
+            q0 = np.array(popt, dtype=float)
+            q0[:n_exp] = np.log10(q0[:n_exp])
             eps = 1e-10
-            popt = np.clip(popt, np.asarray(lo) + eps, np.asarray(hi) - eps)
+            q0 = np.clip(q0, lo_s + eps, hi_s - eps)
             try:
-                pol = least_squares(residuals, popt, bounds=(lo, hi),
-                                    method='trf', max_nfev=5000,
+                pol = least_squares(residuals_log, q0, bounds=(lo_s, hi_s),
+                                    method='trf', max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
-                popt = pol.x
+                popt = pol.x.copy()
+                popt[:n_exp] = 10.0 ** popt[:n_exp]
                 cost = float(pol.cost)
                 message += f'; polished cost={pol.cost:.4e}'
             except ValueError as e:
@@ -161,7 +173,8 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                irf_shift_bins=2,
                tvb_profile=None, fit_tvb=False,
                fit_start_ns=None, fit_end_ns=None, exclude_ns=None,
-               n_sync=None, bootstrap=0, n_starts=None, seed=42, rep_period_ns=None):
+               n_sync=None, bootstrap=0, n_starts=None, seed=42, rep_period_ns=None,
+               fixed_taus_ns=None):
     warmup_gpu_backend()
     rep_period_s = rep_period_ns * 1e-9 if rep_period_ns else None
     tau_min = tau_min_ns * 1e-9
@@ -215,6 +228,15 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                              bg_init=bg_init, bg_upper=bg_upper,
                              sigma_max=sigma_max, irf_shift_bins=irf_shift_bins,
                              fit_tvb=fit_tvb, tvb_init=tvb_init, tvb_upper=tvb_upper)
+    if fixed_taus_ns is not None:
+        fixed = np.asarray(fixed_taus_ns, dtype=float) * 1e-9
+        if fixed.shape != (n_exp,):
+            raise ValueError(f'fixed_taus_ns needs {n_exp} lifetimes, got {len(fixed)}')
+        lo = np.asarray(lo, dtype=float).copy()
+        hi = np.asarray(hi, dtype=float).copy()
+        lo[:n_exp] = fixed * (1.0 - FIXED_TAU_HALF_WIDTH)
+        hi[:n_exp] = fixed * (1.0 + FIXED_TAU_HALF_WIDTH)
+        print('  Lifetimes fixed at ' + ', '.join(f'{x * 1e9:.4g}' for x in fixed) + ' ns, fitting the amplitudes')
     bounds = list(zip(lo, hi))
     if cost_function == 'chi2':
         weights = np.sqrt(np.maximum(decay_work[fit_idx], 1.0))
@@ -270,7 +292,8 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                           has_tail, fit_bg, fit_sigma, bg_init,
                           tau_override=tau_ov, fit_tvb=fit_tvb, tvb_init=tvb_init)
             try:
-                res = least_squares(residuals_scaled, to_scaled(p0),
+                x0 = np.clip(to_scaled(p0), lo_scaled + 1e-12 * np.abs(lo_scaled), hi_scaled - 1e-12 * np.abs(hi_scaled))
+                res = least_squares(residuals_scaled, x0,
                                     bounds=(lo_scaled, hi_scaled), method='trf',
                                     max_nfev=50000,
                                     ftol=1e-13, xtol=1e-13, gtol=1e-13)
@@ -315,6 +338,7 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                             fit_tvb=fit_tvb, n_sync=n_sync, lo=lo, hi=hi,
                             rep_period_s=rep_period_s)
     summary.update(multistart)
+    summary['fixed_taus'] = fixed_taus_ns is not None
     if bootstrap and bootstrap > 1:
         samples, failed = _bootstrap_samples(
             lambda d: fit_summed(d, tcspc_res, n_bins, irf_prompt, has_tail, fit_bg, fit_sigma,
@@ -324,10 +348,32 @@ def fit_summed(decay, tcspc_res, n_bins, irf_prompt,
                                  sigma_max=sigma_max, irf_shift_bins=irf_shift_bins,
                                  tvb_profile=tvb_profile, fit_tvb=fit_tvb, exclude_ns=exclude_ns,
                                  n_sync=n_sync, n_starts=1, seed=seed, rep_period_ns=rep_period_ns,
+                                 fixed_taus_ns=fixed_taus_ns,
                                  **_window_ns(summary)),
             decay, bootstrap)
         summary.update(_bootstrap_fields(summary, samples, failed))
+    _components_note(summary, n_exp)
     return popt_original, summary
+
+def _components_note(summary, n_exp, tau_key='taus_ns'):
+    if n_exp < 2 or summary.get('fixed_taus') == True:
+        return
+    err = summary.get(tau_key + '_boot_err', summary.get(tau_key + '_err'))
+    if err is None:
+        return
+    taus = np.atleast_1d(np.asarray(summary[tau_key], dtype=float))
+    rel = np.atleast_1d(np.asarray(err, dtype=float)) / taus
+    resolved = bool(np.all(np.isfinite(rel) & (rel <= COMPONENT_REL_LIMIT)))
+    summary['components_resolved'] = resolved
+    if resolved == False:
+        t_int = summary.get('tau_mean_int_ns')
+        e_int = summary.get('tau_mean_int_ns_boot_err', summary.get('tau_mean_int_ns_err'))
+        head = (f'{t_int:.3f} ± {e_int:.3f} ns' if e_int is not None and np.isfinite(e_int)
+                else f'{t_int:.3f} ns')
+        note = (f'The {n_exp} components are not resolved at this photon count: at least one lifetime '
+                f'is uncertain by more than {100 * COMPONENT_REL_LIMIT:.0f}%. Report the mean lifetimes '
+                f'(intensity-weighted {head}), or fix the lifetimes from a fit with more photons.')
+        summary['uncertainty_warnings'] = [note] + list(summary.get('uncertainty_warnings') or [])
 
 def _bootstrap_samples(refit, decay, n):
     rng = np.random.default_rng(20260929)
@@ -693,6 +739,7 @@ def fit_summed_tail(decay, tcspc_res, n_bins,
                                       **_window_ns(summary)),
             decay, bootstrap)
         summary.update(_bootstrap_fields(summary, samples, failed))
+    _components_note(summary, n_exp)
     return popt_work, summary
 
 def _make_summary_tail(popt, decay, tcspc_res, n_bins,
@@ -1325,10 +1372,15 @@ def fit_per_pixel(stack, tcspc_res, n_bins, irf_prompt,
                         full_p, tcspc_res, n_bins, irf_prompt,
                         n_exp, _bg, has_tail, fit_bg, fit_sigma,
                         n_sync=_n_sync_model, rep_period_s=rep_period_s)
-                w_px = np.sqrt(np.maximum(decay_px, 1.0))
-                def _resid(p_px, _decay=fit_px, _bg=bg_px, _w=w_px):
-                    model_vals = _eval_model(np.array(_make_full(p_px)), _bg)
-                    return (model_vals[fit_idx] - _decay[fit_idx]) / _w[fit_idx]
+                def _resid(p_px, _decay=fit_px, _bg=bg_px):
+                    m = np.maximum(_eval_model(np.array(_make_full(p_px)), _bg)[fit_idx], 1e-10)
+                    n = _decay[fit_idx]
+                    dev = m - n
+                    pos = n > 0
+                    dev[pos] += n[pos] * np.log(n[pos] / m[pos])
+                    r = np.sqrt(2.0 * np.maximum(dev, 0.0))
+                    r[m < n] *= -1
+                    return r
                 try:
                     res = least_squares(
                         _resid, p0_px,

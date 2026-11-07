@@ -44,6 +44,13 @@ def print_summary(summary: dict, strategy: str, n_exp: int):
     is_dist = 'tau_centers_ns' in s
     is_tail = s.get('fit_model') == 'tail'
     print(f"\n{'─'*60}")
+    if s.get('components_resolved') == False:
+        print(f"  Not resolved at this photon count. Mean lifetimes:")
+        print(f"    τ_mean (intensity-weighted) = {s['tau_mean_int_ns']:.4f}{_pm(s, 'tau_mean_int_ns_err')} ns")
+        print(f"    τ_mean (amplitude-weighted) = {s['tau_mean_amp_ns']:.4f}{_pm(s, 'tau_mean_amp_ns_err')} ns")
+        print('  The components below are not determined to 10%; do not report them on their own.')
+    if s.get('fixed_taus') == True:
+        print('  Lifetimes fixed, amplitudes fitted.')
     if is_tail:
         print(f'  Fit: {n_exp}-exp tail (no reconvolution)')
         print(f"{'─'*60}")
