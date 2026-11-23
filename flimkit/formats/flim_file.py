@@ -15,6 +15,8 @@ _FORMATS = [
      'modality': 'frequency', 'reader': 'flimkit.formats.ISS.fdflim:ISSFdFlim'},
     {'id': 'ps', 'label': 'Photonscore .photons', 'exts': ('.photons',),
      'modality': 'time', 'reader': 'flimkit.formats.PS.reader:PSFile'},
+    {'id': 'ics', 'label': 'ICS v2 TCSPC cube', 'exts': ('.ics',),
+     'modality': 'time', 'reader': 'flimkit.formats.ICS.reader:ICSFile'},
     {'id': 'pq_phu', 'label': 'PicoQuant PHU (histogram)', 'exts': ('.phu',),
      'modality': 'time', 'reader': 'flimkit.formats.PTU.phu:PHUFile'},
     {'id': 'pq_bin', 'label': 'PicoQuant BIN', 'exts': ('.bin',),
@@ -137,6 +139,16 @@ def _sniff_json(p):
         return 'flimlabs_signal'
     return 'unknown'
 
+def _sniff_ics(p):
+    try:
+        with open(p, 'rb') as fh:
+            head = fh.read(4096)
+    except OSError:
+        return 'unknown'
+    if head[:1] == b'\t' and head[1:2] in (b'\n', b'\r') and b'ics_version' in head:
+        return 'ics'
+    return 'unknown'
+
 def _sniff_magic(p):
     try:
         with open(p, 'rb') as fh:
@@ -179,6 +191,8 @@ def detect_format(path):
         return _sniff_tiff(p)
     if ext == '.json':
         return _sniff_json(p)
+    if ext == '.ics':
+        return _sniff_ics(p)
     found = _run_sniffers('extension', p)
     if found is not None:
         return found
